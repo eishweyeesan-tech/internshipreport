@@ -496,7 +496,22 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
             student_signature_value = VALUES(student_signature_value),
             report_status = 'pending', evaluated_at = NOW()");
         $message = 'signature_saved';
-        $student_signed = true;
+
+        $rej_r = $conn->query("SELECT report_status, instructor_comments, student_signature_type, student_signature_value FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_sw}");
+        $rejection = ($rej_r && $rej_r->num_rows > 0) ? $rej_r->fetch_assoc() : null;
+        $is_rejected = $rejection && $rejection['report_status'] === 'rejected';
+        $student_signed = false;
+        if ($rejection && !empty($rejection['student_signature_type']) && !empty($rejection['student_signature_value'])) {
+            $student_signed = true;
+        }
+        if ($is_rejected) {
+            $student_signed = false;
+        }
+        if ($is_rejected) {
+            $magic_link_unlocked = true;
+        } else {
+            $magic_link_unlocked = $reflection_unlocked && $reflection_submitted && $student_signed;
+        }
     } else {
         $message = 'student_sig_required';
     }
@@ -1125,15 +1140,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
         </nav>
-        <div class="px-3 pb-2">
-            <div class="bg-gradient-to-br from-violet-500/80 to-purple-600/80 backdrop-blur-sm rounded-xl p-3 text-white border border-white/20">
-                <p class="text-label font-bold uppercase tracking-wider opacity-80 mb-1">Internship Progress</p>
-                <div class="w-full bg-white/20 rounded-full h-1.5 mb-1.5">
-                    <div class="bg-white rounded-full h-1.5 transition-all duration-500 shadow-sm" style="width: <?= $total_weeks > 0 ? min(round(($weeks_completed / $total_weeks) * 100), 100) : 0 ?>%"></div>
-                </div>
-                <p class="text-label font-bold"><?= $weeks_completed ?>/<?= $total_weeks ?> Weeks</p>
-            </div>
-        </div>
         <div class="p-3 border-t border-white/10">
             <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
@@ -1337,24 +1343,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <?php endif; ?>
                         <p class="text-caption text-red-500 mt-2.5">Please revise your daily logs and weekly reflection, then regenerate a new Magic Link to resubmit.</p>
                     </div>
-                </div>
-            </div>
-            <?php endif; ?>
-
-            <?php if ($approval_notif): ?>
-            <!-- ════ INSTRUCTOR APPROVAL NOTIFICATION BANNER ════ -->
-            <div class="bg-emerald-50/60 backdrop-blur-sm border border-emerald-200/60 rounded-2xl p-5 mb-6">
-                <div class="flex items-start gap-3">
-                    <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shrink-0 mt-0.5">✅</div>
-                    <div class="flex-1">
-                        <h3 class="text-sm font-bold text-emerald-700 mb-1"><?= htmlspecialchars($approval_notif['title']) ?></h3>
-                        <p class="text-emerald-600 leading-relaxed"><?= htmlspecialchars($approval_notif['message']) ?></p>
-                        <p class="text-label text-emerald-400 mt-1.5"><?= (new DateTime($approval_notif['created_at']))->format('d M Y, h:i A') ?></p>
-                    </div>
-                    <form method="POST" class="shrink-0">
-                        <input type="hidden" name="notification_id" value="<?= (int)$approval_notif['id'] ?>">
-                        <button type="submit" name="mark_notification_read" class="w-7 h-7 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-600 flex items-center justify-center text-xs font-bold transition cursor-pointer" title="Dismiss">✕</button>
-                    </form>
                 </div>
             </div>
             <?php endif; ?>

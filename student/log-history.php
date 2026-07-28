@@ -98,6 +98,19 @@ $total_absent = ($absent_r && $absent_r->num_rows > 0) ? (int) $absent_r->fetch_
 $total_weeks = count($weeks);
 $total_reflections = count($all_refs);
 
+$progress_weeks_completed = 0;
+$progress_total_weeks = $total_weeks;
+if (!empty($weeks)) {
+    foreach ($weeks as $wn => $wr) {
+        $esc_wk_s = $conn->real_escape_string($wr['start']);
+        $esc_wk_e = $conn->real_escape_string($wr['end']);
+        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
+        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+            $progress_weeks_completed++;
+        }
+    }
+}
+
 // Total hours
 $total_minutes = 0;
 foreach ($all_logs as $log) {

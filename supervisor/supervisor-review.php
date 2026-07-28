@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/init_year.php';
+require_once __DIR__ . '/../config/ay_helper.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -35,6 +37,13 @@ if (!$student) {
 }
 
 $student_name = $student['full_name'] ?: $student['username'];
+
+// ── Active Year Badge Data ─────────────────────────────────────────
+$ay_filter = get_ay_filter($pdo, 'u');
+$total_assigned_q = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
+$total_assigned_q->execute(array_merge([$sup_id], $ay_filter['params']));
+$total_assigned = (int) $total_assigned_q->fetchColumn();
+$selected_year_label = $_SESSION['selected_academic_year_label'] ?? '';
 
 // ── Determine Week Ranges from internship start date ───────────────
 $weeks = [];
@@ -321,23 +330,29 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
             </div>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
+            <div class="px-4 mb-1">
+                <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Academic Year (2025-2026)</h3>
+            </div>
             <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
             </a>
-            <a href="#" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student Review
+            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
+            </a>
+            <a href="announcements.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📢</span> Announcements
             </a>
             <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
         </nav>
 
-        <!-- ─── ARCHIVES / HISTORY ─── -->
-        <div class="px-4 mb-2">
-            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 px-4">Archives / History</h3>
+        <!-- ─── PAST TRAINEES ─── -->
+        <div class="px-4 mb-1">
+            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Past Academic Years</h3>
         </div>
         <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> My 2025 Trainees
+            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> Archived Records
         </a>
 
         <div class="p-3 border-t border-slate-100/80">
@@ -359,6 +374,13 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                 <h1 class="text-base font-bold text-slate-800">Student Review — <?= htmlspecialchars($student_name) ?></h1>
             </div>
             <div class="flex items-center gap-5">
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-xs font-bold text-emerald-700"><?= $total_assigned ?> Assigned</span>
+                    <?php if (!empty($selected_year_label)): ?>
+                    <span class="text-sm font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded font-mono"><?= htmlspecialchars($selected_year_label) ?></span>
+                    <?php endif; ?>
+                </div>
                 <div class="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
                     <span class="text-xs font-bold text-indigo-700">📅 Week <?= $week_num ?>/12</span>
                     <?php if ($week_num === $auto_week): ?>
@@ -375,7 +397,7 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                         </div>
                         <?php endif; ?>
                     </button>
-                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-xl w-48 py-2">
+                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-[1050] bg-white border border-slate-200 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.15)] w-48 py-2">
                         <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
                             <span>👤</span> My Profile
                         </a>
@@ -414,6 +436,11 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                 </div>
                 <div>
                     <h1 class="text-lg font-bold text-slate-800"><?= htmlspecialchars($student_name) ?></h1>
+                    <?php if ($not_started): ?>
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 ml-2">
+                        <span class="w-2 h-2 rounded-full bg-slate-400"></span> NOT STARTED
+                    </span>
+                    <?php endif; ?>
                     <p class="text-sm text-slate-400 font-mono mt-1">Roll: <?= htmlspecialchars($student['student_roll'] ?: '—') ?> · <?= htmlspecialchars($student['email']) ?></p>
                     <div class="flex items-center gap-2 mt-2 flex-wrap">
                         <?php if ($student['major']): ?>

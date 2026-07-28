@@ -3,7 +3,6 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
-require_once __DIR__ . '/../includes/notification_helper.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -32,17 +31,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
     }
 }
 
+// ── Notification redirect URL helper ────────────────────────────
+function notif_redirect_url($type, $related_week, $announcement_id = null) {
+    if ($announcement_id) return 'announcement-detail.php?id=' . (int)$announcement_id;
+    switch ($type) {
+        case 'instructor_approved':
+        case 'instructor_rejected':
+        case 'supervisor_approved':
+            if ($related_week) return 'supervisor-dashboard.php?week=' . (int)$related_week;
+            return 'supervisor-dashboard.php';
+        default:
+            return 'supervisor-dashboard.php';
+    }
+}
+
 // ── Mark notification as read ──────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
     $notif_id = (int)($_POST['notification_id'] ?? 0);
     if ($notif_id > 0) {
         $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")->execute([$notif_id, $sup_id]);
     }
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        $count_q->execute([$sup_id]);
+        echo json_encode(['unread_count' => (int)$count_q->fetchColumn()]);
+        exit;
+    }
     header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notifications_read'])) {
     $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0")->execute([$sup_id]);
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        echo json_encode(['unread_count' => 0]);
+        exit;
+    }
     header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
     exit;
 }
@@ -55,6 +80,21 @@ $unread_notif_count = (int) $unread_notif_q->fetchColumn();
 $recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
 $recent_notifs_q->execute([$sup_id]);
 $recent_notifications = $recent_notifs_q->fetchAll();
+
+// ── Fetch latest announcements ──────────────────────────────────
+$latest_announcements = [];
+try {
+    $ann_q = $pdo->prepare("
+        SELECT a.id, a.title, a.body, a.created_at, u.username AS sender_name
+        FROM announcements a
+        LEFT JOIN users u ON u.id = a.created_by
+        WHERE a.is_active = 1
+        ORDER BY a.created_at DESC
+        LIMIT 3
+    ");
+    $ann_q->execute();
+    $latest_announcements = $ann_q->fetchAll();
+} catch (PDOException $e) {}
 
 // ══════════════════════════════════════════════════════════════════════
 // EMAIL ALERT HELPER FUNCTION
@@ -135,7 +175,7 @@ function sendRedBadgeAlert($pdo, $supervisor_id, $supervisor_name, $supervisor_e
                 <p>© " . date('Y') . " InternReport. All rights reserved.</p>
             </div>
         </div>
-    </body>
+</body>
     </html>";
 
     // Send email via PHPMailer SMTP
@@ -175,14 +215,6 @@ if (empty($valid_years)) {
     $valid_years = $vy_stmt2->fetchAll(PDO::FETCH_COLUMN);
 }
 
-// Resolve selected year to academic_year_id for FK-based filtering
-$selected_year_id = null;
-if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
-    $ayid_stmt = $pdo->prepare("SELECT id FROM academic_years WHERE year_label = ?");
-    $ayid_stmt->execute([$selected_year]);
-    $selected_year_id = $ayid_stmt->fetchColumn() ?: null;
-}
-
 // ── Detect Current Active Academic Year ─────────────────────────────
 $current_academic_year = $valid_years[0] ?? '';
 if (!$current_academic_year) {
@@ -198,6 +230,14 @@ if (!$current_academic_year) {
 // ── Selected Year (defaults to current academic year) ───────────────
 $selected_year = $filter_year ?: $current_academic_year;
 
+// Resolve selected year to academic_year_id for FK-based filtering
+$selected_year_id = null;
+if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
+    $ayid_stmt = $pdo->prepare("SELECT id FROM academic_years WHERE year_label = ?");
+    $ayid_stmt->execute([$selected_year]);
+    $selected_year_id = $ayid_stmt->fetchColumn() ?: null;
+}
+
 // ── Current Week Boundaries ─────────────────────────────────────────
 $today = new DateTime();
 $dayOfWeek = (int) $today->format('N');
@@ -207,21 +247,24 @@ $weekEnd   = (clone $today)->modify('sunday this week')->format('Y-m-d');
 // ══════════════════════════════════════════════════════════════════════
 // DYNAMIC CARD COUNTS (Filtered by Selected Academic Year)
 // ══════════════════════════════════════════════════════════════════════
-$ay = get_ay_filter($pdo, 'u');
 
-// 1. ALL STUDENTS: Count assigned students for selected year
-$sc = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay['sql']);
-$sc->execute(array_merge([$sup_id], $ay['params']));
+// Build year filter from the dropdown selection (not from session)
+$ay_sql    = $selected_year_id ? ' AND u.academic_year_id = ?' : '';
+$ay_params = $selected_year_id ? [$selected_year_id] : [];
+
+// 1. ALL STUDENTS: Count active assigned students for selected year
+$sc = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_sql);
+$sc->execute(array_merge([$sup_id], $ay_params));
 $total_assigned = (int) $sc->fetchColumn();
 
 // 2. COMPANIES: Count distinct companies for selected year
-$cc = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''" . $ay['sql']);
-$cc->execute(array_merge([$sup_id], $ay['params']));
+$cc = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''" . $ay_sql);
+$cc->execute(array_merge([$sup_id], $ay_params));
 $company_count = (int) $cc->fetchColumn();
 
-// Build base query for students in selected year
-$base_where = "u.role = 'student' AND sp.supervisor_id = ?" . $ay['sql'];
-$base_params = array_merge([$sup_id], $ay['params']);
+// Build base query for active students in selected year
+$base_where  = "u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_sql;
+$base_params = array_merge([$sup_id], $ay_params);
 
 // ══════════════════════════════════════════════════════════════════════
 // DYNAMIC CURRENT WEEK CALCULATION (per student)
@@ -690,6 +733,15 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        @media print {
+            aside, header, .no-print, nav, form, #profile-dropdown-menu, #notif-dropdown, [id*="filter"], [id*="search"], [id*="action"] { display: none !important; }
+            body { background: white !important; }
+            .print-only { display: block !important; }
+            #student-table table { width: 100% !important; }
+            #student-table .overflow-x-auto { overflow: visible !important; }
+        }
+    </style>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -755,12 +807,14 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         var date = new Date(dateStr);
         var now = new Date();
         var seconds = Math.floor((now - date) / 1000);
+        if (seconds < 0) return 'Just now';
         if (seconds < 60) return 'Just now';
         var minutes = Math.floor(seconds / 60);
         if (minutes < 60) return minutes + 'm ago';
         var hours = Math.floor(minutes / 60);
         if (hours < 24) return hours + 'h ago';
         var days = Math.floor(hours / 24);
+        if (days === 1) return 'Yesterday';
         if (days < 7) return days + 'd ago';
         return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     }
@@ -772,6 +826,17 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     }
     updateNotifTimestamps();
     setInterval(updateNotifTimestamps, 60000);
+
+    function toggleNotifOptions(btn) {
+        var menu = btn.nextElementSibling;
+        document.querySelectorAll('.notif-options-menu').forEach(function(m) { if (m !== menu) m.classList.add('hidden'); });
+        menu.classList.toggle('hidden');
+    }
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('[onclick*="toggleNotifOptions"]')) {
+            document.querySelectorAll('.notif-options-menu').forEach(function(m) { m.classList.add('hidden'); });
+        }
+    });
 
     function showToast(message, type) {
         var toast = document.createElement('div');
@@ -812,23 +877,29 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             </div>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
+            <div class="px-4 mb-1">
+                <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Academic Year (2025-2026)</h3>
+            </div>
+            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 <?= $tab === 'dashboard' ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30' : 'font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200' ?>">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
-            </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
             <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
             </a>
+            <a href="announcements.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📢</span> Announcements
+            </a>
+            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
+            </a>
         </nav>
 
-        <!-- ─── ARCHIVES / HISTORY ─── -->
-        <div class="px-4 mb-2">
-            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 px-4">Archives / History</h3>
+        <!-- ─── PAST TRAINEES ─── -->
+        <div class="px-4 mb-1">
+            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Past Academic Years</h3>
         </div>
-        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> My 2025 Trainees
+        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium <?= $tab === 'trainee-archive' ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30' : 'text-slate-600 hover:bg-slate-800 hover:text-slate-200' ?>">
+            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> Archived Records
         </a>
 
         <div class="p-3 border-t border-slate-100/80">
@@ -839,14 +910,20 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </aside>
 
     <!-- ─── MAIN ─── -->
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
-        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm">
+        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-[1050]">
             <div class="flex items-center gap-4">
-                <h1 class="text-base font-bold text-slate-800">University Supervisor Dashboard</h1>
+                <h1 class="text-base font-bold text-slate-800"><?= $tab === 'trainee-archive' ? 'Past Academic Years' : 'University Supervisor Dashboard' ?></h1>
             </div>
             <div class="flex items-center gap-5">
+                <?php if ($tab === 'trainee-archive'): ?>
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-full">
+                    <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                    <span class="text-xs font-bold text-purple-700">HISTORICAL VIEW</span>
+                </div>
+                <?php else: ?>
                 <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span class="text-xs font-bold text-emerald-700"><?= $total_assigned ?> Assigned</span>
@@ -854,52 +931,82 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <span class="text-sm font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded font-mono"><?= htmlspecialchars($selected_year) ?></span>
                     <?php endif; ?>
                 </div>
+                <?php endif; ?>
                 <div class="flex items-center gap-3 pl-5 border-l border-slate-200 relative">
                     <!-- Notification Bell -->
                     <div class="relative" id="notif-bell-wrapper">
                         <button onclick="toggleNotifDropdown()" class="relative p-2 hover:bg-white/30 rounded-xl transition cursor-pointer">
                             <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                             <?php if ($unread_notif_count > 0): ?>
-                            <span class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
+                            <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
                             <?php endif; ?>
                         </button>
                         <!-- Notification Dropdown -->
-                        <div id="notif-dropdown" class="absolute right-0 top-full mt-1 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
-                            <div class="p-3 border-b border-slate-100 bg-gradient-to-br from-violet-50/80 to-white/60 flex items-center justify-between">
-                                <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Notifications</h4>
+                        <div id="notif-dropdown" class="absolute right-0 top-full mt-1 w-[22rem] bg-white border border-slate-200 rounded-xl shadow-xl z-[1060] overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
+                            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-br from-blue-50/80 to-white/60">
+                                <h4 class="text-sm font-black text-slate-700">Notifications</h4>
                                 <?php if ($unread_notif_count > 0): ?>
-                                <form method="POST" class="inline">
-                                    <button type="submit" name="mark_all_notifications_read" class="text-label font-bold text-violet-600 hover:text-violet-800 transition cursor-pointer">Mark all read</button>
-                                </form>
+                                <button onclick="markAllNotifsRead()" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer">Mark all read</button>
                                 <?php endif; ?>
                             </div>
-                            <div class="max-h-80 overflow-y-auto">
+                            <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <div class="flex items-start gap-2.5 px-3 py-3 <?= !$notif['is_read'] ? 'bg-violet-50/40' : 'hover:bg-slate-50' ?> transition-all duration-150 border-b border-slate-100 last:border-0 group">
-                                    <div class="w-8 h-8 rounded-full <?= $notif['type'] === 'instructor_approved' ? 'bg-emerald-100 text-emerald-600' : ($notif['type'] === 'instructor_rejected' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600') ?> flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-sm">
-                                        <?= $notif['type'] === 'instructor_approved' ? '✓' : ($notif['type'] === 'instructor_rejected' ? '✕' : 'ℹ') ?>
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null); ?>
+                                <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-announcement-id="<?= (int)($notif['announcement_id'] ?? 0) ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
+                                    <?php if ($notif['type'] === 'instructor_approved'): ?>
+                                    <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                     </div>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-caption font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-500' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
-                                        <p class="text-label text-slate-400 mt-0.5 leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"><?= htmlspecialchars($notif['message']) ?></p>
-                                        <p class="text-caption text-slate-300 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
+                                    <?php elseif ($notif['type'] === 'instructor_rejected'): ?>
+                                    <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                     </div>
-                                    <?php if (!$notif['is_read']): ?>
-                                    <form method="POST" class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                                        <input type="hidden" name="notification_id" value="<?= (int)$notif['id'] ?>">
-                                        <button type="submit" name="mark_notification_read" class="w-6 h-6 rounded-full bg-slate-100 hover:bg-violet-100 text-slate-400 hover:text-violet-600 flex items-center justify-center text-label font-bold transition cursor-pointer shadow-sm" title="Mark as read">✓</button>
-                                    </form>
+                                    <?php else: ?>
+                                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                    </div>
                                     <?php endif; ?>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-sm <?= !$notif['is_read'] ? 'font-bold text-slate-800' : 'font-medium text-slate-600' ?> leading-snug"><?= htmlspecialchars($notif['title']) ?></p>
+                                        <p class="text-xs text-slate-500 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
+                                        <p class="text-[11px] text-slate-400 mt-1.5" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>" data-notif-id="<?= (int)$notif['id'] ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
+                                        <?php if (!$notif['is_read']): ?>
+                                        <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></span>
+                                        <?php endif; ?>
+                                        <div class="relative">
+                                            <button onclick="event.stopPropagation(); toggleNotifOptions(this)" class="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition opacity-0 group-hover:opacity-100 cursor-pointer" title="More options">
+                                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                                            </button>
+                                            <div class="hidden absolute right-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1.5 notif-options-menu" onclick="event.stopPropagation();">
+                                                <?php if (!$notif['is_read']): ?>
+                                                <form method="POST" class="inline">
+                                                    <input type="hidden" name="notification_id" value="<?= (int)$notif['id'] ?>">
+                                                    <button type="submit" name="mark_notification_read" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition flex items-center gap-2.5 cursor-pointer">
+                                                        <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                        Mark as read
+                                                    </button>
+                                                </form>
+                                                <?php else: ?>
+                                                <div class="px-4 py-2.5 text-xs font-medium text-slate-400 flex items-center gap-2.5">
+                                                    <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                                    Already read
+                                                </div>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <?php endforeach; ?>
                                 <?php else: ?>
-                                <div class="p-8 text-center">
-                                    <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                                        <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                <div class="p-10 text-center">
+                                    <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                                        <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                                     </div>
-                                    <p class="text-xs font-semibold text-slate-400">No notifications yet</p>
-                                    <p class="text-label text-slate-300 mt-1">You'll see updates here</p>
+                                    <p class="text-sm font-semibold text-slate-400">No notifications yet</p>
+                                    <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
                             </div>
@@ -919,11 +1026,11 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <p class="text-sm text-slate-400">Supervisor</p>
                     </div>
                     <!-- Profile Dropdown Menu -->
-                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-xl w-48 py-2">
+                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-[1050] bg-white border border-slate-200 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.15)] w-48 py-2">
                         <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
                             <span>👤</span> My Profile
                         </a>
-                        <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+                        <a href="profile.php#security-section" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
                             <span>🔑</span> Change Password
                         </a>
                         <div class="my-1 border-t border-slate-100"></div>
@@ -1019,6 +1126,37 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         </div>
                     </div>
                 </div>
+
+                <!-- Announcements Widget -->
+                <?php if (!empty($latest_announcements)): ?>
+                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/80 to-white flex items-center justify-between">
+                        <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                            <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm">📢</span> Latest Announcements
+                        </h2>
+                        <a href="announcements.php" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition">View all →</a>
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                        <?php foreach ($latest_announcements as $ann): ?>
+                        <a href="announcement-detail.php?id=<?= (int)$ann['id'] ?>" class="flex items-start gap-4 px-6 py-4 hover:bg-slate-50 transition-colors duration-150 group">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white flex items-center justify-center text-base shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                                📢
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors leading-snug"><?= htmlspecialchars($ann['title']) ?></h3>
+                                <p class="text-xs text-slate-500 mt-0.5 line-clamp-1"><?= htmlspecialchars(mb_strimwidth($ann['body'], 0, 120, '...')) ?></p>
+                                <div class="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400 font-medium">
+                                    <span><?= htmlspecialchars($ann['sender_name'] ?? 'Admin') ?></span>
+                                    <span>·</span>
+                                    <span data-notif-time="<?= htmlspecialchars($ann['created_at']) ?>"><?= (new DateTime($ann['created_at']))->format('d M Y') ?></span>
+                                </div>
+                            </div>
+                            <svg class="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <!-- Current Week Info Banner -->
                 <div class="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl shadow-indigo-500/20">
@@ -1189,7 +1327,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <div class="flex items-center gap-3">
                             <!-- Search Box -->
                             <form method="GET" class="flex items-center gap-1.5">
-                                <?php if ($filter_year): ?><input type="hidden" name="academic_year" value="<?= htmlspecialchars($filter_year) ?>"><?php endif; ?>
                                 <?php if ($filter_status): ?><input type="hidden" name="status" value="<?= htmlspecialchars($filter_status) ?>"><?php endif; ?>
                                 <div class="relative">
                                     <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Search name, roll, email…"
@@ -1201,22 +1338,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <a href="?<?= http_build_query(array_merge($_GET, ['search' => ''])) ?>" class="px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-all duration-200">✕</a>
                                 <?php endif; ?>
                             </form>
-                            <!-- Year Filter -->
-                            <form method="GET" class="flex items-center gap-1.5">
-                                <?php if ($filter_status): ?><input type="hidden" name="status" value="<?= htmlspecialchars($filter_status) ?>"><?php endif; ?>
-                                <?php if ($search): ?><input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>"><?php endif; ?>
-                                <select name="academic_year" onchange="this.form.submit()" class="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm">
-                                    <option value="">All Years</option>
-                                    <?php foreach ($valid_years as $vy): ?>
-                                    <option value="<?= htmlspecialchars($vy) ?>" <?= $filter_year === $vy ? 'selected' : '' ?>><?= htmlspecialchars($vy) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </form>
                             <span class="text-xs text-slate-400 font-medium"><?= count($students) ?> student(s)</span>
-                            <!-- Export CSV Button -->
-                            <a href="?<?= http_build_query(array_merge($_GET, ['export' => 'csv'])) ?>" class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all duration-200 shadow-sm">
-                                📥 Export CSV
-                            </a>
+                            <!-- Print Report Button -->
+                            <?php if ($total_assigned > 0): ?>
+                            <button onclick="window.print()" class="no-print inline-flex items-center gap-1.5 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition-all duration-200 shadow-sm cursor-pointer">
+                                🖨️ Print
+                            </button>
+                            <?php endif; ?>
                         </div>
                     </div>
 
@@ -1418,7 +1546,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             <?php elseif ($filter_status): ?>
                                 No students with status "<?= $filter_status === 'red' ? 'Behind Schedule' : ($filter_status === 'amber' ? 'In Progress' : 'Complete') ?>".
                             <?php else: ?>
-                                No students assigned to you yet.
+                                No students currently assigned for the 2025-2026 academic year.
                             <?php endif; ?>
                         </p>
                         <?php if ($search || $filter_year || $filter_status): ?>
@@ -1504,11 +1632,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         <main class="flex-1 overflow-y-auto p-8">
             <div class="max-w-7xl mx-auto space-y-6">
 
-                <!-- Back Button -->
-                <a href="supervisor-dashboard.php" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
-                    ← Back to Dashboard
-                </a>
-
                 <!-- Archive Header -->
                 <div class="bg-gradient-to-r from-purple-900 via-purple-950 to-indigo-950 rounded-2xl p-6 text-white shadow-xl shadow-purple-500/10">
                     <div class="flex items-center justify-between flex-wrap gap-4">
@@ -1519,18 +1642,15 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <p class="text-sm text-purple-200 mt-0.5">Your Past Assigned Students — Historical Data</p>
                             </div>
                         </div>
-                        <form method="GET" class="flex items-center gap-2">
-                            <input type="hidden" name="tab" value="trainee-archive">
-                            <select name="academic_year" onchange="this.form.submit()" class="appearance-none bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2.5 pr-10 text-sm font-bold text-white focus:outline-none cursor-pointer">
-                                <option value="">All Archived Years</option>
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs font-bold text-white/60 uppercase tracking-wider">Filter by Year:</label>
+                            <select onchange="location = this.value;" class="appearance-none bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2.5 pr-10 text-sm font-bold text-white focus:outline-none cursor-pointer">
+                                <option value="?tab=trainee-archive">All Archived Years</option>
                                 <?php foreach ($ta_valid_years as $ty): ?>
-                                <option value="<?= htmlspecialchars($ty) ?>" <?= $ta_year === $ty ? 'selected' : '' ?>><?= htmlspecialchars($ty) ?></option>
+                                <option value="?tab=trainee-archive&academic_year=<?= urlencode($ty) ?>" <?= $ta_year === $ty ? 'selected' : '' ?>><?= htmlspecialchars($ty) ?></option>
                                 <?php endforeach; ?>
                             </select>
-                            <?php if ($ta_year): ?>
-                            <a href="?tab=trainee-archive" class="px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-bold rounded-xl transition border border-white/20">✕ Clear</a>
-                            <?php endif; ?>
-                        </form>
+                        </div>
                     </div>
                 </div>
 
@@ -1560,13 +1680,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 col-span-2 lg:col-span-1">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg">📊</div>
-                            <div>
+                            <div class="flex-1">
                                 <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Grades</p>
-                                <div class="flex items-center gap-1 mt-1">
-                                    <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['excellent'] ?>E</span>
-                                    <span class="text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['good'] ?>G</span>
-                                    <span class="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['average'] ?>A</span>
-                                    <span class="text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['needs_improvement'] ?>N</span>
+                                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2">
+                                    <span title="Outstanding / Excellent" class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>OE: <?= $ta_grade_dist['excellent'] ?></span>
+                                    <span title="Good" class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>OG: <?= $ta_grade_dist['good'] ?></span>
+                                    <span title="Average" class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>OA: <?= $ta_grade_dist['average'] ?></span>
+                                    <span title="Needs Attention / Not Graded" class="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>ON: <?= $ta_grade_dist['needs_improvement'] ?></span>
                                 </div>
                             </div>
                         </div>
@@ -1666,6 +1786,5 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 <?php endif; ?>
     </div>
 </div>
-
 </body>
 </html>

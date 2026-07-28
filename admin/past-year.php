@@ -243,22 +243,11 @@ if ($selected_archived_year_id > 0) {
 
 // Archived supervisors count (filtered by year if selected)
 if ($selected_archived_year_id > 0) {
-    $sup_stmt = $pdo->prepare("
-        SELECT COUNT(DISTINCT sa.supervisor_id)
-        FROM supervisor_assignments sa
-        JOIN users u ON u.id = sa.supervisor_id
-        WHERE u.role = 'supervisor'
-          AND sa.academic_year_id = ?
-    ");
+    $sup_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ?");
     $sup_stmt->execute([$selected_archived_year_id]);
     $archived_supervisors_count = (int) $sup_stmt->fetchColumn();
 } else {
-    $archived_supervisors_count = (int) $pdo->query("
-        SELECT COUNT(DISTINCT sa.supervisor_id)
-        FROM supervisor_assignments sa
-        JOIN users u ON u.id = sa.supervisor_id
-        WHERE u.role = 'supervisor'
-    ")->fetchColumn();
+    $archived_supervisors_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor'")->fetchColumn();
 }
 
 // All past students (archived, optionally filtered by selected year)

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
 
 $user_id  = $_SESSION['user_id'];
@@ -25,6 +26,33 @@ if (!$profile) {
 
 $student_name = $profile['full_name'] ?? $username;
 $student_roll = $profile['student_roll'] ?? '';
+$intern_start = $profile['internship_start_date'] ?? null;
+$intern_end   = $profile['internship_end_date'] ?? null;
+
+$weeks = [];
+if ($intern_start) {
+    $w = 1;
+    while (true) {
+        $range = getWeekRange($intern_start, $w);
+        if (!$range) break;
+        if ($intern_end && $range['start'] > $intern_end) break;
+        $weeks[$w] = $range;
+        $w++;
+    }
+}
+
+$progress_weeks_completed = 0;
+$progress_total_weeks = count($weeks);
+if (!empty($weeks)) {
+    foreach ($weeks as $wn => $wr) {
+        $esc_wk_s = $conn->real_escape_string($wr['start']);
+        $esc_wk_e = $conn->real_escape_string($wr['end']);
+        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_uid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
+        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+            $progress_weeks_completed++;
+        }
+    }
+}
 
 // ── Fetch user data ─────────────────────────────────────────────
 $user_email    = '';

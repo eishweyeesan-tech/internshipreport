@@ -31,10 +31,36 @@ if (!isset($unread_notif_count) || !isset($recent_notifications)) {
     }
 }
 
+$student_academic_year = '';
+if (isset($conn) && $conn instanceof mysqli) {
+    $student_user_id = null;
+    if (isset($esc_uid) && is_scalar($esc_uid)) {
+        $student_user_id = (int) $esc_uid;
+    } elseif (!empty($_SESSION['user_id'])) {
+        $student_user_id = (int) $_SESSION['user_id'];
+    }
+
+    if ($student_user_id) {
+        $student_user_id_esc = $conn->real_escape_string($student_user_id);
+        $student_year_result = $conn->query("SELECT u.academic_year, ay.year_label FROM users u LEFT JOIN academic_years ay ON ay.id = u.academic_year_id WHERE u.id = {$student_user_id_esc} LIMIT 1");
+        if ($student_year_result && $student_year_result->num_rows > 0) {
+            $student_year_row = $student_year_result->fetch_assoc();
+            $student_academic_year = trim((string) ($student_year_row['year_label'] ?? $student_year_row['academic_year'] ?? ''));
+        }
+    }
+}
+
+if ($student_academic_year === '') {
+    $student_academic_year = trim((string) ($_SESSION['selected_academic_year_label'] ?? ''));
+}
+
 if (!function_exists('student_notif_url')) {
-    function student_notif_url($type, $related_week) {
+    function student_notif_url($type, $related_week, $announcement_id = null) {
+        if ($announcement_id) {
+            return '#';
+        }
         $base = 'student-dashboard.php';
-        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved']) && $related_week) {
+        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved'], true) && $related_week) {
             return $base . '?week=' . (int)$related_week;
         }
         return $base;
@@ -43,13 +69,12 @@ if (!function_exists('student_notif_url')) {
 ?>
 <header class="h-14 glass-header flex items-center justify-between px-6 shrink-0 relative z-50">
     <div class="flex items-center gap-3">
-        <?php if (!empty($show_back_link)): ?>
-        <a href="student-dashboard.php" class="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 bg-white/50 hover:bg-white/80 border border-slate-200/60 px-3 py-1.5 rounded-lg transition">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-            Dashboard
-        </a>
-        <?php endif; ?>
         <span class="text-lg font-semibold text-slate-600"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></span>
+        <?php if (!empty($student_academic_year)): ?>
+        <span class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+            Academic Year <?= htmlspecialchars($student_academic_year) ?>
+        </span>
+        <?php endif; ?>
     </div>
     <div class="flex items-center gap-2 shrink-0">
 
@@ -83,7 +108,11 @@ if (!function_exists('student_notif_url')) {
                                 echo '<div class="px-4 pt-3 pb-1 border-t border-gray-100"><p class="text-[13px] font-bold text-gray-900">Earlier</p></div>';
                             }
                         ?>
-                        <a href="<?= htmlspecialchars(student_notif_url($_notif['type'], $_notif['related_week'] ?? null)) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_notif['is_read'] ? 'bg-blue-50/40' : '' ?>" onclick="markNotifRead(<?= (int)$_notif['id'] ?>)" data-notif-id="<?= (int)$_notif['id'] ?>">
+                        <?php
+                            $_ann_id = (int)($_notif['announcement_id'] ?? 0);
+                            $_notif_href = student_notif_url($_notif['type'], $_notif['related_week'] ?? null, $_ann_id ?: null);
+                        ?>
+                        <a href="<?= htmlspecialchars($_notif_href) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_notif['is_read'] ? 'bg-blue-50/40' : '' ?>" onclick="return onNotificationItemClick(event, this)" data-notif-id="<?= (int)$_notif['id'] ?>" data-announcement-id="<?= $_ann_id ?>" data-fallback-href="<?= htmlspecialchars($_notif_href) ?>">
                             <?php if (!$_notif['is_read']): ?>
                             <span class="w-2.5 h-2.5 bg-blue-500 rounded-full flex-shrink-0 mt-2 shadow-sm"></span>
                             <?php else: ?>
@@ -137,7 +166,7 @@ if (!function_exists('student_notif_url')) {
                 </div>
                 <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
-            <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+            <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1050] py-1 overflow-hidden">
                 <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
                     <span>👤</span> My Profile
                 </a>
@@ -211,40 +240,6 @@ if (!function_exists('student_notif_url')) {
         }
     };
 
-    // ── Mark Single Notification Read ──
-    window.markNotifRead = function(notifId) {
-        var fd = new FormData();
-        fd.append('action', 'mark_read');
-        fd.append('notification_id', notifId);
-        fetch('api/notifications.php?action=mark_read', { method: 'POST', body: fd })
-            .then(function(r) { return r.json(); })
-            .then(function(data) { updateNotifBadge(data.unread_count); });
-    };
-
-    // ── Mark All Notifications Read ──
-    window.markAllNotificationsRead = function() {
-        fetch('api/notifications.php?action=mark_all_read', { method: 'POST' })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                updateNotifBadge(0);
-                document.querySelectorAll('#notif-list .bg-blue-500\\/40').forEach(function(el) {
-                    el.classList.remove('bg-blue-500/40');
-                });
-                document.querySelectorAll('#notif-list .bg-blue-500').forEach(function(dot) {
-                    dot.classList.remove('bg-blue-500');
-                    dot.classList.add('bg-transparent');
-                });
-                document.querySelectorAll('#notif-list p.font-semibold').forEach(function(t) {
-                    t.classList.remove('font-semibold', 'text-gray-900');
-                    t.classList.add('text-gray-600');
-                });
-                document.querySelectorAll('#notif-list .text-blue-500.font-medium').forEach(function(t) {
-                    t.classList.remove('text-blue-500', 'font-medium');
-                    t.classList.add('text-gray-400');
-                });
-            });
-    };
-
     // ── Time Ago ──
     function timeAgo(dateStr) {
         var date = new Date(dateStr);
@@ -268,3 +263,7 @@ if (!function_exists('student_notif_url')) {
     setInterval(updateTimestamps, 60000);
 })();
 </script>
+<?php
+// Announcement modal intentionally removed for student view to avoid showing modal.
+// If needed later, set $enable_announcement_modal = true before including this file.
+?>

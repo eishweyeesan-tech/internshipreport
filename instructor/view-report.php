@@ -26,7 +26,7 @@ $student_id  = (int) $link['student_id'];
 $week_number = (int) $link['week_number'];
 
 // ── Fetch Student Profile ────────────────────────────────────────
-$profile_stmt = $pdo->prepare("SELECT sp.*, u.username, u.email FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE sp.user_id = ?");
+$profile_stmt = $pdo->prepare("SELECT sp.*, u.username, u.email, sup.id AS supervisor_user_id, sup.username AS supervisor_name, sup.email AS supervisor_email FROM student_profiles sp JOIN users u ON u.id = sp.user_id LEFT JOIN users sup ON sup.id = sp.supervisor_id WHERE sp.user_id = ?");
 $profile_stmt->execute([$student_id]);
 $profile = $profile_stmt->fetch();
 
@@ -175,6 +175,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
             $instructor_label . ' has signed and approved your Week ' . $week_number . ' report with grade "' . ucfirst(str_replace('_', ' ', $grade)) . '".',
             $week_number
         ]);
+
+        // Notify assigned supervisor
+        if (!empty($profile['supervisor_user_id'])) {
+            $sup_notif_stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'info', ?)");
+            $sup_notif_stmt->execute([
+                $profile['supervisor_user_id'],
+                'Student Report Ready for Review',
+                $student_name . ' has had Week ' . $week_number . ' approved by the instructor and is ready for your review.',
+                $week_number
+            ]);
+
+            if (!empty($profile['supervisor_email'])) {
+                require_once __DIR__ . '/../config/mail.php';
+                $subject = 'Student Report Approved by Instructor';
+                $htmlBody = '<p>Dear ' . htmlspecialchars($profile['supervisor_name'] ?: 'Supervisor') . ',</p>' .
+                    '<p>The report for <strong>' . htmlspecialchars($student_name) . '</strong> (Week ' . $week_number . ') has been approved by the instructor and is now ready for your review.</p>' .
+                    '<p>Please log in to your supervisor dashboard to provide the final review.</p>' .
+                    '<p>Thank you.</p>';
+                sendAlertEmail($profile['supervisor_email'], $subject, $htmlBody);
+            }
+        }
 
         $eval_stmt->execute([$student_id, $week_number]);
         $evaluation = $eval_stmt->fetch();

@@ -150,7 +150,7 @@
             <!-- Profile Dropdown Menu -->
             <div
                 id="profileDropdownMenu"
-                class="hidden absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 overflow-hidden"
+                class="hidden absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1050] py-1 overflow-hidden"
             >
                 <a href="admin-profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
                     <span>👤</span> My Profile

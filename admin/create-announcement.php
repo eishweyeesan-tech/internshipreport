@@ -23,6 +23,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
     } else {
         $pdo->prepare("INSERT INTO announcements (title, body, created_by) VALUES (?, ?, ?)")
             ->execute([$a_title, $a_body, $admin_id]);
+        $announcement_id = $pdo->lastInsertId();
 
         $roles = match($a_target) {
             "students" => ["student"],
@@ -34,9 +35,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
         $recipients = $pdo->prepare("SELECT id FROM users WHERE role IN ($placeholders) AND status = 'Active'");
         $recipients->execute($roles);
         $count = 0;
-        $notifStmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, 'info')");
+        $notifStmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, announcement_id) VALUES (?, ?, ?, 'info', ?)");
         foreach ($recipients->fetchAll() as $r) {
-            $notifStmt->execute([$r["id"], "📢 " . $a_title, $a_body]);
+            $notifStmt->execute([$r["id"], "📢 Announcement: " . $a_title, $a_body, $announcement_id]);
             $count++;
         }
 

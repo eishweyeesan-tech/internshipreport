@@ -177,6 +177,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_batch'])) {
     }
 }
 
+// ── Restore / Unarchive Batch ─────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_batch'])) {
+    $restore_year = trim($_POST['restore_year'] ?? '');
+    if (empty($restore_year)) {
+        $err = 'Please select an academic year to restore.';
+    } elseif (!preg_match('/^\d{4}-\d{4}$/', $restore_year)) {
+        $err = 'Invalid academic year format.';
+    } else {
+        $restore_year_id = $ay_label_to_id[$restore_year] ?? null;
+
+        if ($restore_year_id) {
+            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year_id = ? AND role = 'student' AND status = 'Archived'");
+            $cnt->execute([$restore_year_id]);
+            $count = (int) $cnt->fetchColumn();
+            $pdo->prepare("UPDATE users SET status = 'Active' WHERE academic_year_id = ? AND role = 'student' AND status = 'Archived'")->execute([$restore_year_id]);
+            // Restore the academic year status to UPCOMING if it was ARCHIVED
+            $pdo->prepare("UPDATE academic_years SET status = 'UPCOMING', is_current = 0 WHERE id = ? AND status = 'ARCHIVED'")->execute([$restore_year_id]);
+        } else {
+            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student' AND status = 'Archived'");
+            $cnt->execute([$restore_year]);
+            $count = (int) $cnt->fetchColumn();
+            $pdo->prepare("UPDATE users SET status = 'Active' WHERE academic_year = ? AND role = 'student' AND status = 'Archived'")->execute([$restore_year]);
+        }
+        $msg = "Restored {$count} student(s) from batch {$restore_year}. They can now log in again.";
+    }
+}
+
 // ── Add Holiday ────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_holiday'])) {
     $h_date      = trim($_POST['h_date'] ?? '');
@@ -226,11 +253,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
 // DATA QUERIES
 // ══════════════════════════════════════════════════════════════════
 
-// Analytics counts
-$student_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn();
-$supervisor_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor'")->fetchColumn();
+// Analytics counts – filtered by current academic year where applicable
+$ay_id = (int) ($_SESSION['selected_academic_year_id'] ?? 0);
+
+// 1. Active students for the current academic year
+if ($ay_id > 0) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ? AND status = 'Active'");
+    $stmt->execute([$ay_id]);
+    $student_count = (int) $stmt->fetchColumn();
+} else {
+    $student_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'Active'")->fetchColumn();
+}
+
+// 2. Active supervisors for the current academic year
+if ($ay_id > 0) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ? AND status = 'Active'");
+    $stmt->execute([$ay_id]);
+    $supervisor_count = (int) $stmt->fetchColumn();
+} else {
+    $supervisor_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor'")->fetchColumn();
+}
+
+// 3. Registered partner companies (global – no year filter)
 $company_count = (int) $pdo->query("SELECT COUNT(*) FROM companies")->fetchColumn();
-$pending_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'")->fetchColumn();
+
+// 4. Pending user approvals / password reset requests
+if ($ay_id > 0) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin' AND academic_year_id = ?");
+    $stmt->execute([$ay_id]);
+    $pending_count = (int) $stmt->fetchColumn();
+} else {
+    $pending_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'")->fetchColumn();
+}
 
 // Companies list
 $companies = $pdo->query("SELECT * FROM companies ORDER BY company_name ASC")->fetchAll();
@@ -439,44 +493,63 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             <div class="max-w-6xl mx-auto space-y-6">
 
             <!-- ════ ANALYTICS SUMMARY CARDS (always visible) ════ -->
-            <div class="w-full grid grid-cols-1 md:grid-cols-12 gap-6">
-                <!-- Students Card → Manage Users tab -->
-                <a href="?tab=manage" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-indigo-50/80 cursor-pointer">
+            <div class="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- Students Card -->
+                <a href="?tab=manage&role=student" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200 hover:bg-indigo-50/60 cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">🎓</div>
+                        <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl transition group-hover:bg-indigo-100">🎓</div>
                         <div>
-                            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Students</p>
-                            <p class="text-sm font-black text-slate-800"><?= $student_count ?></p>
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Students</p>
+                            <p class="text-2xl font-black text-slate-800"><?= $student_count ?></p>
                         </div>
                     </div>
                 </a>
-                <!-- Supervisors Card → Add Supervisor tab -->
-                <a href="?tab=supervisors" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-emerald-50/80 cursor-pointer">
+
+                <!-- Supervisors Card -->
+                <a href="?tab=supervisors" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-200 hover:bg-emerald-50/60 cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">👨‍🏫</div>
+                        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl transition group-hover:bg-emerald-100">👨‍🏫</div>
                         <div>
-                            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Supervisors</p>
-                            <p class="text-sm font-black text-slate-800"><?= $supervisor_count ?></p>
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Supervisors</p>
+                            <p class="text-2xl font-black text-slate-800"><?= $supervisor_count ?></p>
                         </div>
                     </div>
                 </a>
-                <!-- Companies Card → Manage Companies page -->
-                <a href="manage-companies.php" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-blue-50/80 cursor-pointer">
+
+                <!-- Companies Card -->
+                <a href="manage-companies.php" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-blue-200 hover:bg-blue-50/60 cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">🏢</div>
+                        <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl transition group-hover:bg-blue-100">🏢</div>
                         <div>
-                            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Companies</p>
-                            <p class="text-sm font-black text-slate-800"><?= $company_count ?></p>
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Companies</p>
+                            <p class="text-2xl font-black text-slate-800"><?= $company_count ?></p>
                         </div>
                     </div>
                 </a>
-                <!-- Pending Password Card → Manage Users tab (filtered to pending users) -->
-                <a href="?tab=manage" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50/80 cursor-pointer">
+
+                <!-- Pending Requests Card — dynamic alert style -->
+                <a href="?tab=manage" class="group block rounded-2xl shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 cursor-pointer <?= $pending_count > 0
+                    ? 'bg-amber-50 border-2 border-amber-300 hover:shadow-md hover:border-amber-400 hover:bg-amber-100/60'
+                    : 'bg-white border border-slate-200 hover:shadow-md hover:border-amber-200 hover:bg-amber-50/60'
+                ?>">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg">⏳</div>
+                        <div class="relative w-11 h-11 rounded-xl flex items-center justify-center text-xl transition <?= $pending_count > 0
+                            ? 'bg-amber-100 text-amber-600 group-hover:bg-amber-200'
+                            : 'bg-amber-50 text-amber-600 group-hover:bg-amber-100'
+                        ?>">
+                            ⏳
+                            <?php if ($pending_count > 0): ?>
+                            <span class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-amber-50 animate-pulse"></span>
+                            <?php endif; ?>
+                        </div>
                         <div>
-                            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Pending P.W.</p>
-                            <p class="text-sm font-black text-slate-800"><?= $pending_count ?></p>
+                            <p class="text-xs font-bold uppercase tracking-wider <?= $pending_count > 0 ? 'text-amber-600' : 'text-slate-400' ?>">Pending Requests</p>
+                            <div class="flex items-center gap-2">
+                                <p class="text-2xl font-black <?= $pending_count > 0 ? 'text-amber-700' : 'text-slate-800' ?>"><?= $pending_count ?></p>
+                                <?php if ($pending_count > 0): ?>
+                                <span class="text-xs font-bold text-amber-700 bg-amber-200 px-2 py-0.5 rounded-full animate-pulse">Action Needed</span>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </a>
@@ -826,6 +899,65 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                             <p class="text-sm font-bold text-amber-600 uppercase tracking-wider mb-0.5">📦 <?= htmlspecialchars($ar['year_label']) ?></p>
                             <p class="text-sm font-black text-amber-700"><?= $ar['cnt'] ?></p>
                             <p class="text-sm text-amber-400">student(s) archived</p>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- ════ RESTORE / UNARCHIVE BATCH ════ -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="px-5 py-3 border-b border-slate-100">
+                    <h2 class="text-lg font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <span class="p-1 bg-emerald-50 text-emerald-600 rounded">♻️</span> Restore / Unarchive Batch
+                    </h2>
+                </div>
+                <form method="POST" class="p-5 space-y-4">
+                    <input type="hidden" name="restore_batch" value="1">
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        Restore all archived students from a specific academic year back to <strong>Active</strong> status so they can log in again.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
+                            <select name="restore_year" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 transition">
+                                <option value="">— Select Year —</option>
+                                <?php foreach ($all_academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay['year_label']) ?>"><?= htmlspecialchars($ay['year_label']) ?> (<?= htmlspecialchars($ay['status']) ?>)</option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button type="submit" onclick="return confirm('Restore all archived students from this batch?\nThey will be set back to Active status and can log in again.')" class="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">♻️ Restore Batch</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Per-Year Restore Buttons -->
+            <?php if (!empty($archived)): ?>
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="px-5 py-3 border-b border-slate-100">
+                    <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <span class="p-1 bg-emerald-50 text-emerald-600 rounded">♻️</span> Quick Restore
+                    </h2>
+                </div>
+                <div class="p-5">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <?php foreach ($archived as $ar): ?>
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-bold text-slate-700"><?= htmlspecialchars($ar['year_label']) ?></p>
+                                <p class="text-xs text-slate-400"><?= $ar['cnt'] ?> archived student(s)</p>
+                            </div>
+                            <form method="POST" onsubmit="return confirm('Restore all <?= $ar['cnt'] ?> archived student(s) from <?= htmlspecialchars($ar['year_label']) ?>?\nThey will be set back to Active status.')" class="inline">
+                                <input type="hidden" name="restore_batch" value="1">
+                                <input type="hidden" name="restore_year" value="<?= htmlspecialchars($ar['year_label']) ?>">
+                                <button type="submit" class="px-3 py-1.5 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg hover:bg-emerald-100 transition cursor-pointer flex items-center gap-1">
+                                    ♻️ Restore
+                                </button>
+                            </form>
                         </div>
                         <?php endforeach; ?>
                     </div>

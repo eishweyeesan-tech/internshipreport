@@ -289,9 +289,11 @@ CREATE TABLE IF NOT EXISTS notifications (
     message TEXT NOT NULL,
     type ENUM('instructor_approved', 'instructor_rejected', 'supervisor_approved', 'info') NOT NULL DEFAULT 'info',
     related_week INT DEFAULT NULL,
+    announcement_id INT DEFAULT NULL,
     is_read TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

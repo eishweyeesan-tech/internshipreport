@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
 
 $user_id  = $_SESSION['user_id'];
@@ -16,14 +17,43 @@ $student_name = '';
 $student_roll = '';
 $profile_pic  = '';
 
-$_s = $conn->query("SELECT sp.full_name, sp.student_roll, u.profile_pic FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE sp.user_id = {$esc_uid}");
+$_s = $conn->query("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date, u.profile_pic FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE sp.user_id = {$esc_uid}");
 if ($_s && $_s->num_rows > 0) {
     $_sd = $_s->fetch_assoc();
     $student_name = $_sd['full_name'] ?? $username;
     $student_roll = $_sd['student_roll'] ?? '';
     $profile_pic  = $_sd['profile_pic'] ?? '';
+    $intern_start = $_sd['internship_start_date'] ?? null;
+    $intern_end   = $_sd['internship_end_date'] ?? null;
 } else {
     $student_name = $username;
+    $intern_start = null;
+    $intern_end   = null;
+}
+
+$weeks = [];
+if ($intern_start) {
+    $w = 1;
+    while (true) {
+        $range = getWeekRange($intern_start, $w);
+        if (!$range) break;
+        if ($intern_end && $range['start'] > $intern_end) break;
+        $weeks[$w] = $range;
+        $w++;
+    }
+}
+
+$progress_weeks_completed = 0;
+$progress_total_weeks = count($weeks);
+if (!empty($weeks)) {
+    foreach ($weeks as $wn => $wr) {
+        $esc_wk_s = $conn->real_escape_string($wr['start']);
+        $esc_wk_e = $conn->real_escape_string($wr['end']);
+        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_uid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
+        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+            $progress_weeks_completed++;
+        }
+    }
 }
 
 require_once __DIR__ . '/../config/database.php';

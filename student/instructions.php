@@ -24,6 +24,33 @@ $profile_r = $conn->query("SELECT sp.full_name, sp.student_roll, sp.internship_s
 $profile_row = $profile_r ? $profile_r->fetch_assoc() : null;
 $student_name = $profile_row['full_name'] ?? $username;
 $profile_pic  = $profile_row['profile_pic'] ?? null;
+$intern_start = $profile_row['internship_start_date'] ?? null;
+$intern_end   = $profile_row['internship_end_date'] ?? null;
+
+$weeks = [];
+if ($intern_start) {
+    $w = 1;
+    while (true) {
+        $range = getWeekRange($intern_start, $w);
+        if (!$range) break;
+        if ($intern_end && $range['start'] > $intern_end) break;
+        $weeks[$w] = $range;
+        $w++;
+    }
+}
+
+$progress_weeks_completed = 0;
+$progress_total_weeks = count($weeks);
+if (!empty($weeks)) {
+    foreach ($weeks as $wn => $wr) {
+        $esc_wk_s = $conn->real_escape_string($wr['start']);
+        $esc_wk_e = $conn->real_escape_string($wr['end']);
+        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
+        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+            $progress_weeks_completed++;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

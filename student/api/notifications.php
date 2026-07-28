@@ -43,6 +43,8 @@ switch ($action) {
                     'type' => $row['type'],
                     'is_read' => (int)$row['is_read'],
                     'created_at' => $row['created_at'],
+                    'announcement_id' => isset($row['announcement_id']) ? (int)$row['announcement_id'] : null,
+                    'related_week' => isset($row['related_week']) ? (int)$row['related_week'] : null,
                     'redirect_url' => notif_redirect_url($row['type'], $row['related_week'] ?? null),
                 ];
             }

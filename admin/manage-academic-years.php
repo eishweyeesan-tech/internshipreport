@@ -32,10 +32,35 @@ $current_active = null;
 foreach ($years as $y) {
     if ($y['status'] === 'ACTIVE') { $current_active = $y; break; }
 }
+
+$selected_year = $current_academic_year ?? null;
+$selected_year_history = [];
+if (!empty($selected_year['id'])) {
+    $selected_year_id = (int) $selected_year['id'];
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ?");
+    $stmt->execute([$selected_year_id]);
+    $selected_year_history['students'] = (int) $stmt->fetchColumn();
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ?");
+    $stmt->execute([$selected_year_id]);
+    $selected_year_history['supervisors'] = (int) $stmt->fetchColumn();
+
+    $stmt = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''");
+    $stmt->execute([$selected_year_id]);
+    $selected_year_history['companies'] = (int) $stmt->fetchColumn();
+
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM daily_logs dl JOIN student_profiles sp ON sp.id = dl.internship_id JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ?");
+    $stmt->execute([$selected_year_id]);
+    $selected_year_history['logs'] = (int) $stmt->fetchColumn();
+
+    $stmt = $pdo->prepare("SELECT u.id, u.username, sp.full_name, sp.student_roll, sp.company_name FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.academic_year_id = ? ORDER BY sp.full_name ASC LIMIT 8");
+    $stmt->execute([$selected_year_id]);
+    $selected_year_history['students_list'] = $stmt->fetchAll();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Academic Years – Admin – InternReport</title>
@@ -122,6 +147,52 @@ foreach ($years as $y) {
                     <div>
                         <p class="text-sm font-bold text-amber-700">No active academic year</p>
                         <p class="text-xs text-amber-500">Transition an UPCOMING year to ACTIVE to get started.</p>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if (!empty($selected_year['id'])): ?>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                        <div>
+                            <p class="text-xs uppercase tracking-wider text-slate-400">Selected Academic Year</p>
+                            <h3 class="text-xl font-black text-slate-800 mt-1"><?= htmlspecialchars($selected_year['year_label']) ?></h3>
+                            <p class="text-sm text-slate-500 mt-1"><?= (new DateTime($selected_year['start_date']))->format('d M Y') ?> – <?= (new DateTime($selected_year['end_date']))->format('d M Y') ?></p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
+                                <p class="text-xs uppercase tracking-wider text-slate-400">Students</p>
+                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['students'] ?? 0 ?></p>
+                            </div>
+                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
+                                <p class="text-xs uppercase tracking-wider text-slate-400">Supervisors</p>
+                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['supervisors'] ?? 0 ?></p>
+                            </div>
+                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
+                                <p class="text-xs uppercase tracking-wider text-slate-400">Companies</p>
+                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['companies'] ?? 0 ?></p>
+                            </div>
+                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
+                                <p class="text-xs uppercase tracking-wider text-slate-400">Daily logs</p>
+                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['logs'] ?? 0 ?></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <h4 class="text-sm font-bold text-slate-700 mb-3">Sample Students</h4>
+                        <?php if (!empty($selected_year_history['students_list'])): ?>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <?php foreach ($selected_year_history['students_list'] as $student): ?>
+                            <div class="rounded-2xl border border-slate-100 p-4 bg-slate-50">
+                                <p class="font-semibold text-slate-800"><?= htmlspecialchars($student['full_name'] ?: $student['username']) ?></p>
+                                <p class="text-xs text-slate-500 mt-1"><?= htmlspecialchars($student['student_roll'] ?? 'No roll') ?><?= !empty($student['company_name']) ? ' · ' . htmlspecialchars($student['company_name']) : '' ?></p>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php else: ?>
+                        <p class="text-sm text-slate-500">No students are linked to this year yet.</p>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <?php endif; ?>
