@@ -12,22 +12,19 @@ if (!isset($activePage)) $activePage = 'dashboard';
 
 $nav_current = [
     ['key' => 'dashboard',     'href' => 'admin-dashboard.php',                   'icon' => '📊', 'label' => 'Overview'],
-    ['key' => 'students',      'href' => 'admin-dashboard.php?tab=students',      'icon' => '🎓', 'label' => 'Add Student'],
-    ['key' => 'supervisors',   'href' => 'admin-dashboard.php?tab=supervisors',   'icon' => '👨‍🏫', 'label' => 'Add Supervisor'],
+    ['key' => 'students',      'href' => 'admin-dashboard.php?tab=students',      'icon' => '🎓', 'label' => 'Student'],
+    ['key' => 'supervisors',   'href' => 'admin-dashboard.php?tab=supervisors',   'icon' => '👨‍🏫', 'label' => 'Supervisor'],
     ['key' => 'manage',        'href' => 'admin-dashboard.php?tab=manage',        'icon' => '👥', 'label' => 'Manage Users'],
-    ['key' => 'companies',     'href' => 'manage-companies.php',                  'icon' => '🏢', 'label' => 'Manage Companies'],
+    ['key' => 'companies',     'href' => 'manage-companies.php',                  'icon' => '🏢', 'label' => 'Companies'],
     ['key' => 'academic-years','href' => 'manage-academic-years.php',             'icon' => '📅', 'label' => 'Academic Years'],
-    ['key' => 'announcements', 'href' => 'create-announcement.php',               'icon' => '📢', 'label' => 'Announcements'],
 ];
 
 $nav_past = [
     ['key' => 'archive',       'href' => 'admin-dashboard.php?tab=archive',       'icon' => '📦', 'label' => 'Batch Archive'],
-    ['key' => 'history',       'href' => 'admin-dashboard.php?tab=history',       'icon' => '📜', 'label' => 'Student History'],
-    ['key' => 'past-year',     'href' => 'past-year.php',                         'icon' => '🗄️', 'label' => 'Past Academic Years'],
+    ['key' => 'history',       'href' => 'admin-dashboard.php?tab=history',       'icon' => '📜', 'label' => 'Reports'],
 ];
 
 $nav_settings = [
-    ['key' => 'holidays',      'href' => 'admin-dashboard.php?tab=holidays',      'icon' => '🇲🇲', 'label' => 'Myanmar Holidays'],
     ['key' => 'profile',       'href' => 'admin-profile.php',                     'icon' => '👤', 'label' => 'Profile'],
 ];
 ?>

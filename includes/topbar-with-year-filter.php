@@ -52,7 +52,7 @@
                 </a>
                 <?php foreach ($archived_years as $ay): ?>
                 <a
-                    href="?tab=<?= $current_tab ?>&archived_year_id=<?= (int) $ay['id'] ?>"
+                    href="?tab=<?= urlencode($current_tab) ?>&archived_year_id=<?= (int)$ay['id'] ?>"
                     class="hover:bg-purple-50 hover:text-purple-600 px-4 py-2 text-sm text-gray-700 block cursor-pointer transition-colors duration-150 <?= $selected_archived_year_id === (int) $ay['id'] ? 'bg-purple-50 text-purple-600 font-semibold' : '' ?>"
                 >
                     <?= htmlspecialchars($ay['year_label']) ?>

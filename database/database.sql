@@ -268,34 +268,23 @@ CREATE TABLE IF NOT EXISTS supervisor_alerts (
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Announcements
--- FK: created_by -> users.id  (SET NULL)
-CREATE TABLE IF NOT EXISTS announcements (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(200) NOT NULL,
-    body TEXT NOT NULL,
-    is_active TINYINT(1) NOT NULL DEFAULT 1,
-    created_by INT DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-);
 
--- Notifications table (in-app notifications for students)
--- FK: user_id -> users.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     title VARCHAR(200) NOT NULL,
     message TEXT NOT NULL,
-    type ENUM('instructor_approved', 'instructor_rejected', 'supervisor_approved', 'info') NOT NULL DEFAULT 'info',
+    type ENUM(
+        'instructor_approved',
+        'instructor_rejected',
+        'supervisor_approved',
+        'info'
+    ) NOT NULL DEFAULT 'info',
     related_week INT DEFAULT NULL,
-    announcement_id INT DEFAULT NULL,
     is_read TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE SET NULL
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 -- ============================================================
 -- TRIGGERS
 -- ============================================================
@@ -322,9 +311,9 @@ INSERT IGNORE INTO academic_years (year_label, start_date, end_date, status, is_
 ('2025-2026', '2025-09-01', '2026-08-31', 'ACTIVE', 1);
 
 -- Default system settings
-INSERT INTO system_settings (setting_key, setting_value) VALUES
-('default_student_password', 'password123'),
-('default_supervisor_password', 'password123');
+INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES
+('default_student_password', 'password1234'),
+('default_supervisor_password', 'password1234');
 
 -- Default admin account (password: "password")
 INSERT INTO users (username, email, password, role, is_first_login) VALUES

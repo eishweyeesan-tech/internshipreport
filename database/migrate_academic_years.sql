@@ -117,6 +117,5 @@ END //
 DELIMITER ;
 
 SET FOREIGN_KEY_CHECKS = 1;
-
 -- Verify: should show exactly 1 active year
 SELECT year_label, status, is_current FROM academic_years ORDER BY start_date DESC;
