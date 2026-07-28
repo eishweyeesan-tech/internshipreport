@@ -32,8 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
 }
 
 // ── Notification redirect URL helper ────────────────────────────
-function notif_redirect_url($type, $related_week, $announcement_id = null) {
-    if ($announcement_id) return 'announcement-detail.php?id=' . (int)$announcement_id;
+function notif_redirect_url($type, $related_week) {
     switch ($type) {
         case 'instructor_approved':
         case 'instructor_rejected':
@@ -80,21 +79,6 @@ $unread_notif_count = (int) $unread_notif_q->fetchColumn();
 $recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
 $recent_notifs_q->execute([$sup_id]);
 $recent_notifications = $recent_notifs_q->fetchAll();
-
-// ── Fetch latest announcements ──────────────────────────────────
-$latest_announcements = [];
-try {
-    $ann_q = $pdo->prepare("
-        SELECT a.id, a.title, a.body, a.created_at, u.username AS sender_name
-        FROM announcements a
-        LEFT JOIN users u ON u.id = a.created_by
-        WHERE a.is_active = 1
-        ORDER BY a.created_at DESC
-        LIMIT 3
-    ");
-    $ann_q->execute();
-    $latest_announcements = $ann_q->fetchAll();
-} catch (PDOException $e) {}
 
 // ══════════════════════════════════════════════════════════════════════
 // EMAIL ALERT HELPER FUNCTION
@@ -886,9 +870,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
             </a>
-            <a href="announcements.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📢</span> Announcements
-            </a>
             <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
@@ -952,8 +933,8 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null); ?>
-                                <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-announcement-id="<?= (int)($notif['announcement_id'] ?? 0) ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null); ?>
+                                <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
                                     <?php if ($notif['type'] === 'instructor_approved'): ?>
                                     <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -1126,37 +1107,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         </div>
                     </div>
                 </div>
-
-                <!-- Announcements Widget -->
-                <?php if (!empty($latest_announcements)): ?>
-                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50/80 to-white flex items-center justify-between">
-                        <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm">📢</span> Latest Announcements
-                        </h2>
-                        <a href="announcements.php" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition">View all →</a>
-                    </div>
-                    <div class="divide-y divide-slate-100">
-                        <?php foreach ($latest_announcements as $ann): ?>
-                        <a href="announcement-detail.php?id=<?= (int)$ann['id'] ?>" class="flex items-start gap-4 px-6 py-4 hover:bg-slate-50 transition-colors duration-150 group">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white flex items-center justify-center text-base shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                                📢
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <h3 class="text-sm font-bold text-slate-800 group-hover:text-blue-700 transition-colors leading-snug"><?= htmlspecialchars($ann['title']) ?></h3>
-                                <p class="text-xs text-slate-500 mt-0.5 line-clamp-1"><?= htmlspecialchars(mb_strimwidth($ann['body'], 0, 120, '...')) ?></p>
-                                <div class="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400 font-medium">
-                                    <span><?= htmlspecialchars($ann['sender_name'] ?? 'Admin') ?></span>
-                                    <span>·</span>
-                                    <span data-notif-time="<?= htmlspecialchars($ann['created_at']) ?>"><?= (new DateTime($ann['created_at']))->format('d M Y') ?></span>
-                                </div>
-                            </div>
-                            <svg class="w-4 h-4 text-slate-300 group-hover:text-blue-500 transition-colors shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-                        </a>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-                <?php endif; ?>
 
                 <!-- Current Week Info Banner -->
                 <div class="bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 rounded-2xl p-6 text-white shadow-xl shadow-indigo-500/20">
