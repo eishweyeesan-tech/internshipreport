@@ -12,6 +12,20 @@ $admin_id   = $_SESSION['user_id'];
 $msg = '';
 $err = '';
 
+// Default password values should be available before request handlers run.
+$def_student_pw = 'password123';
+$def_supervisor_pw = 'password123';
+$sys_settings = $pdo->query("SELECT setting_key, setting_value FROM system_settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+$def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
+$def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
+
+// ── Academic Years (for dynamic dropdowns) ──────────────────────
+$all_academic_years = $pdo->query("SELECT id, year_label, status, is_current FROM academic_years ORDER BY start_date DESC")->fetchAll();
+$ay_label_to_id = [];
+foreach ($all_academic_years as $ay) {
+    $ay_label_to_id[$ay['year_label']] = (int) $ay['id'];
+}
+
 // ══════════════════════════════════════════════════════════════════
 // HANDLERS
 // ══════════════════════════════════════════════════════════════════
@@ -44,6 +58,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
         if ($check->fetch()) {
             $err = 'A user with this email already exists.';
         } else {
+            // Resolve academic_year_id from the string label
+            $s_academic_id = ($s_academic && isset($ay_label_to_id[$s_academic])) ? $ay_label_to_id[$s_academic] : null;
+
+            // Composite check: same roll number + same academic year = duplicate
+            $check_dup = $pdo->prepare("SELECT id FROM users WHERE username = ? AND (academic_year_id = ? OR (academic_year_id IS NULL AND academic_year = ?))");
+            $check_dup->execute([$s_roll, $s_academic_id, $s_academic ?: null]);
+            if ($check_dup->fetch()) {
+                $err = 'A student with roll number "' . htmlspecialchars($s_roll) . '" already exists in ' . htmlspecialchars($s_academic ?: 'this year') . '.';
+            } else {
             // Look up company name from selected company_id
             $company_name = '';
             if ($s_company_id > 0) {
@@ -53,12 +76,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
             }
 
             $hash = password_hash($s_password, PASSWORD_DEFAULT);
-            $pdo->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year) VALUES (?, ?, ?, 'student', 1, ?)")
-                ->execute([$s_roll, $s_email, $hash, $s_academic ?: null]);
+            $pdo->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?, ?)")
+                ->execute([$s_roll, $s_email, $hash, $s_academic ?: null, $s_academic_id]);
             $uid = $pdo->lastInsertId();
             $pdo->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
                 ->execute([$uid, $s_name, $s_roll, $s_major, $s_company_id ?: null, $company_name, $s_supervisor_id ?: null, $s_instructor, $s_start ?: null, $s_end ?: null]);
             $msg = "Student \"{$s_name}\" created. Email: {$s_email}, Password: {$s_password}";
+            }
         }
     }
 }
@@ -85,10 +109,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
         if ($check->fetch()) {
             $err = 'A user with this email already exists.';
         } else {
+            // Resolve academic_year_id from the string label
+            $t_academic_id = ($t_academic && isset($ay_label_to_id[$t_academic])) ? $ay_label_to_id[$t_academic] : null;
+
             $hash = password_hash($t_password, PASSWORD_DEFAULT);
             $uname = 'sup_' . strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $t_name));
-            $pdo->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year) VALUES (?, ?, ?, 'supervisor', 1, ?)")
-                ->execute([$uname, $t_email, $hash, $t_academic ?: null]);
+            $pdo->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'supervisor', 1, ?, ?)")
+                ->execute([$uname, $t_email, $hash, $t_academic ?: null, $t_academic_id]);
             $msg = "Supervisor \"{$t_name}\" created. Email: {$t_email}, Password: {$t_password}";
         }
     }
@@ -133,11 +160,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_batch'])) {
     } elseif (!preg_match('/^\d{4}-\d{4}$/', $batch_year)) {
         $err = 'Invalid academic year format.';
     } else {
-        $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student'");
-        $cnt->execute([$batch_year]);
-        $count = (int) $cnt->fetchColumn();
+        $batch_year_id = $ay_label_to_id[$batch_year] ?? null;
 
-        $pdo->prepare("UPDATE users SET status = 'Archived' WHERE academic_year = ? AND role = 'student'")->execute([$batch_year]);
+        if ($batch_year_id) {
+            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year_id = ? AND role = 'student'");
+            $cnt->execute([$batch_year_id]);
+            $count = (int) $cnt->fetchColumn();
+            $pdo->prepare("UPDATE users SET status = 'Archived' WHERE academic_year_id = ? AND role = 'student'")->execute([$batch_year_id]);
+        } else {
+            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student'");
+            $cnt->execute([$batch_year]);
+            $count = (int) $cnt->fetchColumn();
+            $pdo->prepare("UPDATE users SET status = 'Archived' WHERE academic_year = ? AND role = 'student'")->execute([$batch_year]);
+        }
         $msg = "Archived {$count} student(s) from batch {$batch_year}.";
     }
 }
@@ -172,6 +207,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_holiday'])) {
     }
 }
 
+// ── Mark notification as read ────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
+    $notif_id = (int)($_POST['notification_id'] ?? 0);
+    if ($notif_id > 0) {
+        $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")->execute([$notif_id, $admin_id]);
+    }
+    header('Location: admin-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notifications_read'])) {
+    $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0")->execute([$admin_id]);
+    header('Location: admin-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    exit;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // DATA QUERIES
 // ══════════════════════════════════════════════════════════════════
@@ -181,11 +231,6 @@ $student_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'stu
 $supervisor_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor'")->fetchColumn();
 $company_count = (int) $pdo->query("SELECT COUNT(*) FROM companies")->fetchColumn();
 $pending_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'")->fetchColumn();
-
-// System default passwords
-$sys_settings = $pdo->query("SELECT setting_key, setting_value FROM system_settings")->fetchAll(PDO::FETCH_KEY_PAIR);
-$def_student_pw  = $sys_settings['default_student_password'] ?? 'password123';
-$def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? 'password123';
 
 // Companies list
 $companies = $pdo->query("SELECT * FROM companies ORDER BY company_name ASC")->fetchAll();
@@ -225,6 +270,96 @@ $all_users = $all_users_stmt->fetchAll();
 // Holidays
 $holidays = $pdo->query("SELECT * FROM holidays ORDER BY holiday_date ASC")->fetchAll();
 
+// Notifications
+$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->execute([$admin_id]);
+$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+
+$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->execute([$admin_id]);
+$recent_notifications = $recent_notifs_q->fetchAll();
+
+// Recent activity feed for the overview panel
+$recent_activity_items = [];
+
+$recent_student_activity = $pdo->query(
+    "SELECT 'student' AS type, 'New student added' AS title, COALESCE(sp.full_name, u.username) AS detail, u.created_at
+     FROM users u
+     LEFT JOIN student_profiles sp ON sp.user_id = u.id
+     WHERE u.role = 'student'
+     ORDER BY u.created_at DESC LIMIT 5"
+)->fetchAll();
+foreach ($recent_student_activity as $item) {
+    $recent_activity_items[] = [
+        'type' => 'student',
+        'title' => 'New student added',
+        'detail' => $item['detail'] ?? 'Student record created',
+        'created_at' => $item['created_at'],
+    ];
+}
+
+$recent_supervisor_activity = $pdo->query(
+    "SELECT 'supervisor' AS type, 'New supervisor added' AS title, u.username AS detail, u.created_at
+     FROM users u
+     WHERE u.role = 'supervisor'
+     ORDER BY u.created_at DESC LIMIT 5"
+)->fetchAll();
+foreach ($recent_supervisor_activity as $item) {
+    $recent_activity_items[] = [
+        'type' => 'supervisor',
+        'title' => 'New supervisor added',
+        'detail' => $item['detail'] ?? 'Supervisor record created',
+        'created_at' => $item['created_at'],
+    ];
+}
+
+$recent_company_activity = $pdo->query(
+    "SELECT 'company' AS type, 'New company added' AS title, company_name AS detail, created_at
+     FROM companies
+     ORDER BY created_at DESC LIMIT 5"
+)->fetchAll();
+foreach ($recent_company_activity as $item) {
+    $recent_activity_items[] = [
+        'type' => 'company',
+        'title' => 'New company added',
+        'detail' => $item['detail'] ?? 'Company record created',
+        'created_at' => $item['created_at'],
+    ];
+}
+
+$recent_holiday_activity = $pdo->query(
+    "SELECT 'holiday' AS type, 'Holiday added' AS title, holiday_name AS detail, created_at
+     FROM holidays
+     ORDER BY created_at DESC LIMIT 5"
+)->fetchAll();
+foreach ($recent_holiday_activity as $item) {
+    $recent_activity_items[] = [
+        'type' => 'holiday',
+        'title' => 'Holiday added',
+        'detail' => $item['detail'] ?? 'Holiday record created',
+        'created_at' => $item['created_at'],
+    ];
+}
+
+$recent_announcement_activity = $pdo->query(
+    "SELECT 'announcement' AS type, 'Announcement published' AS title, title AS detail, created_at
+     FROM announcements
+     ORDER BY created_at DESC LIMIT 5"
+)->fetchAll();
+foreach ($recent_announcement_activity as $item) {
+    $recent_activity_items[] = [
+        'type' => 'announcement',
+        'title' => 'Announcement published',
+        'detail' => $item['detail'] ?? 'Announcement published',
+        'created_at' => $item['created_at'],
+    ];
+}
+
+usort($recent_activity_items, function ($a, $b) {
+    return strtotime($b['created_at'] ?? 'now') <=> strtotime($a['created_at'] ?? 'now');
+});
+$recent_activity_items = array_slice($recent_activity_items, 0, 8);
+
 // ══════════════════════════════════════════════════════════════════
 // ACTIVE TAB
 // ══════════════════════════════════════════════════════════════════
@@ -250,105 +385,42 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 fontFamily: {
                     'inter': ['Inter', 'sans-serif'],
                 },
+                fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
             }
         }
     }
-    function toggleProfileDropdown(e) {
-        e.stopPropagation();
-        var dd = document.getElementById('profile-dropdown-menu');
-        dd.classList.toggle('hidden');
-    }
-    document.addEventListener('click', function(e) {
-        var dd = document.getElementById('profile-dropdown-menu');
-        var btn = document.getElementById('profile-avatar-btn');
-        if (dd && !dd.contains(e.target) && !btn.contains(e.target)) {
-            dd.classList.add('hidden');
-        }
-    });
+    /* Old toggleProfileDropdown removed — handled by includes/topbar.php */
     </script>
 </head>
 <body class="bg-slate-50 font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
-    <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-slate-100">
-            <span class="text-sm font-black text-slate-800 tracking-tight">📋 InternReport</span>
-            <span class="ml-2 text-sm font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">ADMIN</span>
-        </div>
-        <nav class="flex-1 py-4 space-y-1 px-2">
-            <a href="?tab=overview" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'overview' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>📊</span> Overview
-            </a>
-            <a href="?tab=students" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'students' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>🎓</span> Add Student
-            </a>
-            <a href="?tab=supervisors" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'supervisors' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>👨‍🏫</span> Add Supervisor
-            </a>
-            <a href="?tab=manage" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'manage' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>👥</span> Manage Users
-            </a>
-            <a href="manage-companies.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>🏢</span> Manage Companies
-            </a>
-            <a href="create-announcement.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>📢</span> Announcements
-            </a>
-            <a href="?tab=archive" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'archive' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>📦</span> Batch Archive
-            </a>
-            <a href="?tab=history" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'history' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>📜</span> Student History
-            </a>
-            <a href="?tab=holidays" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'holidays' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>🇲🇲</span> Myanmar Holidays
-            </a>
-            <a href="admin-profile.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>👤</span> Profile
-            </a>
-        </nav>
-        <div class="p-3 border-t border-slate-100">
-            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-lg transition">🚪 Logout</a>
-        </div>
-    </aside>
+    <?php
+    $activePageMap = [
+        'overview'     => 'dashboard',
+        'students'     => 'students',
+        'supervisors'  => 'supervisors',
+        'manage'       => 'manage',
+        'archive'      => 'archive',
+        'history'      => 'history',
+        'holidays'     => 'holidays',
+    ];
+    $activePage = $activePageMap[$tab] ?? 'dashboard';
+    ?>
+    <?php require_once __DIR__ . '/../includes/admin-sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-            <h1 class="text-sm font-bold text-slate-700">Admin Control Panel</h1>
-            <div class="flex items-center gap-3 relative">
-                <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="relative focus:outline-none">
-                    <?php if (!empty($_SESSION['profile_pic'])): ?>
-                    <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-lg shadow-amber-500/20">
-                    <?php else: ?>
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-white flex items-center justify-center text-lg font-bold shadow-lg shadow-amber-500/20">
-                        <?= strtoupper(substr($admin_name, 0, 1)) ?>
-                    </div>
-                    <?php endif; ?>
-                </button>
-                <div class="text-right">
-                    <p class="text-lg font-bold text-slate-700"><?= htmlspecialchars($admin_name) ?></p>
-                    <p class="text-sm text-slate-400">Admin</p>
-                </div>
-                <!-- Profile Dropdown Menu -->
-                <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-xl w-48 py-2">
-                    <a href="admin-profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
-                        <span>👤</span> My Profile
-                    </a>
-                    <a href="admin-profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
-                        <span>🔑</span> Change Password
-                    </a>
-                    <div class="my-1 border-t border-slate-100"></div>
-                    <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50 transition">
-                        <span>🚪</span> Logout
-                    </a>
-                </div>
-            </div>
-        </header>
+        <?php $pageTitle = 'Admin Control Panel'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-6">
@@ -367,9 +439,9 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             <div class="max-w-6xl mx-auto space-y-6">
 
             <!-- ════ ANALYTICS SUMMARY CARDS (always visible) ════ -->
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="w-full grid grid-cols-1 md:grid-cols-12 gap-6">
                 <!-- Students Card → Manage Users tab -->
-                <a href="?tab=manage" class="block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-indigo-50/80 cursor-pointer">
+                <a href="?tab=manage" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-indigo-50/80 cursor-pointer">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">🎓</div>
                         <div>
@@ -379,7 +451,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                     </div>
                 </a>
                 <!-- Supervisors Card → Add Supervisor tab -->
-                <a href="?tab=supervisors" class="block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-emerald-50/80 cursor-pointer">
+                <a href="?tab=supervisors" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-emerald-50/80 cursor-pointer">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg">👨‍🏫</div>
                         <div>
@@ -389,7 +461,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                     </div>
                 </a>
                 <!-- Companies Card → Manage Companies page -->
-                <a href="manage-companies.php" class="block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-blue-50/80 cursor-pointer">
+                <a href="manage-companies.php" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-blue-50/80 cursor-pointer">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">🏢</div>
                         <div>
@@ -399,7 +471,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                     </div>
                 </a>
                 <!-- Pending Password Card → Manage Users tab (filtered to pending users) -->
-                <a href="?tab=manage" class="block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50/80 cursor-pointer">
+                <a href="?tab=manage" class="md:col-span-3 block bg-white rounded-2xl border border-slate-200 shadow-sm p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:bg-amber-50/80 cursor-pointer">
                     <div class="flex items-center gap-3">
                         <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg">⏳</div>
                         <div>
@@ -412,55 +484,18 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
 
             <?php if ($tab === 'overview'): ?>
             <!-- ════ TAB: OVERVIEW ════ -->
-            
-            <!-- Quick Actions Panel -->
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="px-5 py-3 border-b border-slate-100">
-                    <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                        <span class="p-1 bg-blue-50 text-blue-600 rounded">⚡</span> Quick Actions
-                    </h2>
-                </div>
-                <div class="p-5">
-                    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                        <a href="?tab=students" class="flex flex-col items-center gap-2 p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition cursor-pointer group">
-                            <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg group-hover:scale-110 transition">🎓</div>
-                            <span class="text-sm font-bold text-indigo-600 text-center">Add Student</span>
-                        </a>
-                        <a href="?tab=supervisors" class="flex flex-col items-center gap-2 p-4 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition cursor-pointer group">
-                            <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg group-hover:scale-110 transition">👨‍🏫</div>
-                            <span class="text-sm font-bold text-emerald-600 text-center">Add Supervisor</span>
-                        </a>
-                        <a href="manage-companies.php" class="flex flex-col items-center gap-2 p-4 bg-blue-50 hover:bg-blue-100 rounded-xl transition cursor-pointer group">
-                            <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg group-hover:scale-110 transition">🏢</div>
-                            <span class="text-sm font-bold text-blue-600 text-center">Manage Companies</span>
-                        </a>
-                        <a href="create-announcement.php" class="flex flex-col items-center gap-2 p-4 bg-amber-50 hover:bg-amber-100 rounded-xl transition cursor-pointer group">
-                            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-lg group-hover:scale-110 transition">📢</div>
-                            <span class="text-sm font-bold text-amber-600 text-center">Post Announcement</span>
-                        </a>
-                        <a href="?tab=archive" class="flex flex-col items-center gap-2 p-4 bg-purple-50 hover:bg-purple-100 rounded-xl transition cursor-pointer group">
-                            <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-lg group-hover:scale-110 transition">📦</div>
-                            <span class="text-sm font-bold text-purple-600 text-center">Batch Archive</span>
-                        </a>
-                        <a href="?tab=history" class="flex flex-col items-center gap-2 p-4 bg-rose-50 hover:bg-rose-100 rounded-xl transition cursor-pointer group">
-                            <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-lg group-hover:scale-110 transition">📜</div>
-                            <span class="text-sm font-bold text-rose-600 text-center">Student History</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
 
-            <div class="grid grid-cols-1 gap-6">
+            <div class="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 items-start">
 
                 <!-- Recent Students -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                        <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider">Recent Students</h2>
+                <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm h-full">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xs font-bold text-slate-400 tracking-wider uppercase">Recent Students</h2>
                         <a href="?tab=manage" class="text-sm font-bold text-indigo-600 hover:underline">View All →</a>
                     </div>
                     <div class="divide-y divide-slate-100 max-h-64 overflow-y-auto">
                         <?php foreach (array_slice($students, 0, 5) as $s): ?>
-                        <div class="px-4 py-3 flex items-center gap-3">
+                        <div class="py-3 flex items-center gap-3">
                             <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold shrink-0">
                                 <?= strtoupper(($s['full_name'] ?: $s['username'])[0]) ?>
                             </div>
@@ -472,9 +507,56 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                         </div>
                         <?php endforeach; ?>
                         <?php if (empty($students)): ?>
-                        <div class="p-6 text-center text-xs text-slate-400">No students yet.</div>
+                        <div class="py-6 text-center text-xs text-slate-400">No students yet.</div>
                         <?php endif; ?>
                     </div>
+                </div>
+
+                <!-- Recent Activities -->
+                <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm h-full">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xs font-bold text-slate-400 tracking-wider uppercase">Recent Activities</h2>
+                        <a href="?tab=history" class="text-sm font-bold text-indigo-600 hover:underline">View History &rarr;</a>
+                    </div>
+                    <?php if (!empty($recent_activity_items)): ?>
+                    <div class="space-y-3 max-h-72 overflow-y-auto pr-1">
+                        <?php foreach ($recent_activity_items as $activity): ?>
+                        <?php
+                        $activity_icon = [
+                            'student' => '🎓',
+                            'supervisor' => '👨‍🏫',
+                            'company' => '🏢',
+                            'holiday' => '🇲🇲',
+                            'announcement' => '📢',
+                        ][$activity['type']] ?? '📋';
+                        $activity_bg = [
+                            'student' => 'bg-indigo-50 text-indigo-600',
+                            'supervisor' => 'bg-emerald-50 text-emerald-600',
+                            'company' => 'bg-blue-50 text-blue-600',
+                            'holiday' => 'bg-red-50 text-red-600',
+                            'announcement' => 'bg-amber-50 text-amber-600',
+                        ][$activity['type']] ?? 'bg-slate-100 text-slate-500';
+                        $activity_time = $activity['created_at'] ? (new DateTime($activity['created_at']))->format('d M Y, H:i') : 'Recently added';
+                        ?>
+                        <div class="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
+                            <div class="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 <?= $activity_bg ?>">
+                                <?= $activity_icon ?>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-sm font-semibold text-slate-700"><?= htmlspecialchars($activity['title']) ?></p>
+                                <p class="text-sm text-slate-500 truncate"><?= htmlspecialchars($activity['detail']) ?></p>
+                                <p class="text-xs text-slate-400 mt-1"><?= htmlspecialchars($activity_time) ?></p>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php else: ?>
+                    <div class="flex flex-col items-center justify-center py-10 text-center">
+                        <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-4">📋</div>
+                        <p class="text-sm font-semibold text-slate-500">No recent activity yet</p>
+                        <p class="text-xs text-slate-400 mt-1 max-w-[240px]">New students, supervisors, companies, and holidays will appear here.</p>
+                    </div>
+                    <?php endif; ?>
                 </div>
 
             </div>
@@ -529,14 +611,14 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
-                            <select name="s_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                                <option value="">— Select Year —</option>
-                                <option value="2023-2024">2023-2024</option>
-                                <option value="2024-2025" selected>2024-2025</option>
-                                <option value="2025-2026">2025-2026</option>
-                                <option value="2026-2027">2026-2027</option>
-                                <option value="2027-2028">2027-2028</option>
+                            <label class="text-xs font-semibold text-slate-700 tracking-wide uppercase block mb-1.5">Academic Year *</label>
+                            <select name="s_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:border-purple-500 focus:bg-white focus:outline-none transition-all duration-200">
+                                <?php foreach ($all_academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay['year_label']) ?>" <?= ($ay['is_current'] ?? 0) ? 'selected' : '' ?>><?= htmlspecialchars($ay['year_label']) ?><?= ($ay['is_current'] ?? 0) ? ' (Current)' : '' ?> — <?= htmlspecialchars($ay['status']) ?></option>
+                                <?php endforeach; ?>
+                                <?php if (empty($all_academic_years)): ?>
+                                <option value="">No academic years configured</option>
+                                <?php endif; ?>
                             </select>
                         </div>
                         <div>
@@ -586,11 +668,9 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                             <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
                             <select name="t_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 <option value="">— Select Year —</option>
-                                <option value="2023-2024">2023-2024</option>
-                                <option value="2024-2025">2024-2025</option>
-                                <option value="2025-2026" selected>2025-2026</option>
-                                <option value="2026-2027">2026-2027</option>
-                                <option value="2027-2028">2027-2028</option>
+                                <?php foreach ($all_academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay['year_label']) ?>" <?= ($ay['is_current'] ?? 0) ? 'selected' : '' ?>><?= htmlspecialchars($ay['year_label']) ?><?= ($ay['is_current'] ?? 0) ? ' (Current)' : '' ?></option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div>
@@ -711,11 +791,9 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                             <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
                             <select name="batch_year" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 <option value="">— Select Year —</option>
-                                <option value="2023-2024">2023-2024</option>
-                                <option value="2024-2025">2024-2025</option>
-                                <option value="2025-2026">2025-2026</option>
-                                <option value="2026-2027">2026-2027</option>
-                                <option value="2027-2028">2027-2028</option>
+                                <?php foreach ($all_academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay['year_label']) ?>"><?= htmlspecialchars($ay['year_label']) ?> (<?= htmlspecialchars($ay['status']) ?>)</option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="flex items-end">
@@ -727,7 +805,14 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
 
             <!-- Archived Students Summary -->
             <?php
-            $archived = $pdo->query("SELECT academic_year, COUNT(*) AS cnt FROM users WHERE role = 'student' AND status = 'Archived' AND academic_year IS NOT NULL GROUP BY academic_year ORDER BY academic_year DESC")->fetchAll();
+            $archived = $pdo->query("
+                SELECT COALESCE(ay.year_label, u.academic_year, 'Unknown') AS year_label, COUNT(*) AS cnt
+                FROM users u
+                LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+                WHERE u.role = 'student' AND u.status = 'Archived'
+                GROUP BY year_label
+                ORDER BY year_label DESC
+            ")->fetchAll();
             ?>
             <?php if (!empty($archived)): ?>
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -738,7 +823,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                         <?php foreach ($archived as $ar): ?>
                         <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 text-center">
-                            <p class="text-sm font-bold text-amber-600 uppercase tracking-wider mb-0.5">📦 <?= htmlspecialchars($ar['academic_year']) ?></p>
+                            <p class="text-sm font-bold text-amber-600 uppercase tracking-wider mb-0.5">📦 <?= htmlspecialchars($ar['year_label']) ?></p>
                             <p class="text-sm font-black text-amber-700"><?= $ar['cnt'] ?></p>
                             <p class="text-sm text-amber-400">student(s) archived</p>
                         </div>
@@ -752,7 +837,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             <!-- ════ TAB: STUDENT HISTORY ════ -->
             <?php
             $hist_year = $_GET['academic_year'] ?? '';
-            $hist_years = $pdo->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year != '' ORDER BY academic_year DESC")->fetchAll(PDO::FETCH_COLUMN);
+            $hist_years = $pdo->query("SELECT year_label FROM academic_years ORDER BY start_date DESC")->fetchAll(PDO::FETCH_COLUMN);
 
             $hist_sql = "
                 SELECT u.id AS uid, u.username, u.email, u.academic_year, u.status, u.created_at,

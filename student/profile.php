@@ -10,11 +10,6 @@ if ($role !== 'student') {
     exit;
 }
 
-// ─── Database Connection (mysqli) ─────────────────────────────────────
-$conn = new mysqli('localhost', 'root', 'root', 'intern_report_db');
-if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
-$conn->set_charset('utf8mb4');
-
 $esc_uid = $conn->real_escape_string($user_id);
 
 // ── Fetch or create profile row ──────────────────────────────────
@@ -27,6 +22,9 @@ if (!$profile) {
     $profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
     $profile = $profile_r ? $profile_r->fetch_assoc() : null;
 }
+
+$student_name = $profile['full_name'] ?? $username;
+$student_roll = $profile['student_roll'] ?? '';
 
 // ── Fetch user data ─────────────────────────────────────────────
 $user_email    = '';
@@ -182,7 +180,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-    .active-nav { background: rgba(255,255,255,0.15); color: #fff; border-right: 3px solid #a78bfa; }
+    .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+    .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
     .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
     .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
     .glass-sidebar { background: rgba(15,23,42,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.08); }
@@ -197,8 +197,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
         darkMode: 'class',
         theme: {
             extend: {
-                fontFamily: {
-                    'inter': ['Inter', 'sans-serif'],
+                fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
                 },
             }
         }
@@ -235,28 +238,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
         <div class="h-14 flex items-center px-5 border-b border-white/10">
             <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-2">
-            <a href="student-dashboard.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📝</span> Dashboard
+        <nav class="flex-1 py-4 space-y-1 px-3">
+            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
             </a>
-            <a href="student-dashboard.php?section=analytics" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📊</span> Analytics
+            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
             </a>
-            <a href="log-history.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📜</span> Log History
+            <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
             </a>
-            <a href="public-holiday.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📅</span> Public Holidays
+            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
             </a>
-            <a href="instructions.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📋</span> Instructions
+            <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
             </a>
-            <a href="profile.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>👤</span> Profile
+            <a href="profile.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
-            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition">🚪 Logout</a>
+            <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+            </a>
         </div>
     </aside>
 
@@ -264,13 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     <div class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
-        <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50">
-            <h1 class="text-sm font-bold text-slate-700">My Profile</h1>
-            <div class="flex items-center gap-2 text-xs text-slate-400">
-                <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold"><?= strtoupper($username[0]) ?></span>
-                <?= htmlspecialchars($username) ?>
-            </div>
-        </header>
+        <?php $pageTitle = 'My Profile'; $show_back_link = true; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-6">

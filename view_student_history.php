@@ -113,6 +113,21 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($student_name) ?> – History</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
+                }
+            }
+        }
+    </script>
 </head>
 <body class="bg-slate-50 font-sans antialiased p-6">
 

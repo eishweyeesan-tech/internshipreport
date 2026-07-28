@@ -102,15 +102,14 @@ $absent_count = ($absent_r && $absent_r->num_rows > 0) ? (int) $absent_r->fetch_
 
 $attendance_rate = ($present_count + $absent_count) > 0 ? round(($present_count / ($present_count + $absent_count)) * 100) : 0;
 
-// Weekly hours data for chart (last 8 weeks)
+// Weekly hours data for chart (all weeks from Week 1)
 $weekly_hours_data = [];
 $weekly_hours_labels = [];
 if (!empty($weeks)) {
-    $chart_weeks = array_slice($weeks, -8, 8, true);
-    foreach ($chart_weeks as $cw_num => $cw_range) {
-        $esc_cw_s = $conn->real_escape_string($cw_range['start']);
-        $esc_cw_e = $conn->real_escape_string($cw_range['end']);
-        $wh_r = $conn->query("SELECT calculated_duration FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_cw_s}' AND '{$esc_cw_e}'");
+    foreach ($weeks as $wn => $wr) {
+        $esc_wn_s = $conn->real_escape_string($wr['start']);
+        $esc_wn_e = $conn->real_escape_string($wr['end']);
+        $wh_r = $conn->query("SELECT calculated_duration FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_wn_s}' AND '{$esc_wn_e}'");
         $week_mins = 0;
         if ($wh_r) {
             while ($row = $wh_r->fetch_assoc()) {
@@ -118,7 +117,7 @@ if (!empty($weeks)) {
                 if (count($p) === 2) $week_mins += ((int)$p[0] * 60) + (int)$p[1];
             }
         }
-        $weekly_hours_labels[] = 'Week ' . $cw_num;
+        $weekly_hours_labels[] = 'Week ' . $wn;
         $weekly_hours_data[] = round($week_mins / 60, 1);
     }
 }
@@ -153,67 +152,39 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics – Intern Report</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                },
+            }
+        }
+    }
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
     <script>
-    function toggleNotifDropdown() {
-        var dd = document.getElementById('notif-dropdown');
-        if (dd.classList.contains('show')) {
-            dd.classList.remove('show');
-            dd.style.opacity = '0';
-            dd.style.visibility = 'hidden';
-            dd.style.transform = 'translateY(-8px) scale(0.95)';
-        } else {
-            dd.classList.add('show');
-            dd.style.opacity = '1';
-            dd.style.visibility = 'visible';
-            dd.style.transform = 'translateY(0) scale(1)';
-        }
-    }
-    document.addEventListener('click', function(e) {
-        var wrapper = document.getElementById('notif-bell-wrapper');
-        var dd = document.getElementById('notif-dropdown');
-        if (wrapper && dd && !wrapper.contains(e.target)) {
-            dd.classList.remove('show');
-            dd.style.opacity = '0';
-            dd.style.visibility = 'hidden';
-            dd.style.transform = 'translateY(-8px) scale(0.95)';
-        }
-    });
-
-    function timeAgo(dateStr) {
-        var date = new Date(dateStr);
-        var now = new Date();
-        var seconds = Math.floor((now - date) / 1000);
-        if (seconds < 60) return 'Just now';
-        var minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return minutes + 'm ago';
-        var hours = Math.floor(minutes / 60);
-        if (hours < 24) return hours + 'h ago';
-        var days = Math.floor(hours / 24);
-        if (days < 7) return days + 'd ago';
-        return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    }
-
-    function updateNotifTimestamps() {
-        document.querySelectorAll('[data-notif-time]').forEach(function(el) {
-            el.textContent = timeAgo(el.getAttribute('data-notif-time'));
-        });
-    }
-    updateNotifTimestamps();
-    setInterval(updateNotifTimestamps, 60000);
-
     // ── CHART INITIALIZATION ──
     document.addEventListener('DOMContentLoaded', function () {
-        // Weekly Hours Bar Chart
+        // ── Full dataset from PHP ──
+        var allLabels = <?= json_encode($weekly_hours_labels, JSON_HEX_TAG) ?>;
+        var allData   = <?= json_encode($weekly_hours_data, JSON_HEX_TAG) ?>;
+
+        // ── Weekly Hours Bar Chart ──
         var hoursCtx = document.getElementById('weeklyHoursChart');
+        var weeklyChart = null;
         if (hoursCtx) {
-            new Chart(hoursCtx.getContext('2d'), {
+            weeklyChart = new Chart(hoursCtx.getContext('2d'), {
                 type: 'bar',
                 data: {
-                    labels: <?= json_encode($weekly_hours_labels, JSON_HEX_TAG) ?>,
+                    labels: allLabels,
                     datasets: [{
                         label: 'Hours Worked',
-                        data: <?= json_encode($weekly_hours_data, JSON_HEX_TAG) ?>,
+                        data: allData,
                         backgroundColor: 'rgba(99, 102, 241, 0.8)',
                         borderColor: 'rgb(99, 102, 241)',
                         borderWidth: 2,
@@ -224,6 +195,7 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: { duration: 400, easing: 'easeInOutQuart' },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -249,6 +221,73 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                         }
                     }
                 }
+            });
+        }
+
+        // ── Week Filter Dropdown ──
+        var filterBtn     = document.getElementById('weekFilterBtn');
+        var filterMenu    = document.getElementById('weekFilterMenu');
+        var filterLabel   = document.getElementById('weekFilterLabel');
+        var filterChevron = document.getElementById('weekFilterChevron');
+        var filterItems   = document.querySelectorAll('.week-filter-item');
+
+        if (filterBtn && filterMenu) {
+            filterBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                var isOpen = !filterMenu.classList.contains('hidden');
+                if (isOpen) {
+                    filterMenu.classList.add('hidden');
+                    filterMenu.style.opacity   = '0';
+                    filterMenu.style.transform  = 'scale(0.95)';
+                    filterChevron.style.transform = '';
+                } else {
+                    filterMenu.classList.remove('hidden');
+                    requestAnimationFrame(function () {
+                        filterMenu.style.opacity   = '1';
+                        filterMenu.style.transform  = 'scale(1)';
+                    });
+                    filterChevron.style.transform = 'rotate(180deg)';
+                }
+            });
+
+            filterItems.forEach(function (item) {
+                item.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var filter = this.getAttribute('data-filter');
+                    var slicedLabels, slicedData;
+
+                    if (filter === '1-7') {
+                        slicedLabels = allLabels.slice(0, 7);
+                        slicedData   = allData.slice(0, 7);
+                        filterLabel.textContent = 'Filtered: Week 1 - 7';
+                    } else if (filter === '8-14') {
+                        slicedLabels = allLabels.slice(7, 14);
+                        slicedData   = allData.slice(7, 14);
+                        filterLabel.textContent = 'Filtered: Week 8 - 14';
+                    } else {
+                        slicedLabels = allLabels;
+                        slicedData   = allData;
+                        filterLabel.textContent = 'Select Weeks';
+                    }
+
+                    if (weeklyChart) {
+                        weeklyChart.data.labels   = slicedLabels;
+                        weeklyChart.data.datasets[0].data = slicedData;
+                        weeklyChart.update();
+                    }
+
+                    filterMenu.classList.add('hidden');
+                    filterMenu.style.opacity   = '0';
+                    filterMenu.style.transform  = 'scale(0.95)';
+                    filterChevron.style.transform = '';
+                });
+            });
+
+            document.addEventListener('click', function () {
+                filterMenu.classList.add('hidden');
+                filterMenu.style.opacity   = '0';
+                filterMenu.style.transform  = 'scale(0.95)';
+                filterChevron.style.transform = '';
             });
         }
 
@@ -295,7 +334,13 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Dancing+Script:wght@400;700&family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
-    .active-nav { background: rgba(255,255,255,0.15); color: #fff; border-right: 3px solid #a78bfa; }
+        body { font-family: 'Inter', sans-serif; }
+        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .animated-bg { background: linear-gradient(-45deg, #e0e7ff, #ede9fe, #fce7f3, #dbeafe, #d1fae5); background-size: 400% 400%; animation: gradientShift 20s ease infinite; }
+        .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
+        .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
+        @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } }
 
     .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
     .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
@@ -336,39 +381,41 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
     <!-- ─── SIDEBAR ─── -->
     <aside class="w-56 glass-sidebar flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
+            <span class="font-black text-white tracking-tight">📋 InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-2">
-            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📝</span> Dashboard
+        <nav class="flex-1 py-4 space-y-1 px-3">
+            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="dashboard" onclick="showDashboard()">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
             </a>
-            <a href="analytics.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition" data-section="analytics">
-                <span>📊</span> Analytics
+            <a href="analytics.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="analytics">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
             </a>
-            <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📜</span> Log History
+            <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
             </a>
-            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📅</span> Public Holidays
+            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
             </a>
-            <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📋</span> Instructions
+            <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" onclick="showInstructions(); return false;">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
             </a>
-            <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>👤</span> Profile
+            <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
         </nav>
         <div class="px-3 pb-2">
             <div class="bg-gradient-to-br from-violet-500/80 to-purple-600/80 backdrop-blur-sm rounded-xl p-3 text-white border border-white/20">
-                <p class="text-[10px] font-bold uppercase tracking-wider opacity-80 mb-1">Internship Progress</p>
+                <p class="text-label font-bold uppercase tracking-wider opacity-80 mb-1">Internship Progress</p>
                 <div class="w-full bg-white/20 rounded-full h-1.5 mb-1.5">
                     <div class="bg-white rounded-full h-1.5 transition-all duration-500 shadow-sm" style="width: <?= $total_weeks > 0 ? min(round(($weeks_completed / $total_weeks) * 100), 100) : 0 ?>%"></div>
                 </div>
-                <p class="text-[10px] font-bold"><?= $weeks_completed ?>/<?= $total_weeks ?> Weeks</p>
+                <p class="text-label font-bold"><?= $weeks_completed ?>/<?= $total_weeks ?> Weeks</p>
             </div>
         </div>
         <div class="p-3 border-t border-white/10">
-            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition">🚪 Logout</a>
+            <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+            </a>
         </div>
     </aside>
 
@@ -376,74 +423,7 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
     <div class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
-        <header class="h-14 glass-header flex items-center justify-between px-6 shrink-0 relative z-50">
-            <div class="flex items-center gap-3">
-                <span class="text-sm font-bold text-slate-700">📋 InternReport</span>
-                <span class="w-px h-5 bg-slate-300/50"></span>
-                <span class="text-xs font-semibold text-slate-500">Analytics</span>
-            </div>
-            <div class="relative group">
-                <div class="relative mr-3 inline-block" id="notif-bell-wrapper">
-                    <button onclick="toggleNotifDropdown()" class="relative p-2 hover:bg-white/30 rounded-xl transition cursor-pointer">
-                        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                        <?php if ($unread_notif_count > 0): ?>
-                        <span class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
-                        <?php endif; ?>
-                    </button>
-                    <div id="notif-dropdown" class="absolute right-0 top-full mt-1 w-80 glass-modal rounded-xl shadow-xl z-50 overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
-                        <div class="p-3 border-b border-white/30 bg-gradient-to-br from-violet-50/80 to-white/60">
-                            <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Notifications</h4>
-                        </div>
-                        <div class="max-h-80 overflow-y-auto">
-                            <?php if (!empty($recent_notifications)): ?>
-                            <?php foreach ($recent_notifications as $notif): ?>
-                            <div class="flex items-start gap-2.5 px-3 py-3 <?= !$notif['is_read'] ? 'bg-violet-50/40' : 'hover:bg-white/40' ?> transition-all duration-150 border-b border-white/20 last:border-0 group">
-                                <div class="w-8 h-8 rounded-full <?= $notif['type'] === 'instructor_approved' ? 'bg-emerald-100 text-emerald-600' : ($notif['type'] === 'instructor_rejected' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600') ?> flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-sm">
-                                    <?= $notif['type'] === 'instructor_approved' ? '✓' : ($notif['type'] === 'instructor_rejected' ? '✕' : 'ℹ') ?>
-                                </div>
-                                <div class="min-w-0 flex-1">
-                                    <p class="text-[11px] font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-600' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
-                                    <p class="text-[10px] text-slate-400 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
-                                    <p class="text-[9px] text-slate-300 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-                            <?php else: ?>
-                            <div class="p-8 text-center">
-                                <p class="text-xs font-semibold text-slate-400">No notifications yet</p>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-                <div class="relative group/profile inline-block">
-                    <button class="flex items-center gap-2.5 hover:bg-white/30 rounded-xl px-2 py-1.5 transition">
-                        <?php if ($profile_pic): ?>
-                        <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-8 h-8 rounded-full object-cover border-2 border-white/60 shadow-sm shrink-0">
-                        <?php else: ?>
-                        <span class="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-bold shrink-0"><?= strtoupper(substr($student_name, 0, 1)) ?></span>
-                        <?php endif; ?>
-                        <div class="text-left hidden sm:block">
-                            <p class="text-xs font-bold text-slate-700 leading-tight"><?= htmlspecialchars($student_name) ?></p>
-                            <?php if ($student_roll): ?>
-                            <p class="text-[10px] font-mono font-bold text-violet-500 leading-tight"><?= htmlspecialchars($student_roll) ?></p>
-                            <?php endif; ?>
-                        </div>
-                        <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </button>
-                    <div class="absolute right-0 top-full mt-1 w-56 glass-modal rounded-xl shadow-xl opacity-0 invisible group-hover/profile:opacity-100 group-hover/profile:visible transition-all z-50 overflow-hidden">
-                        <div class="py-1">
-                            <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-white/40 transition">
-                                <span class="w-5 text-center text-sm">👤</span> My Profile
-                            </a>
-                            <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-50/40 transition">
-                                <span class="w-5 text-center text-sm">🚪</span> Logout
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </header>
+        <?php $pageTitle = 'Analytics'; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-6">
@@ -462,49 +442,87 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
             <!-- Analytics Summary Cards -->
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-500/20">
-                    <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Total Hours</p>
+                    <p class="text-label font-bold uppercase tracking-wider opacity-80">Total Hours</p>
                     <p class="text-3xl font-black mt-1"><?= $total_hours ?><span class="text-lg">h <?= str_pad($total_mins, 2, '0', STR_PAD_LEFT) ?>m</span></p>
                 </div>
                 <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl p-4 text-white shadow-lg shadow-indigo-500/20">
-                    <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Logs Submitted</p>
+                    <p class="text-label font-bold uppercase tracking-wider opacity-80">Logs Submitted</p>
                     <p class="text-3xl font-black mt-1"><?= $total_logs_count ?></p>
                 </div>
                 <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-4 text-white shadow-lg shadow-emerald-500/20">
-                    <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Attendance</p>
+                    <p class="text-label font-bold uppercase tracking-wider opacity-80">Attendance</p>
                     <p class="text-3xl font-black mt-1"><?= $attendance_rate ?><span class="text-lg">%</span></p>
                 </div>
                 <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-4 text-white shadow-lg shadow-purple-500/20">
-                    <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Reflections</p>
+                    <p class="text-label font-bold uppercase tracking-wider opacity-80">Reflections</p>
                     <p class="text-3xl font-black mt-1"><?= $total_reflections_count ?></p>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch w-full mb-6">
                 <!-- Weekly Hours Chart -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                    <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <span class="p-1 bg-blue-50 text-blue-600 rounded">📊</span> Weekly Hours Log
-                    </h3>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 h-full flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
+                            <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <span class="p-1 bg-blue-50 text-blue-600 rounded">📊</span> Weekly Hours Log
+                            </h3>
+                            <div class="relative">
+                                <button id="weekFilterBtn" class="bg-white border border-gray-200 text-gray-700 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-gray-50 flex items-center space-x-2 shadow-sm relative transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30">
+                                    <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    <span id="weekFilterLabel">Select Weeks</span>
+                                    <svg class="w-4 h-4 text-gray-400 transition-transform duration-200" id="weekFilterChevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </button>
+                                <div id="weekFilterMenu" class="absolute right-0 top-full mt-2 w-48 bg-white border border-gray-100 rounded-xl shadow-lg py-1 z-50 hidden transition-all duration-200 origin-top-right scale-95 opacity-0">
+                                    <div class="px-4 py-2 border-b border-gray-100">
+                                        <p class="text-label font-bold text-gray-400 uppercase tracking-wider">Filter by Range</p>
+                                    </div>
+                                    <a href="#" class="week-filter-item flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 cursor-pointer transition-all duration-150" data-filter="all">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                                        All Weeks
+                                    </a>
+                                    <a href="#" class="week-filter-item flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 cursor-pointer transition-all duration-150" data-filter="1-7">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                        Week 1 - 7
+                                    </a>
+                                    <a href="#" class="week-filter-item flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 cursor-pointer transition-all duration-150" data-filter="8-14">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                        Week 8 - 14
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div style="position:relative; height:280px;">
                         <canvas id="weeklyHoursChart"></canvas>
                     </div>
                 </div>
 
                 <!-- Attendance Breakdown Chart -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                    <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🎯</span> Attendance Breakdown
-                    </h3>
-                    <div style="position:relative; height:280px; display:flex; align-items:center; justify-content:center;">
-                        <canvas id="attendanceChart"></canvas>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 h-full flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
+                            <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🎯</span> Attendance Breakdown
+                            </h3>
+                        </div>
                     </div>
-                    <div class="flex items-center justify-center gap-4 mt-4">
-                        <span class="flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
-                            <span class="w-3 h-3 rounded-full bg-emerald-500"></span> Present (<?= $present_count ?>)
-                        </span>
-                        <span class="flex items-center gap-1.5 text-[11px] font-bold text-slate-600">
-                            <span class="w-3 h-3 rounded-full bg-red-500"></span> Absent (<?= $absent_count ?>)
-                        </span>
+                    <div class="flex flex-col items-center justify-center w-full h-full">
+                        <div style="position:relative; height:220px; width:100%;">
+                            <canvas id="attendanceChart"></canvas>
+                        </div>
+                        <div class="flex items-center justify-center gap-4 mt-4">
+                            <span class="flex items-center gap-1.5 text-caption font-bold text-slate-600">
+                                <span class="w-3 h-3 rounded-full bg-emerald-500"></span> Present (<?= $present_count ?>)
+                            </span>
+                            <span class="flex items-center gap-1.5 text-caption font-bold text-slate-600">
+                                <span class="w-3 h-3 rounded-full bg-red-500"></span> Absent (<?= $absent_count ?>)
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -519,7 +537,7 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="bg-slate-50/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                            <tr class="bg-slate-50/80 text-slate-500 font-semibold uppercase tracking-wider text-caption">
                                 <th class="px-5 py-3 text-left">Week</th>
                                 <th class="px-5 py-3 text-left">Date Range</th>
                                 <th class="px-5 py-3 text-center">Logs</th>
@@ -558,11 +576,11 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                                 <tr class="hover:bg-slate-50/50 transition-colors duration-150 <?= $wn === $selected_week ? 'bg-indigo-50/50' : '' ?>">
                                     <td class="px-5 py-3">
                                         <span class="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600">
-                                            <span class="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center text-[10px] font-black"><?= $wn ?></span>
+                                            <span class="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center text-label font-black"><?= $wn ?></span>
                                             Week <?= $wn ?>
                                         </span>
                                     </td>
-                                    <td class="px-5 py-3 text-[11px] text-slate-500 font-medium"><?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?></td>
+                                    <td class="px-5 py-3 text-caption text-slate-500 font-medium"><?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?></td>
                                     <td class="px-5 py-3 text-center">
                                         <span class="text-xs font-bold <?= $wl_count >= 3 ? 'text-emerald-600' : 'text-slate-600' ?>"><?= $wl_count ?> days</span>
                                     </td>
@@ -571,20 +589,20 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                                     </td>
                                     <td class="px-5 py-3 text-center">
                                         <?php if ($has_reflection): ?>
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✅ Submitted</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✅ Submitted</span>
                                         <?php else: ?>
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">—</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="px-5 py-3 text-center">
                                         <?php if ($eval_status === 'approved_by_instructor' || $eval_status === 'approved_by_supervisor'): ?>
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">✅ Approved</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">✅ Approved</span>
                                         <?php elseif ($eval_status === 'rejected'): ?>
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">❌ Rejected</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">❌ Rejected</span>
                                         <?php elseif ($eval_status === 'pending'): ?>
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">⏳ Pending</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">⏳ Pending</span>
                                         <?php else: ?>
-                                        <span class="text-[10px] font-bold text-slate-400">—</span>
+                                        <span class="text-label font-bold text-slate-400">—</span>
                                         <?php endif; ?>
                                     </td>
                                 </tr>
@@ -596,54 +614,63 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
             </div>
 
             <!-- Recent Activity & Evaluation History -->
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 <!-- Recent Activity -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                    <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 h-auto max-h-[450px] overflow-y-auto flex flex-col">
+                    <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2 sticky top-0 bg-white z-20 pb-2">
                         <span class="p-1 bg-blue-50 text-blue-600 rounded">🕐</span> Recent Activity
                     </h3>
                     <?php if (!empty($recent_activities)): ?>
-                    <div class="space-y-3">
+                    <div class="relative">
+                        <div class="absolute left-[13px] top-3 bottom-3 w-px bg-slate-200 z-0"></div>
                         <?php foreach ($recent_activities as $act): ?>
-                        <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 transition">
-                            <div class="w-8 h-8 rounded-lg <?= $act['attendance_status'] === 'present' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600' ?> flex items-center justify-center text-xs font-bold shrink-0">
-                                <?= $act['attendance_status'] === 'present' ? '✅' : '❌' ?>
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="text-xs font-bold text-slate-700 truncate"><?= htmlspecialchars($act['task_title'] ?: 'No task title') ?></p>
-                                <p class="text-[10px] text-slate-400"><?= (new DateTime($act['log_date']))->format('D, d M Y') ?> · <?= htmlspecialchars($act['calculated_duration']) ?></p>
+                        <div class="flex items-center justify-between py-2.5 pl-1 pr-1 gap-3 hover:bg-slate-50 rounded-lg transition relative z-10">
+                            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                                <span class="relative z-10 w-5 h-5 rounded-full <?= $act['attendance_status'] === 'present' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600' ?> flex items-center justify-center text-label shrink-0">
+                                    <?= $act['attendance_status'] === 'present' ? '✓' : '✗' ?>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xs font-semibold text-slate-700 truncate leading-tight"><?= htmlspecialchars($act['task_title'] ?: 'No task title') ?></p>
+                                    <p class="text-label text-slate-400 leading-tight mt-0.5"><?= (new DateTime($act['log_date']))->format('D, d M') ?> · <?= htmlspecialchars($act['calculated_duration']) ?></p>
+                                </div>
                             </div>
                         </div>
                         <?php endforeach; ?>
                     </div>
                     <?php else: ?>
-                    <p class="text-xs text-slate-400 text-center py-6">No activity recorded yet.</p>
+                    <p class="text-xs text-slate-400 text-center py-4">No activity recorded yet.</p>
                     <?php endif; ?>
                 </div>
 
                 <!-- Evaluation History -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-                    <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 h-auto max-h-[450px] overflow-y-auto flex flex-col">
+                    <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2 sticky top-0 bg-white z-20 pb-2">
                         <span class="p-1 bg-amber-50 text-amber-600 rounded">📝</span> Evaluation History
                     </h3>
                     <?php if (!empty($recent_evaluations)): ?>
-                    <div class="space-y-3">
+                    <div class="relative">
+                        <div class="absolute left-[13px] top-3 bottom-3 w-px bg-slate-200 z-0"></div>
                         <?php foreach ($recent_evaluations as $ev): ?>
-                        <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                            <div class="w-8 h-8 rounded-lg <?= $ev['report_status'] === 'approved_by_instructor' || $ev['report_status'] === 'approved_by_supervisor' ? 'bg-emerald-100 text-emerald-600' : ($ev['report_status'] === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600') ?> flex items-center justify-center text-xs font-bold shrink-0">
-                                <?= $ev['report_status'] === 'approved_by_instructor' || $ev['report_status'] === 'approved_by_supervisor' ? '✅' : ($ev['report_status'] === 'rejected' ? '❌' : '⏳') ?>
+                        <div class="flex items-center justify-between py-2.5 pl-1 pr-1 gap-3 relative z-10">
+                            <div class="flex items-center gap-2.5 min-w-0 flex-1">
+                                <span class="relative z-10 w-5 h-5 rounded-full <?= $ev['report_status'] === 'approved_by_instructor' || $ev['report_status'] === 'approved_by_supervisor' ? 'bg-emerald-100 text-emerald-600' : ($ev['report_status'] === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600') ?> flex items-center justify-center text-label shrink-0">
+                                    <?= $ev['report_status'] === 'approved_by_instructor' || $ev['report_status'] === 'approved_by_supervisor' ? '✓' : ($ev['report_status'] === 'rejected' ? '✗' : '…') ?>
+                                </span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-xs font-semibold text-slate-700 leading-tight">Week <?= (int)$ev['week_number'] ?> — <?= ucfirst(str_replace('_', ' ', $ev['report_status'])) ?></p>
+                                    <p class="text-label text-slate-400 leading-tight mt-0.5 truncate"><?= $ev['instructor_comments'] ? htmlspecialchars(substr($ev['instructor_comments'], 0, 60)) . (strlen($ev['instructor_comments']) > 60 ? '…' : '') : 'No comments' ?></p>
+                                </div>
                             </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="text-xs font-bold text-slate-700">Week <?= (int)$ev['week_number'] ?> — <?= ucfirst(str_replace('_', ' ', $ev['report_status'])) ?></p>
-                                <p class="text-[10px] text-slate-400"><?= $ev['instructor_comments'] ? htmlspecialchars(substr($ev['instructor_comments'], 0, 80)) . (strlen($ev['instructor_comments']) > 80 ? '…' : '') : 'No comments' ?></p>
-                            </div>
-                            <span class="text-[10px] font-bold text-slate-400 shrink-0"><?= (new DateTime($ev['evaluated_at']))->format('d M') ?></span>
+                            <span class="text-label font-semibold text-slate-400 shrink-0 whitespace-nowrap"><?= (new DateTime($ev['evaluated_at']))->format('d M') ?></span>
                         </div>
                         <?php endforeach; ?>
                     </div>
                     <?php else: ?>
-                    <p class="text-xs text-slate-400 text-center py-6">No evaluations yet.</p>
+                    <p class="text-xs text-slate-400 text-center py-4">No evaluations yet.</p>
                     <?php endif; ?>
+                    <div class="pt-2 border-t border-slate-100 mt-2 text-right">
+                        <a href="log-history.php" class="text-purple-600 text-sm font-medium hover:text-purple-700 transition">View All History →</a>
+                    </div>
                 </div>
             </div>
 

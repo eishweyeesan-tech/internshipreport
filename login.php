@@ -32,9 +32,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($username) || empty($password)) {
         $error = 'Please enter username and password.';
     } else {
-        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :username OR email = :username LIMIT 1");
-        $stmt->execute([':username' => $username]);
-        $user = $stmt->fetch();
+        // First, check if this is an email address
+        $is_email = filter_var($username, FILTER_VALIDATE_EMAIL);
+
+        if ($is_email) {
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :val LIMIT 1");
+            $stmt->execute([':val' => $username]);
+            $user = $stmt->fetch();
+        } else {
+            // Check how many users share this username (roll number)
+            $cnt_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = :val");
+            $cnt_stmt->execute([':val' => $username]);
+            $cnt = (int) $cnt_stmt->fetchColumn();
+
+            if ($cnt > 1) {
+                // Same roll number exists across multiple academic years
+                $error = 'Multiple accounts found for this roll number. Please log in with your email address instead.';
+                $user = null;
+            } elseif ($cnt === 1) {
+                $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :val LIMIT 1");
+                $stmt->execute([':val' => $username]);
+                $user = $stmt->fetch();
+            } else {
+                $user = null;
+            }
+        }
 
         if ($user && password_verify($password, $user['password'])) {
             $_SESSION['user_id'] = $user['id'];
@@ -95,6 +117,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     fontFamily: {
                         'inter': ['Inter', 'sans-serif'],
                     },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
                 }
             }
         }
@@ -188,9 +217,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <form method="POST" class="space-y-5">
                         <div>
-                            <label class="block text-sm font-bold text-slate-700 mb-2">Username or Email</label>
-                            <input type="text" name="username" required placeholder="Enter your username or email"
+                            <label class="block text-sm font-bold text-slate-700 mb-2">Email</label>
+                            <input type="email" name="username" required placeholder="Enter your email address"
                                    class="w-full px-4 py-3 bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm placeholder:text-slate-400">
+                            <p class="text-xs text-slate-400 mt-1">Use your email to log in (roll numbers may repeat across years).</p>
                         </div>
 
                         <div>

@@ -326,6 +326,25 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'week_helper.php'):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Week Helper — Internship Week Calculator</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
+                }
+            }
+        }
+    </script>
 </head>
 <body class="bg-slate-50 font-sans antialiased min-h-screen p-6">
 

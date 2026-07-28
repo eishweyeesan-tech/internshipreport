@@ -16,17 +16,26 @@ if (!empty($weeks[$selected_week])) {
     $we->setTime(0, 0);
     $cursor = clone $ws;
     while ($cursor <= $we) {
-        $week_dates[] = $cursor->format('Y-m-d');
+        $day_num = (int)$cursor->format('N');
+        if ($day_num < 6) {
+            $week_dates[] = $cursor->format('Y-m-d');
+        }
         $cursor->modify('+1 day');
     }
 }
 ?>
 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between">
-        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm">📋</span> Log History
-        </h3>
-        <span class="text-xs text-slate-400 font-medium"><?= count($log_by_date) ?> / <?= count($week_dates) ?> day(s)</span>
+    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm">📋</span>Daily Log History
+            </h3>
+            <span class="text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full"><?= count($log_by_date) ?> / <?= count($week_dates) ?> day(s)</span>
+        </div>
+        <button onclick="window.print()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 border border-slate-100 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition group cursor-pointer">
+            <span class="group-hover:scale-110 transition-transform">🖨️</span>
+            Print
+        </button>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
@@ -55,7 +64,7 @@ if (!empty($weeks[$selected_week])) {
                         <tr class="hover:bg-slate-50/50 transition-colors duration-150">
                             <td class="px-5 py-4 font-medium text-slate-700 whitespace-nowrap">
                                 <div class="text-xs font-bold text-slate-800"><?= $date_display ?></div>
-                                <div class="text-[10px] text-slate-400 font-semibold"><?= $day_name ?></div>
+                                <div class="text-label text-slate-400 font-semibold"><?= $day_name ?></div>
                             </td>
                             <td class="px-5 py-4 whitespace-nowrap">
                                 <?php
@@ -79,11 +88,15 @@ if (!empty($weeks[$selected_week])) {
                             <td class="px-5 py-4 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($log['calculated_duration']) ?></td>
                             <td class="px-5 py-4 whitespace-nowrap text-right">
                                 <div class="flex items-center justify-end gap-1.5">
-                                    <a href="?edit=<?= $log['id'] ?>&week=<?= $selected_week ?>" class="px-2.5 py-1 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition">✏️ Edit</a>
-                                    <form method="POST" class="inline" onsubmit="return confirm('Delete this log entry for <?= htmlspecialchars($log['log_date']) ?>? This cannot be undone.')">
-                                        <input type="hidden" name="log_id" value="<?= $log['id'] ?>">
-                                        <button type="submit" name="delete_log" class="px-2.5 py-1 text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition cursor-pointer">🗑️ Delete</button>
-                                    </form>
+                                    <?php if (!empty($student_signed)): ?>
+                                        <span class="px-2.5 py-1 text-sm font-bold text-slate-400 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed">🔒 Signed</span>
+                                    <?php else: ?>
+                                        <a href="?edit=<?= $log['id'] ?>&week=<?= $selected_week ?>" class="px-2.5 py-1 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition">✏️ Edit</a>
+                                        <form method="POST" class="inline" onsubmit="return confirm('Delete this log entry for <?= htmlspecialchars($log['log_date']) ?>? This cannot be undone.')">
+                                            <input type="hidden" name="log_id" value="<?= $log['id'] ?>">
+                                            <button type="submit" name="delete_log" class="px-2.5 py-1 text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition cursor-pointer">🗑️ Delete</button>
+                                        </form>
+                                    <?php endif; ?>
                                 </div>
                             </td>
                         </tr>
@@ -91,13 +104,13 @@ if (!empty($weeks[$selected_week])) {
                         <tr class="bg-slate-50/30 hover:bg-slate-50/60 transition-colors duration-150">
                             <td class="px-5 py-4 font-medium text-slate-700 whitespace-nowrap">
                                 <div class="text-xs font-bold text-slate-800"><?= $date_display ?></div>
-                                <div class="text-[10px] text-slate-400 font-semibold"><?= $day_name ?></div>
+                                <div class="text-label text-slate-400 font-semibold"><?= $day_name ?></div>
                             </td>
                             <td class="px-5 py-4" colspan="6">
                                 <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/60">📝 No log yet — click Save Daily Log above</span>
                             </td>
                             <td class="px-5 py-4 whitespace-nowrap text-right">
-                                <span class="text-[10px] font-bold text-slate-300">—</span>
+                                <span class="text-label font-bold text-slate-300">—</span>
                             </td>
                         </tr>
                         <?php endif; ?>

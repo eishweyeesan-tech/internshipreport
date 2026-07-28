@@ -66,6 +66,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             theme: {
                 extend: {
                     fontFamily: { 'inter': ['Inter', 'sans-serif'] },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
                 }
             }
         }

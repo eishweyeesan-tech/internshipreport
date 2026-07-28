@@ -178,6 +178,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
                     fontFamily: {
                         'inter': ['Inter', 'sans-serif'],
                     },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
                 }
             }
         }
@@ -222,16 +229,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
             </div>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
-            <a href="instructor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/30 transition-all duration-200">
-                <span class="text-base">📊</span> Dashboard
+            <a href="instructor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
             </a>
-            <a href="../supervisor/supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
-                <span class="text-base">👩‍🏫</span> Supervisor View
+            <a href="../supervisor/supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👩‍🏫</span> Supervisor View
             </a>
         </nav>
         <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200">
-                <span class="text-base">🚪</span> Logout
+            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
             </a>
         </div>
     </aside>

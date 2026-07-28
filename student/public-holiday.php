@@ -1,10 +1,59 @@
+<?php
+require_once __DIR__ . '/../auth.php';
+
+$user_id  = $_SESSION['user_id'];
+$username = $_SESSION['username'];
+$role     = $_SESSION['role'];
+
+if ($role !== 'student') {
+    header('Location: ../dashboard.php');
+    exit;
+}
+
+$esc_uid = $conn->real_escape_string($user_id);
+
+$student_name = '';
+$student_roll = '';
+$profile_pic  = '';
+
+$_s = $conn->query("SELECT sp.full_name, sp.student_roll, u.profile_pic FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE sp.user_id = {$esc_uid}");
+if ($_s && $_s->num_rows > 0) {
+    $_sd = $_s->fetch_assoc();
+    $student_name = $_sd['full_name'] ?? $username;
+    $student_roll = $_sd['student_roll'] ?? '';
+    $profile_pic  = $_sd['profile_pic'] ?? '';
+} else {
+    $student_name = $username;
+}
+
+require_once __DIR__ . '/../config/database.php';
+
+// Fetch all holidays from database
+$hol_stmt = $pdo->query("SELECT holiday_date, holiday_name, holiday_name_mm, note FROM holidays ORDER BY holiday_date ASC");
+$db_holidays = $hol_stmt->fetchAll();
+$holiday_json = json_encode($db_holidays);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Public Holidays - InternReport</title>
+    <title>Intern Period Calendar - InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                },
+            }
+        }
+    }
+    </script>
     <style>
         /* Glass sidebar & header */
         .glass-sidebar {
@@ -16,10 +65,9 @@
             backdrop-filter: blur(12px);
             border-bottom: 1px solid rgba(226,232,240,0.5);
         }
-        .active-nav {
-            background: rgba(255,255,255,0.12);
-            color: white !important;
-        }
+        .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
+        .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
         /* Calendar tooltip */
         .holiday-cell { position: relative; }
         .holiday-tooltip {
@@ -40,10 +88,6 @@
             50% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0); }
         }
         .today-ring { animation: softPulse 2s ease-in-out infinite; }
-        /* Color swatch selected state */
-        .color-swatch.ring-2 {
-            box-shadow: 0 0 0 2px white, 0 0 0 4px currentColor;
-        }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-indigo-50/30 to-rose-50/20 min-h-screen font-sans antialiased">
@@ -55,28 +99,30 @@
         <div class="h-14 flex items-center px-5 border-b border-white/10">
             <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-2">
-            <a href="student-dashboard.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📝</span> Dashboard
+        <nav class="flex-1 py-4 space-y-1 px-3">
+            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
             </a>
-            <a href="student-dashboard.php?section=analytics" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📊</span> Analytics
+            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
             </a>
-            <a href="log-history.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📜</span> Log History
+            <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
             </a>
-            <a href="public-holiday.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📅</span> Public Holidays
+            <a href="public-holiday.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
             </a>
-            <a href="instructions.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📋</span> Instructions
+            <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
             </a>
-            <a href="profile.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>👤</span> Profile
+            <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
-            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition">🚪 Logout</a>
+            <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+            </a>
         </div>
     </aside>
 
@@ -84,19 +130,7 @@
     <div class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
-        <header class="h-14 glass-header flex items-center justify-between px-6 shrink-0 relative z-50">
-            <div class="flex items-center gap-3">
-                <span class="text-sm font-bold text-slate-700">📋 InternReport</span>
-                <span class="w-px h-5 bg-slate-300/50"></span>
-                <span class="text-xs font-semibold text-slate-500">Public Holidays</span>
-            </div>
-            <div class="flex items-center gap-3">
-                <button onclick="openAddModal()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[10px] font-bold rounded-lg transition cursor-pointer uppercase tracking-wider border border-rose-200">
-                    + Add Holiday
-                </button>
-                <a href="student-dashboard.php" class="text-xs font-semibold text-slate-500 hover:text-slate-700 transition">← Back to Dashboard</a>
-            </div>
-        </header>
+        <?php $pageTitle = 'Intern Period Calendar'; $show_back_link = true; include '../includes/student-topbar.php'; ?>
 
         <!-- Page Content (scrollable) -->
         <main class="flex-1 overflow-y-auto p-6">
@@ -106,9 +140,9 @@
                 <!-- Page Header -->
                 <div class="mb-6">
                     <h1 class="text-lg font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                        <span class="p-1.5 bg-rose-50 text-rose-600 rounded-lg text-sm">📅</span> Public Holidays
+                        <span class="p-1.5 bg-rose-50 text-rose-600 rounded-lg text-sm">📅</span> Intern Period Calendar
                     </h1>
-                    <p class="text-xs text-slate-400 mt-1">View and manage Myanmar public holidays for your internship period</p>
+                    <p class="text-xs text-slate-400 mt-1">View public holidays during your internship period</p>
                 </div>
 
                 <!-- Calendar Card -->
@@ -119,14 +153,14 @@
                         <div class="flex items-center gap-3">
                             <div>
                                 <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider" id="calendar-title">July 2026</h2>
-                                <p class="text-[10px] text-slate-400 mt-0.5">Click a holiday to edit · Click + to add new</p>
+                                <p class="text-label text-slate-400 mt-0.5">Public holidays during your internship</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
                             <button onclick="prevMonth()" class="w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-bold transition cursor-pointer">
                                 ‹
                             </button>
-                            <button onclick="goToday()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-[10px] font-bold rounded-lg transition cursor-pointer uppercase tracking-wider">
+                            <button onclick="goToday()" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-label font-bold rounded-lg transition cursor-pointer uppercase tracking-wider">
                                 Today
                             </button>
                             <button onclick="nextMonth()" class="w-8 h-8 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 text-xs font-bold transition cursor-pointer">
@@ -137,13 +171,13 @@
 
                     <!-- Day-of-Week Headers -->
                     <div class="grid grid-cols-7 border-b border-slate-100">
-                        <div class="px-2 py-2.5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Sun</div>
-                        <div class="px-2 py-2.5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Mon</div>
-                        <div class="px-2 py-2.5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Tue</div>
-                        <div class="px-2 py-2.5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Wed</div>
-                        <div class="px-2 py-2.5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Thu</div>
-                        <div class="px-2 py-2.5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Fri</div>
-                        <div class="px-2 py-2.5 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Sat</div>
+                        <div class="px-2 py-2.5 text-center text-label font-black text-slate-400 uppercase tracking-widest">Sun</div>
+                        <div class="px-2 py-2.5 text-center text-label font-black text-slate-400 uppercase tracking-widest">Mon</div>
+                        <div class="px-2 py-2.5 text-center text-label font-black text-slate-400 uppercase tracking-widest">Tue</div>
+                        <div class="px-2 py-2.5 text-center text-label font-black text-slate-400 uppercase tracking-widest">Wed</div>
+                        <div class="px-2 py-2.5 text-center text-label font-black text-slate-400 uppercase tracking-widest">Thu</div>
+                        <div class="px-2 py-2.5 text-center text-label font-black text-slate-400 uppercase tracking-widest">Fri</div>
+                        <div class="px-2 py-2.5 text-center text-label font-black text-slate-400 uppercase tracking-widest">Sat</div>
                     </div>
 
                     <!-- Calendar Grid -->
@@ -155,15 +189,15 @@
                     <div class="px-5 py-3 border-t border-slate-100 flex flex-wrap items-center gap-4">
                         <div class="flex items-center gap-2">
                             <span class="w-3 h-3 rounded bg-indigo-100 border-2 border-indigo-400 ring-2 ring-indigo-100"></span>
-                            <span class="text-[10px] font-semibold text-slate-500">Today</span>
+                            <span class="text-label font-semibold text-slate-500">Today</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="w-3 h-3 rounded bg-rose-100 border border-rose-200"></span>
-                            <span class="text-[10px] font-semibold text-slate-500">Holiday</span>
+                            <span class="text-label font-semibold text-slate-500">Holiday</span>
                         </div>
                         <div class="flex items-center gap-2">
                             <span class="w-3 h-3 rounded bg-slate-50 border border-slate-200"></span>
-                            <span class="text-[10px] font-semibold text-slate-500">Regular Day</span>
+                            <span class="text-label font-semibold text-slate-500">Regular Day</span>
                         </div>
                     </div>
 
@@ -189,10 +223,10 @@
                         </h2>
                         <div class="flex items-center gap-2">
                             <div class="relative">
-                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]">🔍</span>
-                                <input type="text" id="holiday-search" placeholder="Search holidays..." oninput="renderUpcoming()" class="w-44 bg-slate-50 border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 text-[11px] text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:bg-white transition">
+                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-label">🔍</span>
+                                <input type="text" id="holiday-search" placeholder="Search holidays..." oninput="renderUpcoming()" class="w-44 bg-slate-50 border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 text-caption text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:bg-white transition">
                             </div>
-                            <span class="text-[10px] text-slate-400 font-semibold shrink-0" id="holiday-count"></span>
+                            <span class="text-label text-slate-400 font-semibold shrink-0" id="holiday-count"></span>
                         </div>
                     </div>
                     <div id="upcoming-list" class="divide-y divide-slate-100">
@@ -203,11 +237,10 @@
                 <!-- Info Note -->
                 <div class="mt-6 bg-slate-50 border border-slate-200 rounded-2xl p-4">
                     <h3 class="text-xs font-bold text-slate-700 mb-2">ℹ️ Notes</h3>
-                    <ul class="text-[11px] text-slate-500 space-y-1">
-                        <li>• Click any holiday on the calendar to edit its name, note, or color.</li>
-                        <li>• Use the <strong>+ Add Holiday</strong> button to add new holidays.</li>
-                        <li>• Each holiday has a custom color dot — use the color picker to differentiate them.</li>
+                    <ul class="text-caption text-slate-500 space-y-1">
+                        <li>• These are public holidays set by the administrator during your internship period.</li>
                         <li>• Holiday dates will be automatically marked as <strong>"Leave"</strong> in your daily logs.</li>
+                        <li>• Hover over a holiday on the calendar to see its details.</li>
                     </ul>
                 </div>
 
@@ -218,91 +251,18 @@
     </div>
 </div>
 
-<!-- ══════ HOLIDAY MODAL (Add / Edit) ══════ -->
-<div id="holiday-modal" class="hidden fixed inset-0 z-[999] flex items-center justify-center p-4">
-    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeModal()"></div>
-    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 overflow-hidden">
-        <!-- Modal Header -->
-        <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-                <span class="p-1.5 bg-rose-50 text-rose-600 rounded-lg text-sm">📅</span>
-                <h3 id="modal-title" class="text-sm font-black text-slate-800 uppercase tracking-wider">Add Public Holiday</h3>
-            </div>
-            <button onclick="closeModal()" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 text-xs font-bold transition cursor-pointer">✕</button>
-        </div>
-        <!-- Modal Body -->
-        <form id="holiday-form" class="p-5 space-y-4" onsubmit="return handleSaveHoliday(event)">
-            <input type="hidden" id="modal-edit-key" value="">
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Holiday Date *</label>
-                <input type="date" id="modal-holiday-date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white transition">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Holiday Name *</label>
-                <input type="text" id="modal-holiday-name" required placeholder="e.g. Thingyan Festival" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white transition">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1">Note <span class="text-slate-400 font-normal">(optional)</span></label>
-                <input type="text" id="modal-holiday-note" placeholder="Optional note" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-rose-500 focus:bg-white transition">
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-600 mb-1.5">Dot Color</label>
-                <div class="flex items-center gap-2">
-                    <div class="flex items-center gap-1.5 flex-wrap" id="color-presets">
-                        <button type="button" onclick="pickColor('#f43f5e')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#f43f5e" data-color="#f43f5e"></button>
-                        <button type="button" onclick="pickColor('#ef4444')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#ef4444" data-color="#ef4444"></button>
-                        <button type="button" onclick="pickColor('#f97316')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#f97316" data-color="#f97316"></button>
-                        <button type="button" onclick="pickColor('#eab308')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#eab308" data-color="#eab308"></button>
-                        <button type="button" onclick="pickColor('#22c55e')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#22c55e" data-color="#22c55e"></button>
-                        <button type="button" onclick="pickColor('#3b82f6')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#3b82f6" data-color="#3b82f6"></button>
-                        <button type="button" onclick="pickColor('#8b5cf6')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#8b5cf6" data-color="#8b5cf6"></button>
-                        <button type="button" onclick="pickColor('#ec4899')" class="color-swatch w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer hover:scale-110 transition" style="background:#ec4899" data-color="#ec4899"></button>
-                    </div>
-                    <div class="relative">
-                        <input type="color" id="modal-holiday-color" value="#f43f5e" onchange="pickColor(this.value)" class="w-6 h-6 rounded-full border-2 border-white shadow-sm ring-1 ring-slate-200 cursor-pointer p-0">
-                    </div>
-                    <span id="color-hex" class="text-[10px] font-mono text-slate-400">#f43f5e</span>
-                </div>
-            </div>
-            <div id="modal-error" class="hidden bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 text-xs text-rose-600 font-semibold"></div>
-            <div class="flex items-center justify-between pt-2">
-                <button type="button" id="modal-delete-btn" onclick="handleDeleteHoliday()" class="hidden px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl border border-rose-200 transition cursor-pointer">
-                    Delete
-                </button>
-                <div class="flex items-center gap-2 ml-auto">
-                    <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition cursor-pointer">Cancel</button>
-                    <button type="submit" id="modal-submit-btn" class="px-5 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-xl shadow-sm transition cursor-pointer">Add Holiday</button>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
 <script>
-// ── Holiday Data (set by Admin) ──
-var holidays = {
-    "2026-01-04": { name: "Independence Day", note: "", color: "#ef4444" },
-    "2026-01-12": { name: "National Garden Day", note: "", color: "#22c55e" },
-    "2026-02-12": { name: "Union Day", note: "", color: "#3b82f6" },
-    "2026-03-02": { name: "Peasants' Day", note: "", color: "#f97316" },
-    "2026-03-13": { name: "Full Moon of Tabodwe", note: "", color: "#8b5cf6" },
-    "2026-03-27": { name: "Armed Forces Day", note: "", color: "#ef4444" },
-    "2026-04-13": { name: "Thingyan Festival (Water Festival)", note: "Official Water Festival holiday", color: "#3b82f6" },
-    "2026-04-14": { name: "Thingyan Festival (Water Festival)", note: "", color: "#3b82f6" },
-    "2026-04-15": { name: "Thingyan Festival (Water Festival)", note: "", color: "#3b82f6" },
-    "2026-04-16": { name: "Thingyan Festival (Water Festival)", note: "", color: "#3b82f6" },
-    "2026-04-17": { name: "Thingyan Festival (Water Festival)", note: "", color: "#3b82f6" },
-    "2026-04-18": { name: "Thingyan Festival (Water Festival)", note: "", color: "#3b82f6" },
-    "2026-04-19": { name: "Thingyan Festival (Water Festival)", note: "", color: "#3b82f6" },
-    "2026-05-01": { name: "Labour Day", note: "", color: "#f97316" },
-    "2026-05-10": { name: "Full Moon of Kason", note: "", color: "#8b5cf6" },
-    "2026-07-19": { name: "Martyrs' Day", note: "", color: "#ef4444" },
-    "2026-07-20": { name: "Full Moon of Waso", note: "", color: "#8b5cf6" },
-    "2026-10-05": { name: "Thadingyut (Lighting Festival)", note: "", color: "#eab308" },
-    "2026-10-22": { name: "Tazaungdaung Festival", note: "", color: "#ec4899" },
-    "2026-11-09": { name: "National Day", note: "", color: "#ef4444" },
-    "2026-11-25": { name: "Full Moon of Natdaw", note: "", color: "#8b5cf6" }
-};
+// ── Holiday Data (from Admin via Database) ──
+var holidays = {};
+var dbHolidays = <?= $holiday_json ?>;
+var defaultColors = ['#ef4444','#3b82f6','#22c55e','#f97316','#8b5cf6','#eab308','#ec4899','#f43f5e'];
+dbHolidays.forEach(function(row, i) {
+    holidays[row.holiday_date] = {
+        name: row.holiday_name_mm || row.holiday_name,
+        note: row.note || '',
+        color: defaultColors[i % defaultColors.length]
+    };
+});
 
 // ── State ──
 var today = new Date();
@@ -360,29 +320,28 @@ function render() {
             cell.style.backgroundColor = hexToRgba(hColor, 0.08);
             cell.setAttribute("onmouseenter", "this.style.backgroundColor='" + hexToRgba(hColor, 0.15) + "'");
             cell.setAttribute("onmouseleave", "this.style.backgroundColor='" + hexToRgba(hColor, 0.08) + "'");
-            cell.setAttribute("onclick", "openEditModal('" + dateKey + "')");
         }
 
         var html = "";
         if (td && hol) {
-            html += '<span class="w-6 h-6 rounded-full bg-indigo-500 text-white text-[11px] font-black flex items-center justify-center today-ring">' + d + '</span>';
+            html += '<span class="w-6 h-6 rounded-full bg-indigo-500 text-white text-caption font-black flex items-center justify-center today-ring">' + d + '</span>';
         } else if (td) {
-            html += '<span class="w-6 h-6 rounded-full bg-indigo-500 text-white text-[11px] font-black flex items-center justify-center today-ring">' + d + '</span>';
+            html += '<span class="w-6 h-6 rounded-full bg-indigo-500 text-white text-caption font-black flex items-center justify-center today-ring">' + d + '</span>';
         } else if (hol) {
-            html += '<span class="w-6 h-6 rounded-full text-white text-[11px] font-black flex items-center justify-center" style="background:' + hColor + '">' + d + '</span>';
+            html += '<span class="w-6 h-6 rounded-full text-white text-caption font-black flex items-center justify-center" style="background:' + hColor + '">' + d + '</span>';
         } else {
-            html += '<span class="text-[11px] font-semibold text-slate-600">' + d + '</span>';
+            html += '<span class="text-caption font-semibold text-slate-600">' + d + '</span>';
         }
 
         if (hol) {
-            html += '<span class="mt-0.5 px-1 py-0.5 text-[7px] font-black rounded uppercase tracking-wider leading-none text-center max-w-full truncate hidden sm:block" style="background:' + hexToRgba(hColor, 0.15) + ';color:' + hColor + '">' +
+            html += '<span class="mt-0.5 px-1 py-0.5 text-micro font-black rounded uppercase tracking-wider leading-none text-center max-w-full truncate hidden sm:block" style="background:' + hexToRgba(hColor, 0.15) + ';color:' + hColor + '">' +
                 (name.length > 12 ? name.substring(0, 10) + "…" : name) + '</span>';
-            html += '<span class="mt-0.5 text-[7px] font-bold sm:hidden" style="color:' + hColor + '">●</span>';
+            html += '<span class="mt-0.5 text-micro font-bold sm:hidden" style="color:' + hColor + '">●</span>';
         }
 
         if (hol) {
             html += '<div class="holiday-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50">';
-            html += '  <div class="bg-slate-900 text-white text-[10px] font-semibold rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">';
+            html += '  <div class="bg-slate-900 text-white text-label font-semibold rounded-lg px-3 py-2 shadow-lg whitespace-nowrap">';
             html += '    <p class="font-black mb-0.5" style="color:' + hColor + '">' + name + '</p>';
             html += '    <p class="text-slate-300">' + monthNames[currentMonth] + ' ' + d + ', ' + currentYear + '</p>';
             if (note) html += '    <p class="text-slate-400 mt-0.5 italic">' + note + '</p>';
@@ -449,21 +408,20 @@ function renderUpcoming() {
         var hData = holidays[display[k]];
         var hCol = hData.color || "#f43f5e";
 
-        html += '<div class="px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition ' + (isPast ? 'opacity-50' : '') + '" onclick="openEditModal(\'' + display[k] + '\')">';
+        html += '<div class="px-4 py-3 flex items-center gap-3 ' + (isPast ? 'opacity-50' : '') + '">';
         html += '  <div class="w-10 h-10 rounded-xl flex flex-col items-center justify-center shrink-0" style="background:' + hexToRgba(hCol, 0.15) + ';color:' + hCol + '">';
         html += '    <span class="text-sm font-black leading-none">' + dy + '</span>';
-        html += '    <span class="text-[7px] font-bold uppercase leading-none mt-0.5">' + monthNames[mo].substring(0, 3) + '</span>';
+        html += '    <span class="text-micro font-bold uppercase leading-none mt-0.5">' + monthNames[mo].substring(0, 3) + '</span>';
         html += '  </div>';
         html += '  <div class="flex-1 min-w-0">';
         html += '    <p class="text-xs font-bold text-slate-700 truncate">' + hData.name + '</p>';
-        html += '    <p class="text-[10px] text-slate-400">' + dayName + ', ' + monthNames[mo] + ' ' + dy + ', ' + yr + '</p>';
+        html += '    <p class="text-label text-slate-400">' + dayName + ', ' + monthNames[mo] + ' ' + dy + ', ' + yr + '</p>';
         html += '  </div>';
-        html += '  <span class="text-[10px] text-slate-300 shrink-0">›</span>';
         html += '</div>';
     }
     if (!query && upcoming.length > 5) {
         html += '<div class="px-4 py-2.5 bg-slate-50 text-center">';
-        html += '  <span class="text-[10px] font-bold text-slate-400">+' + (upcoming.length - 5) + ' more holidays this year</span>';
+        html += '  <span class="text-label font-bold text-slate-400">+' + (upcoming.length - 5) + ' more holidays this year</span>';
         html += '</div>';
     }
     list.innerHTML = html;
@@ -488,10 +446,10 @@ function renderLegend() {
         var tip = names.join(", ");
         out += "<div class=\"flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100 cursor-default\" title=\"" + tip + "\">";
         out += "<span class=\"w-2.5 h-2.5 rounded-full shrink-0\" style=\"background:" + col + "\"></span>";
-        out += "<span class=\"text-[10px] font-semibold text-slate-600 truncate max-w-[120px]\" title=\"" + tip + "\">" + label + "</span>";
+        out += "<span class=\"text-label font-semibold text-slate-600 truncate max-w-[120px]\" title=\"" + tip + "\">" + label + "</span>";
         out += "</div>";
     }
-    if (!out) out = "<p class=\"text-[10px] text-slate-400\">No holidays configured.</p>";
+    if (!out) out = "<p class=\"text-label text-slate-400\">No holidays configured.</p>";
     el.innerHTML = out;
 }
 function prevMonth() { currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; } render(); }
@@ -500,109 +458,6 @@ function goToday() { currentYear = today.getFullYear(); currentMonth = today.get
 
 // ── Init ──
 render();
-
-// ── Modal Functions ──
-function openAddModal() {
-    document.getElementById("holiday-modal").classList.remove("hidden");
-    document.getElementById("modal-title").textContent = "Add Public Holiday";
-    document.getElementById("modal-edit-key").value = "";
-    document.getElementById("modal-holiday-date").value = "";
-    document.getElementById("modal-holiday-name").value = "";
-    document.getElementById("modal-holiday-note").value = "";
-    document.getElementById("modal-error").classList.add("hidden");
-    document.getElementById("modal-delete-btn").classList.add("hidden");
-    document.getElementById("modal-submit-btn").textContent = "Add Holiday";
-    document.getElementById("modal-holiday-date").removeAttribute("readonly");
-    pickColor("#f43f5e");
-    document.getElementById("modal-holiday-date").focus();
-}
-
-function openEditModal(dateKey) {
-    var h = holidays[dateKey];
-    if (!h) return;
-    document.getElementById("holiday-modal").classList.remove("hidden");
-    document.getElementById("modal-title").textContent = "Edit Holiday";
-    document.getElementById("modal-edit-key").value = dateKey;
-    document.getElementById("modal-holiday-date").value = dateKey;
-    document.getElementById("modal-holiday-date").setAttribute("readonly", true);
-    document.getElementById("modal-holiday-name").value = h.name;
-    document.getElementById("modal-holiday-note").value = h.note || "";
-    document.getElementById("modal-error").classList.add("hidden");
-    document.getElementById("modal-delete-btn").classList.remove("hidden");
-    document.getElementById("modal-submit-btn").textContent = "Save Changes";
-    pickColor(h.color || "#f43f5e");
-    document.getElementById("modal-holiday-name").focus();
-}
-
-function closeModal() { document.getElementById("holiday-modal").classList.add("hidden"); }
-
-function pickColor(hex) {
-    document.getElementById("modal-holiday-color").value = hex;
-    document.getElementById("color-hex").textContent = hex;
-    document.querySelectorAll(".color-swatch").forEach(function(el) {
-        if (el.getAttribute("data-color") === hex) {
-            el.classList.add("ring-2", "ring-offset-1");
-        } else {
-            el.classList.remove("ring-2", "ring-offset-1");
-        }
-    });
-}
-
-function handleSaveHoliday(e) {
-    e.preventDefault();
-    var editKey = document.getElementById("modal-edit-key").value;
-    var dateVal = document.getElementById("modal-holiday-date").value;
-    var nameVal = document.getElementById("modal-holiday-name").value.trim();
-    var noteVal = document.getElementById("modal-holiday-note").value.trim();
-    var colorVal = document.getElementById("modal-holiday-color").value;
-    var errEl = document.getElementById("modal-error");
-    errEl.classList.add("hidden");
-
-    if (!dateVal || !nameVal) {
-        errEl.textContent = "Date and Holiday Name are required.";
-        errEl.classList.remove("hidden");
-        return false;
-    }
-
-    if (editKey) {
-        holidays[editKey] = { name: nameVal, note: noteVal, color: colorVal };
-        render(); closeModal();
-        showSuccessToast(nameVal + " updated successfully!");
-    } else {
-        if (holidays.hasOwnProperty(dateVal)) {
-            errEl.textContent = "A holiday already exists for this date (" + holidays[dateVal].name + ").";
-            errEl.classList.remove("hidden");
-            return false;
-        }
-        holidays[dateVal] = { name: nameVal, note: noteVal, color: colorVal };
-        render(); closeModal();
-        showSuccessToast(nameVal + " added successfully!");
-    }
-    return false;
-}
-
-function handleDeleteHoliday() {
-    var editKey = document.getElementById("modal-edit-key").value;
-    if (!editKey || !holidays[editKey]) return;
-    var name = holidays[editKey].name;
-    if (confirm('Delete "' + name + '" on ' + editKey + '?')) {
-        delete holidays[editKey]; render(); closeModal();
-        showSuccessToast(name + " deleted.");
-    }
-}
-
-function showSuccessToast(msg) {
-    var toast = document.createElement("div");
-    toast.className = "fixed bottom-6 right-6 z-[1000] bg-emerald-600 text-white text-xs font-bold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 transition-all duration-300";
-    toast.style.opacity = "0"; toast.style.transform = "translateY(10px)";
-    toast.innerHTML = '<span class="text-base">✓</span> ' + msg;
-    document.body.appendChild(toast);
-    requestAnimationFrame(function() { toast.style.opacity = "1"; toast.style.transform = "translateY(0)"; });
-    setTimeout(function() {
-        toast.style.opacity = "0"; toast.style.transform = "translateY(10px)";
-        setTimeout(function() { toast.remove(); }, 300);
-    }, 2500);
-}
 </script>
 
 </body>

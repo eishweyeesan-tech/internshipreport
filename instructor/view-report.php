@@ -230,6 +230,25 @@ function render_error($title, $msg, $icon) {
         .student-sig-preview { font-family: 'Great Vibes', cursive; font-size: 24px; color: #1e293b; min-height: 36px; line-height: 1.4; }
     </style>
     <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
+                }
+            }
+        }
+    </script>
+    <script>
     function previewTypedSig() {
         var name = document.getElementById('typed_name').value;
         var el   = document.getElementById('sig_preview');

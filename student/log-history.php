@@ -109,6 +109,14 @@ foreach ($all_logs as $log) {
 $total_hours = floor($total_minutes / 60);
 $total_mins  = $total_minutes % 60;
 
+// ── Filtered period stats ────────────────────────────────────────
+$display_logs_count = $total_logs_count;
+$display_present    = $total_present;
+$display_absent     = $total_absent;
+$display_reflections = $total_reflections;
+$display_hours      = $total_hours;
+$display_mins       = $total_mins;
+
 // ── Build monthly data ───────────────────────────────────────────
 $months = [];
 foreach ($weeks as $wn => $wr) {
@@ -127,6 +135,43 @@ foreach ($weeks as $wn => $wr) {
 $filter_week = isset($_GET['week']) ? (int) $_GET['week'] : (!empty($weeks) ? array_key_first($weeks) : 0);
 $filter_month = $_GET['month'] ?? (!empty($months) ? array_key_first($months) : '');
 
+// ── Scoped stats for selected period ─────────────────────────────
+if ($view_mode === 'weekly' && $filter_week > 0 && isset($weeks[$filter_week])) {
+    $wl = $logs_by_week[$filter_week] ?? [];
+    $display_logs_count = count($wl);
+    $display_present = 0;
+    $display_absent = 0;
+    $display_minutes = 0;
+    foreach ($wl as $log) {
+        if ($log['attendance_status'] === 'present') $display_present++;
+        else $display_absent++;
+        $p = explode(':', $log['calculated_duration']);
+        if (count($p) === 2) $display_minutes += ((int)$p[0] * 60) + (int)$p[1];
+    }
+    $display_reflections = isset($refs_by_week[$filter_week]) ? 1 : 0;
+    $display_hours = floor($display_minutes / 60);
+    $display_mins  = $display_minutes % 60;
+} elseif ($view_mode === 'monthly' && $filter_month && isset($months[$filter_month])) {
+    $display_logs_count = 0;
+    $display_present = 0;
+    $display_absent = 0;
+    $display_minutes = 0;
+    $display_reflections = 0;
+    foreach ($months[$filter_month]['weeks'] as $wn) {
+        $wl = $logs_by_week[$wn] ?? [];
+        $display_logs_count += count($wl);
+        foreach ($wl as $log) {
+            if ($log['attendance_status'] === 'present') $display_present++;
+            else $display_absent++;
+            $p = explode(':', $log['calculated_duration']);
+            if (count($p) === 2) $display_minutes += ((int)$p[0] * 60) + (int)$p[1];
+        }
+        if (isset($refs_by_week[$wn])) $display_reflections++;
+    }
+    $display_hours = floor($display_minutes / 60);
+    $display_mins  = $display_minutes % 60;
+}
+
 // Back link
 $back_url = 'student-dashboard.php';
 ?>
@@ -137,11 +182,27 @@ $back_url = 'student-dashboard.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log History – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                },
+            }
+        }
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
-    .active-nav { background: rgba(255,255,255,0.15); color: #fff; border-right: 3px solid #a78bfa; }
+    .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
+    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+    .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
     .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
     .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
     .glass-sidebar { background: rgba(15,23,42,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.08); }
@@ -161,28 +222,30 @@ $back_url = 'student-dashboard.php';
         <div class="h-14 flex items-center px-5 border-b border-white/10">
             <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-2">
-            <a href="student-dashboard.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📝</span> Dashboard
+        <nav class="flex-1 py-4 space-y-1 px-3">
+            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
             </a>
-            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📊</span> Analytics
+            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
             </a>
-            <a href="log-history.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition" data-section="history">
-                <span>📜</span> Log History
+            <a href="log-history.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="history">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
             </a>
-            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📅</span> Public Holidays
+            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
             </a>
-            <a href="instructions.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>📋</span> Instructions
+            <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
             </a>
-            <a href="profile.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
-                <span>👤</span> Profile
+            <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
-            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition">🚪 Logout</a>
+            <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+            </a>
         </div>
     </aside>
 
@@ -190,36 +253,13 @@ $back_url = 'student-dashboard.php';
     <div class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
-        <header class="h-14 glass-header flex items-center justify-between px-6 shrink-0">
-            <div class="flex items-center gap-3">
-                <span class="text-sm font-bold text-slate-700">📋 InternReport</span>
-                <span class="w-px h-5 bg-slate-300/50"></span>
-                <span class="text-xs font-semibold text-slate-500">Log History</span>
-            </div>
-            <div class="flex items-center gap-3">
-                <a href="student-dashboard.php" class="flex items-center gap-2 px-3 py-1.5 bg-white/40 hover:bg-white/60 border border-white/40 rounded-xl text-xs font-bold text-slate-600 transition">
-                    ← Back to Dashboard
-                </a>
-                <div class="relative group/profile inline-block">
-                    <button class="flex items-center gap-2.5 hover:bg-white/30 rounded-xl px-2 py-1.5 transition">
-                        <?php if ($profile_pic): ?>
-                        <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-8 h-8 rounded-full object-cover border-2 border-white/60 shadow-sm shrink-0">
-                        <?php else: ?>
-                        <span class="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-bold shrink-0"><?= strtoupper(substr($student_name, 0, 1)) ?></span>
-                        <?php endif; ?>
-                        <div class="text-left hidden sm:block">
-                            <p class="text-xs font-bold text-slate-700 leading-tight"><?= htmlspecialchars($student_name) ?></p>
-                        </div>
-                    </button>
-                </div>
-            </div>
-        </header>
+        <?php $pageTitle = 'Log History'; $show_back_link = true; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-6">
 
             <!-- ════ PAGE HEADER ════ -->
-            <div class="glass-card rounded-2xl p-5 mb-6">
+            <div class="glass-card rounded-2xl p-5 mb-6 no-print">
                 <div class="flex items-start justify-between flex-wrap gap-4">
                     <div class="flex items-center gap-4">
                         <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold shrink-0">
@@ -242,26 +282,26 @@ $back_url = 'student-dashboard.php';
             </div>
 
             <!-- ════ STATS CARDS ════ -->
-            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6 no-print">
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-slate-800"><?= $total_logs_count ?></p>
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Logs</p>
+                    <p class="text-2xl font-black text-slate-800"><?= $display_logs_count ?></p>
+                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Total Logs</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-emerald-600"><?= $total_present ?></p>
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Present Days</p>
+                    <p class="text-2xl font-black text-emerald-600"><?= $display_present ?></p>
+                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Present Days</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-red-500"><?= $total_absent ?></p>
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Absent Days</p>
+                    <p class="text-2xl font-black text-red-500"><?= $display_absent ?></p>
+                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Absent Days</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-indigo-600"><?= $total_reflections ?></p>
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reflections</p>
+                    <p class="text-2xl font-black text-indigo-600"><?= $display_reflections ?></p>
+                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Reflections</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-blue-600"><?= $total_hours ?>h <?= str_pad($total_mins, 2, '0', STR_PAD_LEFT) ?>m</p>
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Hours</p>
+                    <p class="text-2xl font-black text-blue-600"><?= $display_hours ?>h <?= str_pad($display_mins, 2, '0', STR_PAD_LEFT) ?>m</p>
+                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Total Hours</p>
                 </div>
             </div>
 
@@ -270,7 +310,7 @@ $back_url = 'student-dashboard.php';
                 <div class="flex items-center justify-between flex-wrap gap-4">
                     <!-- View Mode Toggle -->
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">View:</span>
+                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider">View:</span>
                         <a href="?mode=weekly<?= $filter_week ? "&week={$filter_week}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">📅 Weekly</a>
                         <a href="?mode=monthly<?= $filter_month ? "&month={$filter_month}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">📆 Monthly</a>
                     </div>
@@ -278,7 +318,7 @@ $back_url = 'student-dashboard.php';
                     <!-- Week/Month Filter -->
                     <?php if ($view_mode === 'weekly' && !empty($weeks)): ?>
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jump to:</span>
+                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider">Jump to:</span>
                         <select onchange="if(this.value) window.location.href='?mode=weekly&week='+this.value; else window.location.href='?mode=weekly';" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
                             <option value="">All Weeks</option>
                             <?php foreach ($weeks as $wn => $wr): ?>
@@ -288,7 +328,7 @@ $back_url = 'student-dashboard.php';
                     </div>
                     <?php elseif ($view_mode === 'monthly' && !empty($months)): ?>
                     <div class="flex items-center gap-2">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Jump to:</span>
+                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider">Jump to:</span>
                         <select onchange="if(this.value) window.location.href='?mode=monthly&month='+this.value; else window.location.href='?mode=monthly';" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
                             <option value="">All Months</option>
                             <?php foreach ($months as $mk => $mv): ?>
@@ -339,15 +379,15 @@ $back_url = 'student-dashboard.php';
                                 </div>
                                 <div>
                                     <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider">Week <?= $wn ?></h2>
-                                    <span class="text-[11px] text-slate-400">
+                                    <span class="text-caption text-slate-400">
                                         <?= (new DateTime($wr['start']))->format('d M Y') ?> – <?= (new DateTime($wr['end']))->format('d M Y') ?>
                                     </span>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $week_present ?> Present</span>
-                                <span class="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $week_absent ?> Absent</span>
-                                <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">⏱️ <?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
+                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $week_present ?> Present</span>
+                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $week_absent ?> Absent</span>
+                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">⏱️ <?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
                                 <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
                                     <?php
                                     $gmap = [
@@ -358,7 +398,7 @@ $back_url = 'student-dashboard.php';
                                     ];
                                     $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
                                     ?>
-                                    <span class="text-[10px] font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                                    <span class="text-label font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -367,13 +407,13 @@ $back_url = 'student-dashboard.php';
                             <!-- Daily Logs -->
                             <?php if (!empty($week_logs)): ?>
                             <div>
-                                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-[10px]">📋</span> Daily Logs
+                                <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-label">📋</span> Daily Logs
                                 </h3>
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-xs">
                                         <thead>
-                                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-label">
                                                 <th class="px-3 py-2 text-left">Date</th>
                                                 <th class="px-3 py-2 text-left">Status</th>
                                                 <th class="px-3 py-2 text-left">Intended Task</th>
@@ -392,9 +432,9 @@ $back_url = 'student-dashboard.php';
                                                 </td>
                                                 <td class="px-3 py-2 whitespace-nowrap">
                                                     <?php if ($wl['attendance_status'] === 'present'): ?>
-                                                        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
+                                                        <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
                                                     <?php else: ?>
-                                                        <span class="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
+                                                        <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <?php $is_absent = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
@@ -419,20 +459,20 @@ $back_url = 'student-dashboard.php';
                             <!-- Weekly Reflection -->
                             <?php if ($week_ref): ?>
                             <div class="border-t border-slate-100 pt-4">
-                                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center text-[10px]">📊</span> Weekly Reflection
+                                <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center text-label">📊</span> Weekly Reflection
                                 </h3>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div class="bg-slate-50 rounded-xl p-3">
-                                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">What was done?</span>
+                                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">What was done?</span>
                                         <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['what_done'] ?? '')) ?></p>
                                     </div>
                                     <div class="bg-slate-50 rounded-xl p-3">
-                                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">How was it done?</span>
+                                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">How was it done?</span>
                                         <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['how_done'] ?? '')) ?></p>
                                     </div>
                                     <div class="bg-slate-50 rounded-xl p-3">
-                                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Why was it done?</span>
+                                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">Why was it done?</span>
                                         <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['why_done'] ?? '')) ?></p>
                                     </div>
                                 </div>
@@ -442,8 +482,8 @@ $back_url = 'student-dashboard.php';
                             <!-- Evaluation -->
                             <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
                             <div class="border-t border-slate-100 pt-4">
-                                <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center text-[10px]">⭐</span> Instructor Evaluation
+                                <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center text-label">⭐</span> Instructor Evaluation
                                 </h3>
                                 <div class="bg-slate-50 rounded-xl p-3 flex items-start gap-4">
                                     <div class="flex-1">
@@ -451,20 +491,20 @@ $back_url = 'student-dashboard.php';
                                             <?php
                                             $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
                                             ?>
-                                            <span class="text-[10px] font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
-                                            <span class="text-[10px] font-bold <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
+                                            <span class="text-label font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                                            <span class="text-label font-bold <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
                                         </div>
                                         <?php if ($week_eval['comment']): ?>
                                             <p class="text-xs text-slate-600 leading-relaxed mt-1"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
                                         <?php endif; ?>
                                         <?php if ($week_eval['instructor_comments']): ?>
                                             <div class="bg-red-50 border border-red-100 rounded-lg p-2 mt-2">
-                                                <p class="text-[10px] font-bold text-red-500 mb-0.5">Instructor Comments:</p>
+                                                <p class="text-label font-bold text-red-500 mb-0.5">Instructor Comments:</p>
                                                 <p class="text-xs text-red-600"><?= nl2br(htmlspecialchars($week_eval['instructor_comments'])) ?></p>
                                             </div>
                                         <?php endif; ?>
                                     </div>
-                                    <span class="text-[10px] text-slate-300 shrink-0"><?= (new DateTime($week_eval['evaluated_at']))->format('d M Y') ?></span>
+                                    <span class="text-label text-slate-300 shrink-0"><?= (new DateTime($week_eval['evaluated_at']))->format('d M Y') ?></span>
                                 </div>
                             </div>
                             <?php endif; ?>
@@ -520,15 +560,15 @@ $back_url = 'student-dashboard.php';
                                 </div>
                                 <div>
                                     <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider"><?= htmlspecialchars($mv['label']) ?></h2>
-                                    <span class="text-[11px] text-slate-400"><?= count($mv['weeks']) ?> week(s) · <?= count($month_logs) ?> log(s)</span>
+                                    <span class="text-caption text-slate-400"><?= count($mv['weeks']) ?> week(s) · <?= count($month_logs) ?> log(s)</span>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $month_present ?> Present</span>
-                                <span class="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $month_absent ?> Absent</span>
-                                <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">⏱️ <?= floor($month_minutes / 60) ?>h <?= str_pad($month_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
-                                <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">📊 <?= $month_refs ?> Reflections</span>
-                                <span class="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">⭐ <?= $month_evals ?> Evaluated</span>
+                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $month_present ?> Present</span>
+                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $month_absent ?> Absent</span>
+                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">⏱️ <?= floor($month_minutes / 60) ?>h <?= str_pad($month_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
+                                <span class="text-label font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">📊 <?= $month_refs ?> Reflections</span>
+                                <span class="text-label font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">⭐ <?= $month_evals ?> Evaluated</span>
                             </div>
                         </div>
 
@@ -544,9 +584,9 @@ $back_url = 'student-dashboard.php';
                             <div class="border border-slate-100 rounded-xl overflow-hidden">
                                 <div class="px-4 py-2.5 bg-slate-50/80 flex items-center justify-between">
                                     <div class="flex items-center gap-2">
-                                        <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold"><?= $wn ?></span>
-                                        <span class="text-[11px] font-bold text-slate-600">Week <?= $wn ?></span>
-                                        <span class="text-[10px] text-slate-400"><?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?></span>
+                                        <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-label font-bold"><?= $wn ?></span>
+                                        <span class="text-caption font-bold text-slate-600">Week <?= $wn ?></span>
+                                        <span class="text-label text-slate-400"><?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?></span>
                                     </div>
                                     <div class="flex items-center gap-1.5">
                                         <?php
@@ -555,52 +595,127 @@ $back_url = 'student-dashboard.php';
                                             if ($wl['attendance_status'] === 'present') $wk_p++; else $wk_a++;
                                         }
                                         ?>
-                                        <span class="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ <?= $wk_p ?></span>
-                                        <span class="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ <?= $wk_a ?></span>
+                                        <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ <?= $wk_p ?></span>
+                                        <span class="text-caption font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ <?= $wk_a ?></span>
                                         <?php if ($week_ref_m): ?>
-                                            <span class="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">📊 ✓</span>
+                                            <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">📊 ✓</span>
                                         <?php endif; ?>
                                         <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
                                             <?php
                                             $ev_status = $week_eval_m['report_status'];
                                             $ev_cls = $ev_status === 'approved_by_instructor' || $ev_status === 'approved_by_supervisor' ? 'text-emerald-600 bg-emerald-50' : ($ev_status === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50');
                                             ?>
-                                            <span class="text-[9px] font-bold <?= $ev_cls ?> px-1.5 py-0.5 rounded">⭐ <?= $ev_status === 'rejected' ? 'Rejected' : 'Evaluated' ?></span>
+                                            <span class="text-caption font-bold <?= $ev_cls ?> px-1.5 py-0.5 rounded">⭐ <?= $ev_status === 'rejected' ? 'Rejected' : 'Evaluated' ?></span>
                                         <?php endif; ?>
                                     </div>
                                 </div>
                                 <?php if (!empty($week_logs_m)): ?>
-                                <div class="divide-y divide-slate-50">
-                                    <?php foreach ($week_logs_m as $wl): ?>
-                                    <div class="px-4 py-2.5 flex items-center gap-3 text-xs hover:bg-slate-50/50 transition">
-                                        <span class="font-medium text-slate-700 whitespace-nowrap w-24"><?= (new DateTime($wl['log_date']))->format('D, d M') ?></span>
-                                        <span class="whitespace-nowrap">
-                                            <?php if ($wl['attendance_status'] === 'present'): ?>
-                                                <span class="text-[10px] font-bold text-emerald-600">✅</span>
-                                            <?php else: ?>
-                                                <span class="text-[10px] font-bold text-red-600">❌</span>
-                                            <?php endif; ?>
-                                        </span>
-                                        <span class="text-slate-600 truncate flex-1" title="<?= htmlspecialchars($wl['task_title'] ?? '') ?>"><?= htmlspecialchars($wl['task_title'] ?: '-') ?></span>
-                                        <span class="font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></span>
+                                <div>
+                                    <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 px-4 pt-3">
+                                        <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-label">📋</span> Daily Logs
+                                    </h3>
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-xs">
+                                            <thead>
+                                                <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-label">
+                                                    <th class="px-3 py-2 text-left">Date</th>
+                                                    <th class="px-3 py-2 text-left">Status</th>
+                                                    <th class="px-3 py-2 text-left">Intended Task</th>
+                                                    <th class="px-3 py-2 text-left">Task Detail</th>
+                                                    <th class="px-3 py-2 text-left">Actual Task</th>
+                                                    <th class="px-3 py-2 text-left">Tools</th>
+                                                    <th class="px-3 py-2 text-left">Knowledge</th>
+                                                    <th class="px-3 py-2 text-left">Duration</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100">
+                                                <?php foreach ($week_logs_m as $wl): ?>
+                                                <tr class="hover:bg-slate-50 transition">
+                                                    <td class="px-3 py-2 font-medium text-slate-700 whitespace-nowrap">
+                                                        <?= (new DateTime($wl['log_date']))->format('D, d M Y') ?>
+                                                    </td>
+                                                    <td class="px-3 py-2 whitespace-nowrap">
+                                                        <?php if ($wl['attendance_status'] === 'present'): ?>
+                                                            <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
+                                                        <?php else: ?>
+                                                            <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <?php $is_absent_m = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
+                                                    <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['task_title'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['task_detail'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_detail'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['tasks_performed'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['learnt_skills'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
+                                                </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
                                     </div>
-                                    <?php endforeach; ?>
                                 </div>
                                 <?php else: ?>
                                 <div class="px-4 py-3 text-center">
-                                    <p class="text-[10px] text-slate-400">No logs for this week.</p>
+                                    <p class="text-label text-slate-400">No logs for this week.</p>
                                 </div>
                                 <?php endif; ?>
 
-                                <!-- Week Reflection & Eval Summary -->
-                                <?php if ($week_ref_m || ($week_eval_m && $week_eval_m['report_status'] !== 'pending')): ?>
-                                <div class="px-4 py-2.5 bg-slate-50/40 border-t border-slate-100 flex items-center gap-4 text-[10px]">
-                                    <?php if ($week_ref_m): ?>
-                                    <span class="text-slate-500"><strong class="text-slate-600">Reflection:</strong> <?= htmlspecialchars(mb_substr($week_ref_m['what_done'], 0, 80)) ?><?= strlen($week_ref_m['what_done']) > 80 ? '…' : '' ?></span>
-                                    <?php endif; ?>
-                                    <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
-                                    <span class="text-slate-500"><strong class="text-slate-600">Grade:</strong> <?= ucfirst(str_replace('_', ' ', $week_eval_m['grade'])) ?></span>
-                                    <?php endif; ?>
+                                <!-- Week Reflection -->
+                                <?php if ($week_ref_m): ?>
+                                <div class="border-t border-slate-100 pt-4 px-4 pb-3">
+                                    <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                        <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center text-label">📊</span> Weekly Reflection
+                                    </h3>
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div class="bg-slate-50 rounded-xl p-3">
+                                            <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">What was done?</span>
+                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref_m['what_done'] ?? '')) ?></p>
+                                        </div>
+                                        <div class="bg-slate-50 rounded-xl p-3">
+                                            <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">How was it done?</span>
+                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref_m['how_done'] ?? '')) ?></p>
+                                        </div>
+                                        <div class="bg-slate-50 rounded-xl p-3">
+                                            <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">Why was it done?</span>
+                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref_m['why_done'] ?? '')) ?></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+
+                                <!-- Evaluation -->
+                                <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
+                                <div class="border-t border-slate-100 pt-4 px-4 pb-3">
+                                    <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                        <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center text-label">⭐</span> Instructor Evaluation
+                                    </h3>
+                                    <div class="bg-slate-50 rounded-xl p-3 flex items-start gap-4">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <?php
+                                                $gmap_m = [
+                                                    'excellent'         => ['Excellent',         'text-emerald-600', 'bg-emerald-50'],
+                                                    'good'              => ['Good',              'text-blue-600',    'bg-blue-50'],
+                                                    'average'           => ['Average',           'text-amber-600',   'bg-amber-50'],
+                                                    'needs_improvement' => ['Needs Improvement', 'text-red-600',     'bg-red-50'],
+                                                ];
+                                                $gs_m = $gmap_m[$week_eval_m['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
+                                                ?>
+                                                <span class="text-label font-bold <?= $gs_m[1] ?> <?= $gs_m[2] ?> px-2 py-0.5 rounded"><?= $gs_m[0] ?></span>
+                                                <span class="text-label font-bold <?= $week_eval_m['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval_m['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval_m['report_status'])) ?></span>
+                                            </div>
+                                            <?php if ($week_eval_m['comment']): ?>
+                                                <p class="text-xs text-slate-600 leading-relaxed mt-1"><?= nl2br(htmlspecialchars($week_eval_m['comment'])) ?></p>
+                                            <?php endif; ?>
+                                            <?php if ($week_eval_m['instructor_comments']): ?>
+                                                <div class="bg-red-50 border border-red-100 rounded-lg p-2 mt-2">
+                                                    <p class="text-label font-bold text-red-500 mb-0.5">Instructor Comments:</p>
+                                                    <p class="text-xs text-red-600"><?= nl2br(htmlspecialchars($week_eval_m['instructor_comments'])) ?></p>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <span class="text-label text-slate-300 shrink-0"><?= (new DateTime($week_eval_m['evaluated_at']))->format('d M Y') ?></span>
+                                    </div>
                                 </div>
                                 <?php endif; ?>
                             </div>
@@ -618,7 +733,7 @@ $back_url = 'student-dashboard.php';
                 <?php endif; ?>
             <?php endif; ?>
 
-            <div class="text-center text-sm text-slate-300 py-4">Powered by InternReport System</div>
+            <div class="text-center text-sm text-slate-300 py-4 no-print">Powered by InternReport System</div>
         </main>
     </div>
 </div>

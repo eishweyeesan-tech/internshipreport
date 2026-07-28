@@ -48,9 +48,22 @@ $sup_id = $_SESSION['user_id'];
 if ($student_id <= 0) {
     $all_stu_q = $pdo->prepare("
         SELECT u.id AS uid, u.username, u.email,
-               sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role
+               sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
+               COALESCE(ls.log_count, 0) AS log_count,
+               COALESCE(ls.present_count, 0) AS present_count,
+               COALESCE(ls.total_count, 0) AS total_count,
+               ls.latest_log
         FROM users u
         JOIN student_profiles sp ON sp.user_id = u.id
+        LEFT JOIN (
+            SELECT internship_id,
+                   COUNT(*) AS log_count,
+                   SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_count,
+                   COUNT(*) AS total_count,
+                   MAX(log_date) AS latest_log
+            FROM daily_logs
+            GROUP BY internship_id
+        ) ls ON ls.internship_id = u.id
         WHERE u.role = 'student' AND sp.supervisor_id = ?
         ORDER BY sp.full_name ASC
     ");
@@ -70,7 +83,18 @@ if ($student_id <= 0) {
     <script>
         tailwind.config = {
             darkMode: 'class',
-            theme: { extend: { fontFamily: { 'inter': ['Inter', 'sans-serif'] } } }
+            theme: {
+                extend: {
+                    fontFamily: { 'inter': ['Inter', 'sans-serif'] },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
+                }
+            }
         }
     </script>
 </head>
@@ -90,19 +114,28 @@ if ($student_id <= 0) {
             </div>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
-                <span class="text-base">📊</span> Dashboard
+            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
             </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
-                <span class="text-base">👤</span> Profile
+            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
-            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/30 transition-all duration-200">
-                <span class="text-base">🎓</span> Student View
+            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
             </a>
         </nav>
+
+        <!-- ─── ARCHIVES / HISTORY ─── -->
+        <div class="px-4 mb-2">
+            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 px-4">Archives / History</h3>
+        </div>
+        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> My 2025 Trainees
+        </a>
+
         <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200">
-                <span class="text-base">🚪</span> Logout
+            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
             </a>
         </div>
     </aside>
@@ -110,52 +143,77 @@ if ($student_id <= 0) {
     <div class="flex-1 flex flex-col overflow-hidden">
         <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm">
             <div class="flex items-center gap-4">
-                <a href="supervisor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition">
-                    <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">←</span> Back
+                <a href="supervisor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-purple-600 hover:text-purple-800 transition">
+                    <span class="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center text-sm transition-colors group-hover:bg-purple-100">←</span> Back
                 </a>
+                <div class="w-px h-6 bg-slate-200"></div>
                 <h1 class="text-base font-bold text-slate-800">Select a Student to View</h1>
             </div>
-            <div class="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
-                <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-                <span class="text-xs font-bold text-indigo-700"><?= count($all_students) ?> Student<?= count($all_students) !== 1 ? 's' : '' ?></span>
+            <div class="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-full">
+                <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                <span class="text-xs font-bold text-purple-700"><?= count($all_students) ?> Student<?= count($all_students) !== 1 ? 's' : '' ?></span>
             </div>
         </header>
         <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-7xl mx-auto space-y-6">
-                <?php if (!empty($all_students)): ?>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <?php foreach ($all_students as $stu): ?>
-                    <a href="view-student-dashboard.php?id=<?= $stu['uid'] ?>" class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md hover:border-indigo-300 transition-all duration-200 cursor-pointer group">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-lg font-bold shrink-0 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-                                <?= strtoupper(($stu['full_name'] ?: $stu['username'])[0]) ?>
+            <div class="max-w-5xl mx-auto">
+                <div class="w-full bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
+                    <!-- Header -->
+                    <div class="pb-6 border-b border-slate-100">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Your Students</h2>
+                                <p class="text-sm text-slate-400 mt-1">Click any row to open their full dashboard.</p>
                             </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition truncate"><?= htmlspecialchars($stu['full_name'] ?: $stu['username']) ?></p>
-                                <p class="text-xs text-slate-400 mt-0.5"><?= htmlspecialchars($stu['email']) ?></p>
+                            <span class="text-sm font-medium text-slate-400"><?= count($all_students) ?> total</span>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($all_students)): ?>
+                    <!-- Feed List -->
+                    <div class="divide-y divide-slate-100">
+                        <?php foreach ($all_students as $stu):
+                            $att_rate = $stu['total_count'] > 0 ? round(($stu['present_count'] / $stu['total_count']) * 100) : 0;
+                            $initials = strtoupper(mb_substr($stu['full_name'] ?: $stu['username'], 0, 2));
+                        ?>
+                        <a href="view-student-dashboard.php?id=<?= $stu['uid'] ?>" class="flex flex-col md:flex-row md:items-center justify-between py-4 px-2 hover:bg-slate-50/70 rounded-xl transition-all duration-200 cursor-pointer group">
+                            <!-- Left: Avatar + Info -->
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-full flex items-center justify-center bg-purple-600 text-white font-semibold text-base shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-200">
+                                    <?= $initials ?>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="font-medium text-slate-900 text-base truncate group-hover:text-purple-600 transition-colors"><?= htmlspecialchars($stu['full_name'] ?: $stu['username']) ?></p>
+                                    <p class="text-sm text-slate-400 truncate"><?= htmlspecialchars($stu['email']) ?></p>
+                                </div>
                             </div>
-                        </div>
-                        <div class="flex items-center gap-2 mt-3 flex-wrap">
-                            <?php if ($stu['student_roll']): ?>
-                            <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($stu['student_roll']) ?></span>
-                            <?php endif; ?>
-                            <?php if ($stu['job_role']): ?>
-                            <span class="text-[10px] font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded">💼 <?= htmlspecialchars($stu['job_role']) ?></span>
-                            <?php endif; ?>
-                            <?php if ($stu['company_name']): ?>
-                            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">🏢 <?= htmlspecialchars($stu['company_name']) ?></span>
-                            <?php endif; ?>
-                        </div>
-                    </a>
-                    <?php endforeach; ?>
+                            <!-- Right: Metrics -->
+                            <div class="flex items-center gap-6 mt-3 md:mt-0 shrink-0">
+                                <div class="flex items-center gap-1.5 text-sm text-slate-600 font-medium">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                                    <?= $stu['log_count'] ?> Log<?= $stu['log_count'] !== 1 ? 's' : '' ?>
+                                </div>
+                                <?php if ($stu['total_count'] > 0): ?>
+                                <div class="flex items-center gap-1.5 text-sm font-medium <?= $att_rate >= 80 ? 'text-emerald-600' : ($att_rate >= 50 ? 'text-amber-600' : 'text-red-500') ?>">
+                                    <span class="w-1.5 h-1.5 rounded-full <?= $att_rate >= 80 ? 'bg-emerald-400' : ($att_rate >= 50 ? 'bg-amber-400' : 'bg-red-400') ?>"></span>
+                                    <?= $att_rate ?>%
+                                </div>
+                                <?php endif; ?>
+                                <?php if ($stu['latest_log']): ?>
+                                <span class="text-xs text-slate-400 hidden sm:inline"><?= (new DateTime($stu['latest_log']))->format('d M') ?></span>
+                                <?php endif; ?>
+                            </div>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php else: ?>
+                    <div class="py-20 text-center">
+                        <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mx-auto mb-4">📭</div>
+                        <p class="text-base font-medium text-slate-500">No students assigned yet</p>
+                        <p class="text-sm text-slate-400 mt-1">Students will appear here once assigned to you.</p>
+                        <a href="supervisor-dashboard.php" class="mt-5 inline-block text-sm font-semibold text-purple-600 hover:text-purple-800 transition">← Back to Dashboard</a>
+                    </div>
+                    <?php endif; ?>
                 </div>
-                <?php else: ?>
-                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-12 text-center">
-                    <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">📭</div>
-                    <p class="text-sm text-slate-500 font-medium">No students assigned to you yet.</p>
-                    <a href="supervisor-dashboard.php" class="mt-3 inline-block text-xs font-bold text-indigo-600 hover:underline">← Back to Dashboard</a>
-                </div>
-                <?php endif; ?>
             </div>
         </main>
     </div>
@@ -341,6 +399,13 @@ $wf_step5_done = $sup_evaluation !== false;
             theme: {
                 extend: {
                     fontFamily: { 'inter': ['Inter', 'sans-serif'] },
+                    fontSize: {
+                        'micro': '0.5rem',
+                        'caption': '0.6875rem',
+                        'label': '0.8125rem',
+                        'subtitle': '0.9375rem',
+                        'body': '1rem',
+                    },
                 }
             }
         }
@@ -381,19 +446,28 @@ $wf_step5_done = $sup_evaluation !== false;
             </div>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
-                <span class="text-base">📊</span> Dashboard
+            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
             </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
-                <span class="text-base">👤</span> Profile
+            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
-            <a href="view-student-dashboard.php?id=<?= $student_id ?>" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/30 transition-all duration-200">
-                <span class="text-base">🎓</span> Student View
+            <a href="view-student-dashboard.php?id=<?= $student_id ?>" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
             </a>
         </nav>
+
+        <!-- ─── ARCHIVES / HISTORY ─── -->
+        <div class="px-4 mb-2">
+            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 px-4">Archives / History</h3>
+        </div>
+        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> My 2025 Trainees
+        </a>
+
         <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200">
-                <span class="text-base">🚪</span> Logout
+            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
             </a>
         </div>
     </aside>
@@ -404,17 +478,21 @@ $wf_step5_done = $sup_evaluation !== false;
         <!-- Top Bar -->
         <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm">
             <div class="flex items-center gap-4">
-                <a href="supervisor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition">
-                    <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">←</span> Back
+                <a href="view-student-dashboard.php" class="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-purple-600 transition-colors duration-200 cursor-pointer">
+                    <span class="p-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-full border border-slate-100 shadow-sm transition-all duration-200">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                    </span>
+                    <span class="hidden sm:inline">Back to Students</span>
                 </a>
-                <h1 class="text-base font-bold text-slate-800">Student Dashboard View</h1>
+                <div class="w-px h-6 bg-slate-200 hidden sm:block"></div>
+                <h1 class="text-base font-bold text-slate-800 hidden sm:block"><?= htmlspecialchars($student_name) ?></h1>
             </div>
             <div class="flex items-center gap-5">
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
-                    <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-                    <span class="text-xs font-bold text-indigo-700">Week <?= $selected_week ?></span>
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-full">
+                    <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                    <span class="text-xs font-bold text-purple-700">Week <?= $selected_week ?></span>
                     <?php if ($week_date_range): ?>
-                    <span class="text-xs font-bold text-indigo-600 bg-indigo-100 px-1.5 py-0.5 rounded font-mono"><?= $week_date_range ?></span>
+                    <span class="text-xs font-bold text-purple-600 bg-purple-100 px-1.5 py-0.5 rounded font-mono hidden md:inline"><?= $week_date_range ?></span>
                     <?php endif; ?>
                 </div>
             </div>
@@ -462,7 +540,7 @@ $wf_step5_done = $sup_evaluation !== false;
                                 <?= strtoupper(substr($profile['supervisor_name'] ?? '', 0, 1)) ?>
                             </div>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Supervisor</p>
+                                <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Supervisor</p>
                                 <p class="text-xs font-bold text-slate-700 truncate"><?= htmlspecialchars($profile['supervisor_name'] ?? '—') ?></p>
                             </div>
                         </div>
@@ -471,7 +549,7 @@ $wf_step5_done = $sup_evaluation !== false;
                                 <?= strtoupper(substr($instructor_name, 0, 1)) ?>
                             </div>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Instructor</p>
+                                <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Instructor</p>
                                 <p class="text-xs font-bold text-slate-700 truncate"><?= htmlspecialchars($instructor_name) ?></p>
                             </div>
                         </div>
@@ -479,7 +557,7 @@ $wf_step5_done = $sup_evaluation !== false;
                         <div class="flex items-center gap-3 bg-indigo-50/50 rounded-xl px-4 py-3 border border-indigo-200/50">
                             <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm shrink-0">📅</div>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Internship Period</p>
+                                <p class="text-label font-bold text-indigo-400 uppercase tracking-wider">Internship Period</p>
                                 <p class="text-xs font-bold text-indigo-700"><?= (new DateTime($intern_start))->format('d M Y') ?> – <?= (new DateTime($intern_end))->format('d M Y') ?></p>
                             </div>
                         </div>
@@ -487,7 +565,7 @@ $wf_step5_done = $sup_evaluation !== false;
                         <div class="flex items-center gap-3 bg-indigo-50/50 rounded-xl px-4 py-3 border border-indigo-200/50">
                             <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm shrink-0">📅</div>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Internship Start</p>
+                                <p class="text-label font-bold text-indigo-400 uppercase tracking-wider">Internship Start</p>
                                 <p class="text-xs font-bold text-indigo-700"><?= (new DateTime($intern_start))->format('d M Y') ?></p>
                             </div>
                         </div>
@@ -505,40 +583,40 @@ $wf_step5_done = $sup_evaluation !== false;
                             <div class="w-10 h-10 rounded-full <?= $wf_step1_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
                                 <?= $wf_step1_done ? '✅' : '📝' ?>
                             </div>
-                            <p class="text-[10px] font-bold text-slate-600 mt-2 text-center leading-tight">Daily Logs</p>
-                            <p class="text-[9px] text-slate-400 text-center"><?= $wf_log_count ?>/3 min</p>
+                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Daily Logs</p>
+                            <p class="text-caption text-slate-400 text-center"><?= $wf_log_count ?>/3 min</p>
                         </div>
                         <div class="flex-1 h-0.5 <?= $wf_step2_done ? 'bg-emerald-400' : 'bg-slate-200' ?> rounded-full mx-1 mt-[-22px]"></div>
                         <div class="flex flex-col items-center flex-1 min-w-0">
                             <div class="w-10 h-10 rounded-full <?= $wf_step2_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
                                 <?= $wf_step2_done ? '✅' : '📊' ?>
                             </div>
-                            <p class="text-[10px] font-bold text-slate-600 mt-2 text-center leading-tight">Reflection</p>
-                            <p class="text-[9px] text-slate-400 text-center"><?= $wf_step2_done ? 'Done' : 'Pending' ?></p>
+                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Reflection</p>
+                            <p class="text-caption text-slate-400 text-center"><?= $wf_step2_done ? 'Done' : 'Pending' ?></p>
                         </div>
                         <div class="flex-1 h-0.5 <?= ($evaluation && !empty($evaluation['student_signature_value'])) ? 'bg-emerald-400' : 'bg-slate-200' ?> rounded-full mx-1 mt-[-22px]"></div>
                         <div class="flex flex-col items-center flex-1 min-w-0">
                             <div class="w-10 h-10 rounded-full <?= ($evaluation && !empty($evaluation['student_signature_value'])) ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
                                 <?= ($evaluation && !empty($evaluation['student_signature_value'])) ? '✅' : '✍️' ?>
                             </div>
-                            <p class="text-[10px] font-bold text-slate-600 mt-2 text-center leading-tight">Sign & Submit</p>
-                            <p class="text-[9px] text-slate-400 text-center"><?= ($evaluation && !empty($evaluation['student_signature_value'])) ? 'Done' : 'Pending' ?></p>
+                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Sign & Submit</p>
+                            <p class="text-caption text-slate-400 text-center"><?= ($evaluation && !empty($evaluation['student_signature_value'])) ? 'Done' : 'Pending' ?></p>
                         </div>
                         <div class="flex-1 h-0.5 <?= $wf_step4_status === 'approved' ? 'bg-emerald-400' : ($wf_step4_status === 'rejected' ? 'bg-red-400' : 'bg-slate-200') ?> rounded-full mx-1 mt-[-22px]"></div>
                         <div class="flex flex-col items-center flex-1 min-w-0">
                             <div class="w-10 h-10 rounded-full <?= $wf_step4_status === 'approved' ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : ($wf_step4_status === 'rejected' ? 'bg-red-500 text-white shadow-lg glow-red' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300') ?> flex items-center justify-center text-sm font-bold">
                                 <?= $wf_step4_status === 'approved' ? '✅' : ($wf_step4_status === 'rejected' ? '❌' : '👨‍🏫') ?>
                             </div>
-                            <p class="text-[10px] font-bold text-slate-600 mt-2 text-center leading-tight">Instructor</p>
-                            <p class="text-[9px] text-slate-400 text-center"><?= $wf_step4_status === 'approved' ? 'Approved' : ($wf_step4_status === 'rejected' ? 'Rejected' : 'Pending') ?></p>
+                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Instructor</p>
+                            <p class="text-caption text-slate-400 text-center"><?= $wf_step4_status === 'approved' ? 'Approved' : ($wf_step4_status === 'rejected' ? 'Rejected' : 'Pending') ?></p>
                         </div>
                         <div class="flex-1 h-0.5 <?= $wf_step5_done ? 'bg-emerald-400' : 'bg-slate-200' ?> rounded-full mx-1 mt-[-22px]"></div>
                         <div class="flex flex-col items-center flex-1 min-w-0">
                             <div class="w-10 h-10 rounded-full <?= $wf_step5_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
                                 <?= $wf_step5_done ? '✅' : '👩‍🏫' ?>
                             </div>
-                            <p class="text-[10px] font-bold text-slate-600 mt-2 text-center leading-tight">Supervisor</p>
-                            <p class="text-[9px] text-slate-400 text-center"><?= $wf_step5_done ? 'Graded' : 'Pending' ?></p>
+                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Supervisor</p>
+                            <p class="text-caption text-slate-400 text-center"><?= $wf_step5_done ? 'Graded' : 'Pending' ?></p>
                         </div>
                     </div>
                 </div>
@@ -582,13 +660,13 @@ $wf_step5_done = $sup_evaluation !== false;
                             <div class="relative" id="week-dropdown">
                                 <button onclick="toggleWeekDropdown()" class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer whitespace-nowrap">
                                     📆 Week <?= $selected_week ?>
-                                    <span class="text-slate-400 text-[10px]">▾</span>
+                                    <span class="text-slate-400 text-label">▾</span>
                                 </button>
                                 <div id="week-menu" class="absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden overflow-hidden max-h-64 overflow-y-auto">
                                     <?php foreach ($weeks as $wn => $wr): ?>
                                     <a href="?id=<?= $student_id ?>&week=<?= $wn ?>" class="flex items-center justify-between px-3 py-2 text-xs font-semibold <?= $selected_week === $wn ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?> transition">
                                         Week <?= $wn ?>
-                                        <span class="text-[10px] text-slate-400"><?= $wr['start'] ?></span>
+                                        <span class="text-label text-slate-400"><?= $wr['start'] ?></span>
                                     </a>
                                     <?php endforeach; ?>
                                 </div>

@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/init_year.php';
+require_once __DIR__ . '/../config/ay_helper.php';
+require_once __DIR__ . '/../includes/notification_helper.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -79,7 +82,7 @@ function sendRedBadgeAlert($pdo, $supervisor_id, $supervisor_name, $supervisor_e
             .header { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; padding: 20px; border-radius: 10px 10px 0 0; }
             .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
             .alert-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 15px; margin: 15px 0; }
-            .footer { background: #1e293b; color: #94a3b8; padding: 15px; border-radius: 0 0 10px 10px; text-align: center; font-size: 12px; }
+            .footer { background: #1e293b; color: #94a3b8; padding: 15px; border-radius: 0 0 10px 10px; text-align: center; font-size: 0.8125rem; }
             .btn { display: inline-block; background: #6366f1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 10px; }
         </style>
     </head>
@@ -150,11 +153,35 @@ $filter_status = $_GET['status'] ?? '';
 $search = trim($_GET['search'] ?? '');
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $per_page = 10;
+$tab = $_GET['tab'] ?? 'dashboard';
+if (!in_array($tab, ['dashboard', 'trainee-archive'])) $tab = 'dashboard';
 
-// Valid academic years for filter dropdown
-$vy_stmt = $pdo->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.academic_year IS NOT NULL AND u.academic_year != '' ORDER BY u.academic_year DESC");
+// Valid academic years for filter dropdown (from dimension table)
+$vy_stmt = $pdo->prepare("
+    SELECT DISTINCT ay.year_label
+    FROM academic_years ay
+    INNER JOIN users u ON u.academic_year_id = ay.id
+    INNER JOIN student_profiles sp ON sp.user_id = u.id
+    WHERE sp.supervisor_id = ?
+    ORDER BY ay.year_label DESC
+");
 $vy_stmt->execute([$sup_id]);
 $valid_years = $vy_stmt->fetchAll(PDO::FETCH_COLUMN);
+
+// Fallback: if no FK matches, also check string column for legacy data
+if (empty($valid_years)) {
+    $vy_stmt2 = $pdo->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.academic_year IS NOT NULL AND u.academic_year != '' ORDER BY u.academic_year DESC");
+    $vy_stmt2->execute([$sup_id]);
+    $valid_years = $vy_stmt2->fetchAll(PDO::FETCH_COLUMN);
+}
+
+// Resolve selected year to academic_year_id for FK-based filtering
+$selected_year_id = null;
+if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
+    $ayid_stmt = $pdo->prepare("SELECT id FROM academic_years WHERE year_label = ?");
+    $ayid_stmt->execute([$selected_year]);
+    $selected_year_id = $ayid_stmt->fetchColumn() ?: null;
+}
 
 // ── Detect Current Active Academic Year ─────────────────────────────
 $current_academic_year = $valid_years[0] ?? '';
@@ -180,34 +207,21 @@ $weekEnd   = (clone $today)->modify('sunday this week')->format('Y-m-d');
 // ══════════════════════════════════════════════════════════════════════
 // DYNAMIC CARD COUNTS (Filtered by Selected Academic Year)
 // ══════════════════════════════════════════════════════════════════════
+$ay = get_ay_filter($pdo, 'u');
 
 // 1. ALL STUDENTS: Count assigned students for selected year
-if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
-    $sc = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ? AND u.academic_year = ?");
-    $sc->execute([$sup_id, $selected_year]);
-} else {
-    $sc = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ?");
-    $sc->execute([$sup_id]);
-}
+$sc = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay['sql']);
+$sc->execute(array_merge([$sup_id], $ay['params']));
 $total_assigned = (int) $sc->fetchColumn();
 
 // 2. COMPANIES: Count distinct companies for selected year
-if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
-    $cc = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ? AND u.academic_year = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''");
-    $cc->execute([$sup_id, $selected_year]);
-} else {
-    $cc = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''");
-    $cc->execute([$sup_id]);
-}
+$cc = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''" . $ay['sql']);
+$cc->execute(array_merge([$sup_id], $ay['params']));
 $company_count = (int) $cc->fetchColumn();
 
 // Build base query for students in selected year
-$base_where = "u.role = 'student' AND sp.supervisor_id = ?";
-$base_params = [$sup_id];
-if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
-    $base_where .= " AND u.academic_year = ?";
-    $base_params[] = $selected_year;
-}
+$base_where = "u.role = 'student' AND sp.supervisor_id = ?" . $ay['sql'];
+$base_params = array_merge([$sup_id], $ay['params']);
 
 // ══════════════════════════════════════════════════════════════════════
 // DYNAMIC CURRENT WEEK CALCULATION (per student)
@@ -684,6 +698,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                     fontFamily: {
                         'inter': ['Inter', 'sans-serif'],
                     },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
                 }
             }
         }
@@ -791,20 +812,28 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             </div>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/30 transition-all duration-200">
-                <span class="text-base">📊</span> Dashboard
+            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
             </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
-                <span class="text-base">👤</span> Profile
+            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
             </a>
-            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
-                <span class="text-base">🎓</span> Student View
+            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
             </a>
-
         </nav>
+
+        <!-- ─── ARCHIVES / HISTORY ─── -->
+        <div class="px-4 mb-2">
+            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase mb-2 px-4">Archives / History</h3>
+        </div>
+        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> My 2025 Trainees
+        </a>
+
         <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200">
-                <span class="text-base">🚪</span> Logout
+            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
+                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
             </a>
         </div>
     </aside>
@@ -831,7 +860,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         <button onclick="toggleNotifDropdown()" class="relative p-2 hover:bg-white/30 rounded-xl transition cursor-pointer">
                             <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                             <?php if ($unread_notif_count > 0): ?>
-                            <span class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
+                            <span class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
                             <?php endif; ?>
                         </button>
                         <!-- Notification Dropdown -->
@@ -840,7 +869,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                 <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Notifications</h4>
                                 <?php if ($unread_notif_count > 0): ?>
                                 <form method="POST" class="inline">
-                                    <button type="submit" name="mark_all_notifications_read" class="text-[10px] font-bold text-violet-600 hover:text-violet-800 transition cursor-pointer">Mark all read</button>
+                                    <button type="submit" name="mark_all_notifications_read" class="text-label font-bold text-violet-600 hover:text-violet-800 transition cursor-pointer">Mark all read</button>
                                 </form>
                                 <?php endif; ?>
                             </div>
@@ -852,14 +881,14 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                         <?= $notif['type'] === 'instructor_approved' ? '✓' : ($notif['type'] === 'instructor_rejected' ? '✕' : 'ℹ') ?>
                                     </div>
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-[11px] font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-500' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
-                                        <p class="text-[10px] text-slate-400 mt-0.5 leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"><?= htmlspecialchars($notif['message']) ?></p>
-                                        <p class="text-[9px] text-slate-300 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
+                                        <p class="text-caption font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-500' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
+                                        <p class="text-label text-slate-400 mt-0.5 leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"><?= htmlspecialchars($notif['message']) ?></p>
+                                        <p class="text-caption text-slate-300 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
                                     </div>
                                     <?php if (!$notif['is_read']): ?>
                                     <form method="POST" class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
                                         <input type="hidden" name="notification_id" value="<?= (int)$notif['id'] ?>">
-                                        <button type="submit" name="mark_notification_read" class="w-6 h-6 rounded-full bg-slate-100 hover:bg-violet-100 text-slate-400 hover:text-violet-600 flex items-center justify-center text-[10px] font-bold transition cursor-pointer shadow-sm" title="Mark as read">✓</button>
+                                        <button type="submit" name="mark_notification_read" class="w-6 h-6 rounded-full bg-slate-100 hover:bg-violet-100 text-slate-400 hover:text-violet-600 flex items-center justify-center text-label font-bold transition cursor-pointer shadow-sm" title="Mark as read">✓</button>
                                     </form>
                                     <?php endif; ?>
                                 </div>
@@ -870,7 +899,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                                         <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                                     </div>
                                     <p class="text-xs font-semibold text-slate-400">No notifications yet</p>
-                                    <p class="text-[10px] text-slate-300 mt-1">You'll see updates here</p>
+                                    <p class="text-label text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
                             </div>
@@ -906,6 +935,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             </div>
         </header>
 
+<?php if ($tab === 'dashboard'): ?>
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-8">
             <div class="max-w-7xl mx-auto space-y-6">
@@ -1400,6 +1430,240 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
             </div>
         </main>
+
+<?php elseif ($tab === 'trainee-archive'): ?>
+        <!-- ═══ TRAINEE ARCHIVE CONTENT ═══ -->
+        <?php
+        $ta_year = $_GET['academic_year'] ?? '';
+        $ta_years = $pdo->prepare("
+            SELECT DISTINCT ay.year_label
+            FROM academic_years ay
+            INNER JOIN users u ON u.academic_year_id = ay.id
+            INNER JOIN student_profiles sp ON sp.user_id = u.id
+            WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived'
+            ORDER BY ay.year_label DESC
+        ");
+        $ta_years->execute([$sup_id]);
+        $ta_valid_years = $ta_years->fetchAll(PDO::FETCH_COLUMN);
+
+        // Fallback: also check string column for legacy data
+        if (empty($ta_valid_years)) {
+            $ta_years2 = $pdo->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived' AND u.academic_year IS NOT NULL ORDER BY u.academic_year DESC");
+            $ta_years2->execute([$sup_id]);
+            $ta_valid_years = $ta_years2->fetchAll(PDO::FETCH_COLUMN);
+        }
+
+        // Resolve selected archive year to FK
+        $ta_year_id = null;
+        if ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
+            $ta_ayid = $pdo->prepare("SELECT id FROM academic_years WHERE year_label = ?");
+            $ta_ayid->execute([$ta_year]);
+            $ta_year_id = $ta_ayid->fetchColumn() ?: null;
+        }
+
+        $ta_sql = "
+            SELECT u.id AS uid, u.username, u.email, u.academic_year, u.created_at,
+                   sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
+                   sp.instructor_name, sp.internship_start_date, sp.internship_end_date
+            FROM users u
+            JOIN student_profiles sp ON sp.user_id = u.id
+            WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived'
+        ";
+        $ta_params = [$sup_id];
+        if ($ta_year_id) {
+            $ta_sql .= " AND u.academic_year_id = ?";
+            $ta_params[] = $ta_year_id;
+        } elseif ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
+            $ta_sql .= " AND u.academic_year = ?";
+            $ta_params[] = $ta_year;
+        }
+        $ta_sql .= " ORDER BY sp.full_name ASC";
+        $ta_stmt = $pdo->prepare($ta_sql);
+        $ta_stmt->execute($ta_params);
+        $ta_students = $ta_stmt->fetchAll();
+
+        $ta_total = count($ta_students);
+        $ta_companies = [];
+        foreach ($ta_students as $ts) {
+            if (!empty($ts['company_name'])) $ta_companies[$ts['company_name']] = true;
+        }
+
+        $ta_grades = [];
+        foreach ($ta_students as $ts) {
+            $gq = $pdo->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
+            $gq->execute([$ts['uid']]);
+            $ta_grades[$ts['uid']] = $gq->fetchColumn() ?: null;
+        }
+
+        $ta_grade_dist = ['excellent' => 0, 'good' => 0, 'average' => 0, 'needs_improvement' => 0];
+        foreach ($ta_grades as $gv) {
+            if ($gv && isset($ta_grade_dist[$gv])) $ta_grade_dist[$gv]++;
+        }
+        ?>
+
+        <main class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-7xl mx-auto space-y-6">
+
+                <!-- Back Button -->
+                <a href="supervisor-dashboard.php" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm">
+                    ← Back to Dashboard
+                </a>
+
+                <!-- Archive Header -->
+                <div class="bg-gradient-to-r from-purple-900 via-purple-950 to-indigo-950 rounded-2xl p-6 text-white shadow-xl shadow-purple-500/10">
+                    <div class="flex items-center justify-between flex-wrap gap-4">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-xl border border-white/20">⏪</div>
+                            <div>
+                                <h2 class="text-lg font-black uppercase tracking-wider">My Trainees <?= $ta_year ? htmlspecialchars($ta_year) : '' ?></h2>
+                                <p class="text-sm text-purple-200 mt-0.5">Your Past Assigned Students — Historical Data</p>
+                            </div>
+                        </div>
+                        <form method="GET" class="flex items-center gap-2">
+                            <input type="hidden" name="tab" value="trainee-archive">
+                            <select name="academic_year" onchange="this.form.submit()" class="appearance-none bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2.5 pr-10 text-sm font-bold text-white focus:outline-none cursor-pointer">
+                                <option value="">All Archived Years</option>
+                                <?php foreach ($ta_valid_years as $ty): ?>
+                                <option value="<?= htmlspecialchars($ty) ?>" <?= $ta_year === $ty ? 'selected' : '' ?>><?= htmlspecialchars($ty) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <?php if ($ta_year): ?>
+                            <a href="?tab=trainee-archive" class="px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white text-sm font-bold rounded-xl transition border border-white/20">✕ Clear</a>
+                            <?php endif; ?>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-lg">⏪</div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Archived</p>
+                                <p class="text-2xl font-black text-slate-800"><?= $ta_total ?></p>
+                                <?php if ($ta_year): ?>
+                                <p class="text-xs text-purple-500 font-bold font-mono"><?= htmlspecialchars($ta_year) ?></p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-lg">🏢</div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Companies</p>
+                                <p class="text-2xl font-black text-slate-800"><?= count($ta_companies) ?></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 col-span-2 lg:col-span-1">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg">📊</div>
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Grades</p>
+                                <div class="flex items-center gap-1 mt-1">
+                                    <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['excellent'] ?>E</span>
+                                    <span class="text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['good'] ?>G</span>
+                                    <span class="text-xs font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['average'] ?>A</span>
+                                    <span class="text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded"><?= $ta_grade_dist['needs_improvement'] ?>N</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Archived Trainees Table -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <h3 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                            <span class="p-1 bg-purple-50 text-purple-600 rounded">⏪</span> Past Assigned Students
+                        </h3>
+                        <span class="text-sm text-slate-400"><?= $ta_total ?> student(s)</span>
+                    </div>
+
+                    <?php if (!empty($ta_students)): ?>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-sm">
+                                    <th class="px-4 py-2.5 text-left">Roll No</th>
+                                    <th class="px-4 py-2.5 text-left">Student Name</th>
+                                    <th class="px-4 py-2.5 text-left">Job Role</th>
+                                    <th class="px-4 py-2.5 text-left">Company</th>
+                                    <th class="px-4 py-2.5 text-left">Duration</th>
+                                    <th class="px-4 py-2.5 text-left">Year</th>
+                                    <th class="px-4 py-2.5 text-left">Grade</th>
+                                    <th class="px-4 py-2.5 text-left">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                <?php foreach ($ta_students as $ts): ?>
+                                <tr class="hover:bg-slate-50 transition">
+                                    <td class="px-4 py-2.5 font-mono font-semibold text-slate-700"><?= htmlspecialchars($ts['student_roll'] ?: '—') ?></td>
+                                    <td class="px-4 py-2.5">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-sm font-bold shrink-0">
+                                                <?= strtoupper(($ts['full_name'] ?: $ts['username'])[0]) ?>
+                                            </div>
+                                            <div>
+                                                <p class="font-semibold text-slate-700"><?= htmlspecialchars($ts['full_name'] ?: $ts['username']) ?></p>
+                                                <p class="text-xs text-slate-400"><?= htmlspecialchars($ts['email']) ?></p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-2.5 text-slate-600 max-w-[120px] truncate" title="<?= htmlspecialchars($ts['job_role'] ?? '') ?>"><?= htmlspecialchars($ts['job_role'] ?: '—') ?></td>
+                                    <td class="px-4 py-2.5 text-slate-600 max-w-[130px] truncate" title="<?= htmlspecialchars($ts['company_name'] ?? '') ?>"><?= htmlspecialchars($ts['company_name'] ?: '—') ?></td>
+                                    <td class="px-4 py-2.5 text-slate-500 text-xs">
+                                        <?php if ($ts['internship_start_date'] && $ts['internship_end_date']): ?>
+                                            <?= htmlspecialchars((new DateTime($ts['internship_start_date']))->format('d M Y')) ?> – <?= htmlspecialchars((new DateTime($ts['internship_end_date']))->format('d M Y')) ?>
+                                        <?php else: ?>
+                                            —
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="px-4 py-2.5">
+                                        <span class="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($ts['academic_year'] ?: '—') ?></span>
+                                    </td>
+                                    <td class="px-4 py-2.5">
+                                        <?php
+                                        $grade_map = [
+                                            'excellent'         => ['Excellent',         'text-emerald-600', 'bg-emerald-50'],
+                                            'good'              => ['Good',              'text-blue-600',    'bg-blue-50'],
+                                            'average'           => ['Average',           'text-amber-600',   'bg-amber-50'],
+                                            'needs_improvement' => ['Needs Improvement', 'text-red-600',     'bg-red-50'],
+                                        ];
+                                        $gv = $ta_grades[$ts['uid']] ?? null;
+                                        $gs = $gv ? ($grade_map[$gv] ?? ['—', 'text-slate-400', 'bg-slate-50']) : ['—', 'text-slate-400', 'bg-slate-50'];
+                                        ?>
+                                        <span class="text-xs font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                                    </td>
+                                    <td class="px-4 py-2.5">
+                                        <a href="../view_student_history.php?uid=<?= $ts['uid'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-lg hover:bg-purple-100 transition">
+                                            👁️ View
+                                        </a>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <?php else: ?>
+                    <div class="p-12 text-center">
+                        <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">⏪</div>
+                        <p class="text-sm text-slate-500 font-medium">
+                            <?php if ($ta_year): ?>
+                                No archived trainees found for <?= htmlspecialchars($ta_year) ?>.
+                            <?php else: ?>
+                                No archived trainees assigned to you yet.
+                            <?php endif; ?>
+                        </p>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+            </div>
+        </main>
+<?php endif; ?>
     </div>
 </div>
 

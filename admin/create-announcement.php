@@ -63,21 +63,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
                 fontFamily: {
                     'inter': ['Inter', 'sans-serif'],
                 },
+                fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
             }
         }
     }
-    function toggleProfileDropdown(e) {
-        e.stopPropagation();
-        var dd = document.getElementById('profile-dropdown-menu');
-        dd.classList.toggle('hidden');
-    }
-    document.addEventListener('click', function(e) {
-        var dd = document.getElementById('profile-dropdown-menu');
-        var btn = document.getElementById('profile-avatar-btn');
-        if (dd && !dd.contains(e.target) && !btn.contains(e.target)) {
-            dd.classList.add('hidden');
-        }
-    });
+    /* Old toggleProfileDropdown removed — handled by includes/topbar.php */
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -108,86 +104,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
 
 <div class="flex h-screen overflow-hidden">
 
-    <!-- ─── SIDEBAR ─── -->
-    <aside class="w-60 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 flex flex-col shrink-0 shadow-[1px_0_12px_-4px_rgba(0,0,0,0.04)]">
-        <div class="h-16 flex items-center px-5 border-b border-slate-100/80">
-            <span class="text-sm font-black text-slate-800 tracking-tight">📋 InternReport</span>
-            <span class="ml-2 text-[10px] font-extrabold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-wider">Admin</span>
-        </div>
-        <nav class="flex-1 py-3 space-y-0.5 px-2.5">
-            <a href="admin-dashboard.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">📊</span> Overview
-            </a>
-            <a href="admin-dashboard.php?tab=students" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">🎓</span> Add Student
-            </a>
-            <a href="admin-dashboard.php?tab=supervisors" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">👨‍🏫</span> Add Supervisor
-            </a>
-            <a href="admin-dashboard.php?tab=manage" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">👥</span> Manage Users
-            </a>
-            <a href="manage-companies.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">🏢</span> Manage Companies
-            </a>
-            <a href="create-announcement.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-bold bg-gradient-to-r from-indigo-50 to-indigo-50/50 text-indigo-600 border border-indigo-100/60">
-                <span class="text-base">📢</span> Announcements
-            </a>
-            <a href="admin-dashboard.php?tab=archive" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">📦</span> Batch Archive
-            </a>
-            <a href="admin-dashboard.php?tab=history" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">📜</span> Student History
-            </a>
-            <a href="admin-dashboard.php?tab=holidays" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">🇲🇲</span> Myanmar Holidays
-            </a>
-            <a href="admin-profile.php" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-semibold text-slate-500 hover:bg-slate-50/80 hover:text-slate-700">
-                <span class="text-base">👤</span> Profile
-            </a>
-        </nav>
-        <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-2.5 px-3 py-2.5 text-[13px] font-semibold text-red-400 hover:bg-red-50/80 hover:text-red-500 rounded-xl transition">
-                <span class="text-base">🚪</span> Logout
-            </a>
-        </div>
-    </aside>
+    <?php $activePage = 'announcements'; ?>
+    <?php require_once __DIR__ . '/../includes/admin-sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <header class="h-16 bg-white/70 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-8 shrink-0 shadow-[0_1px_8px_-4px_rgba(0,0,0,0.03)]">
-            <h1 class="text-[15px] font-bold text-slate-700 tracking-tight">Create Announcement</h1>
-            <div class="flex items-center gap-4 relative">
-                <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="relative focus:outline-none">
-                    <?php if (!empty($_SESSION['profile_pic'])): ?>
-                    <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-lg shadow-amber-500/20 ring-2 ring-slate-100">
-                    <?php else: ?>
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white flex items-center justify-center text-sm font-bold shadow-lg shadow-amber-500/25 ring-2 ring-slate-100">
-                        <?= strtoupper(substr($admin_name, 0, 1)) ?>
-                    </div>
-                    <?php endif; ?>
-                </button>
-                <div class="text-right">
-                    <p class="text-sm font-bold text-slate-700 leading-tight"><?= htmlspecialchars($admin_name) ?></p>
-                    <p class="text-[11px] text-slate-400 font-medium">Administrator</p>
-                </div>
-                <!-- Profile Dropdown Menu -->
-                <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-3 z-50 bg-white/95 backdrop-blur-xl border border-slate-200/60 rounded-2xl shadow-xl shadow-slate-200/50 w-52 py-2 animate-fade-in">
-                    <a href="admin-profile.php" class="flex items-center gap-3 px-4 py-3 text-[13px] font-semibold text-slate-600 hover:bg-slate-50/80 transition rounded-lg mx-1">
-                        <span class="text-base">👤</span> My Profile
-                    </a>
-                    <a href="admin-profile.php" class="flex items-center gap-3 px-4 py-3 text-[13px] font-semibold text-slate-600 hover:bg-slate-50/80 transition rounded-lg mx-1">
-                        <span class="text-base">🔑</span> Change Password
-                    </a>
-                    <div class="my-1.5 border-t border-slate-100/80 mx-3"></div>
-                    <a href="../logout.php" class="flex items-center gap-3 px-4 py-3 text-[13px] font-semibold text-red-400 hover:bg-red-50/80 hover:text-red-500 transition rounded-lg mx-1">
-                        <span class="text-base">🚪</span> Logout
-                    </a>
-                </div>
-            </div>
-        </header>
+        <?php $pageTitle = 'Create Announcement'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-6">
@@ -232,7 +156,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
 
                         <!-- Announcement Title -->
                         <div class="space-y-1.5">
-                            <label for="a_title" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                            <label for="a_title" class="block text-caption font-bold text-slate-600 uppercase tracking-wider">
                                 Announcement Title <span class="text-rose-400">*</span>
                             </label>
                             <div class="field-focus rounded-xl border border-slate-200 transition-all duration-200">
@@ -249,7 +173,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
 
                         <!-- Target Audience -->
                         <div class="space-y-1.5">
-                            <label for="a_target" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                            <label for="a_target" class="block text-caption font-bold text-slate-600 uppercase tracking-wider">
                                 Target Audience <span class="text-rose-400">*</span>
                             </label>
                             <div class="relative field-focus rounded-xl border border-slate-200 transition-all duration-200">
@@ -266,17 +190,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
                                     <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
                                 </div>
                             </div>
-                            <p class="text-[10px] text-slate-400 font-medium mt-1">Choose who will receive this announcement notification</p>
+                            <p class="text-label text-slate-400 font-medium mt-1">Choose who will receive this announcement notification</p>
                         </div>
 
                         <!-- Content Textarea -->
                         <div class="space-y-1.5">
-                            <label for="a_body" class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                            <label for="a_body" class="block text-caption font-bold text-slate-600 uppercase tracking-wider">
                                 Announcement Content <span class="text-rose-400">*</span>
                             </label>
                             <div class="field-focus rounded-xl border border-slate-200 overflow-hidden transition-all duration-200">
                                 <div class="bg-slate-50/80 border-b border-slate-200/60 px-3.5 py-2.5 flex items-center gap-2">
-                                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Editor</span>
+                                    <span class="text-label font-bold text-slate-400 uppercase tracking-wider">Editor</span>
                                     <span class="w-px h-4 bg-slate-200/80"></span>
                                     <button type="button" class="w-7 h-7 rounded-lg hover:bg-slate-200/80 flex items-center justify-center text-slate-400 text-xs font-bold transition">B</button>
                                     <button type="button" class="w-7 h-7 rounded-lg hover:bg-slate-200/80 flex items-center justify-center text-slate-400 text-xs italic transition">I</button>
@@ -298,7 +222,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
 
                         <!-- File Attachment Dropzone -->
                         <div class="space-y-1.5">
-                            <label class="block text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                            <label class="block text-caption font-bold text-slate-600 uppercase tracking-wider">
                                 Attachments <span class="text-slate-400 font-normal normal-case">(optional)</span>
                             </label>
                             <div id="drop-zone" class="drop-zone border-2 border-dashed border-slate-200 hover:border-indigo-400 rounded-2xl p-10 text-center cursor-pointer transition-all duration-300 bg-slate-50/30 hover:bg-indigo-50/20">
@@ -306,7 +230,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
                                     <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.23m1.999-1.999l.005-.005M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                 </div>
                                 <p class="text-sm font-semibold text-slate-600 mb-1">Drag & drop files here or <span class="text-indigo-500 font-bold underline decoration-indigo-300 underline-offset-2">browse</span></p>
-                                <p class="text-[11px] text-slate-400 font-medium">PDF, DOC, PNG, JPG up to 10MB each</p>
+                                <p class="text-caption text-slate-400 font-medium">PDF, DOC, PNG, JPG up to 10MB each</p>
                                 <input type="file" id="file-input" name="attachments[]" multiple class="hidden" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg">
                             </div>
                             <div id="file-list" class="mt-3 space-y-2"></div>
@@ -314,14 +238,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["send_announcement"]))
 
                         <!-- Action Buttons -->
                         <div class="flex items-center justify-between pt-5 border-t border-slate-100/80">
-                            <p class="text-[11px] text-slate-400 font-medium">
+                            <p class="text-caption text-slate-400 font-medium">
                                 <span class="text-rose-400">*</span> Required fields
                             </p>
                             <div class="flex items-center gap-3">
-                                <a href="admin-dashboard.php" class="px-6 py-3 bg-slate-100/80 hover:bg-slate-200/80 text-slate-500 text-[13px] font-bold rounded-xl transition-all duration-200 border border-slate-200/50">
+                                <a href="admin-dashboard.php" class="px-6 py-3 bg-slate-100/80 hover:bg-slate-200/80 text-slate-500 text-label font-bold rounded-xl transition-all duration-200 border border-slate-200/50">
                                     Cancel
                                 </a>
-                                <button type="submit" class="btn-primary px-7 py-3 text-white text-[13px] font-bold rounded-xl transition-all duration-200 flex items-center gap-2.5 cursor-pointer">
+                                <button type="submit" class="btn-primary px-7 py-3 text-white text-label font-bold rounded-xl transition-all duration-200 flex items-center gap-2.5 cursor-pointer">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"/></svg>
                                     Send Announcement
                                 </button>
@@ -370,7 +294,7 @@ function handleFiles(files) {
         var icon = file.type.includes("image") ? "🖼️" : "📄";
         div.innerHTML = "<span class='text-base'>" + icon + "</span>" +
             "<span class='text-xs font-semibold text-slate-700 truncate flex-1'>" + file.name + "</span>" +
-            "<span class='text-[10px] text-slate-400 font-medium bg-slate-100/80 px-2 py-0.5 rounded-full'>" + (file.size / 1024).toFixed(1) + " KB</span>" +
+            "<span class='text-label text-slate-400 font-medium bg-slate-100/80 px-2 py-0.5 rounded-full'>" + (file.size / 1024).toFixed(1) + " KB</span>" +
             "<button type='button' onclick='this.parentElement.remove()' class='w-6 h-6 rounded-lg hover:bg-red-50 text-slate-400 hover:text-rose-500 text-xs font-bold transition flex items-center justify-center'>✕</button>";
         fileList.appendChild(div);
     }

@@ -202,6 +202,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 fontFamily: {
                     'inter': ['Inter', 'sans-serif'],
                 },
+                fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
             }
         }
     }
@@ -211,56 +218,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
 
 <div class="flex h-screen overflow-hidden">
 
-    <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-slate-100">
-            <span class="text-sm font-black text-slate-800 tracking-tight">📋 InternReport</span>
-            <span class="ml-2 text-sm font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">ADMIN</span>
-        </div>
-        <nav class="flex-1 py-4 space-y-1 px-2">
-            <a href="admin-dashboard.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>📊</span> Dashboard
-            </a><a href="?tab=students" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'students' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>🎓</span> Add Student
-            </a>
-            <a href="?tab=supervisors" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'supervisors' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>👨‍🏫</span> Add Supervisor
-            </a>
-            <a href="?tab=manage" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition <?= $tab === 'manage' ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?>">
-                <span>👥</span> Manage Users
-            </a>
-            <a href="create-announcement.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>📢</span> Announcements
-            </a>
-            <a href="admin-dashboard.php?tab=archive" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>📦</span> Batch Archive
-            </a>
-            <a href="admin-dashboard.php?tab=history" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>📜</span> Student History
-            </a>
-            <a href="manage-companies.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">
-                <span>🏢</span> Manage Companies
-            </a>
-            <a href="admin-profile.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold bg-indigo-50 text-indigo-600 transition" style="border-right:3px solid #4f46e5">
-                <span>👤</span> Profile
-            </a>
-        </nav>
-        <div class="p-3 border-t border-slate-100">
-            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-lg transition">🚪 Logout</a>
-        </div>
-    </aside>
+    <?php $activePage = 'profile'; ?>
+    <?php require_once __DIR__ . '/../includes/admin-sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-            <h1 class="text-sm font-bold text-slate-700">Admin Profile Settings</h1>
-            <div class="flex items-center gap-2 text-sm text-slate-400">
-                <span class="w-7 h-7 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold">A</span>
-                <?= htmlspecialchars($admin_name) ?>
-            </div>
-        </header>
+        <?php $pageTitle = 'Admin Profile Settings'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-6">

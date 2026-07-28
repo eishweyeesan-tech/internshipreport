@@ -39,6 +39,13 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     fontFamily: {
                         'inter': ['Inter', 'sans-serif'],
                     },
+                    fontSize: {
+                    'micro': '0.5rem',
+                    'caption': '0.6875rem',
+                    'label': '0.8125rem',
+                    'subtitle': '0.9375rem',
+                    'body': '1rem',
+                },
                 }
             }
         }
