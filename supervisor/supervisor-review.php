@@ -20,7 +20,8 @@ if ($student_id <= 0) {
 $stu = $pdo->prepare("
     SELECT u.id, u.username, u.email, u.academic_year, u.created_at,
            sp.full_name, sp.student_roll, sp.major, sp.company_name,
-           sp.job_role, sp.instructor_name, sp.internship_start_date
+           sp.job_role, sp.phone, sp.instructor_name, sp.instructor_email,
+           sp.internship_start_date, sp.internship_end_date
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.id = ? AND u.role = 'student' AND sp.supervisor_id = ?
@@ -41,7 +42,8 @@ if ($student['internship_start_date']) {
     $start_dt = new DateTime($student['internship_start_date']);
     // Generate 12 weeks from start date
     for ($i = 1; $i <= 12; $i++) {
-        $ws = (clone $start_dt)->modify(($i === 1 ? '' : '+7 days'));
+        $ws = clone $start_dt;
+        if ($i > 1) $ws->modify('+' . (($i - 1) * 7) . ' days');
         $we = (clone $ws)->modify('+6 days');
         $weeks[$i] = ['start' => $ws->format('Y-m-d'), 'end' => $we->format('Y-m-d')];
     }
@@ -64,9 +66,36 @@ if ($student['internship_start_date']) {
     }
 }
 
-// Default to Week 1 if no week specified
+// ══════════════════════════════════════════════════════════════════════
+// DYNAMIC CURRENT WEEK AUTO-DETECTION
+// ══════════════════════════════════════════════════════════════════════
+$auto_week = 1;
+$max_week = 12;
+$not_started = false;
+
+if ($student['internship_start_date']) {
+    $today_obj = new DateTime();
+    $start_date = new DateTime($student['internship_start_date']);
+    $end_date = !empty($student['internship_end_date']) ? new DateTime($student['internship_end_date']) : null;
+
+    if ($today_obj < $start_date) {
+        $auto_week = 1;
+        $not_started = true;
+    } elseif ($end_date && $today_obj > $end_date) {
+        $auto_week = $max_week;
+    } else {
+        $days_elapsed = (int) $today_obj->diff($start_date)->days;
+        $auto_week = (int) floor($days_elapsed / 7) + 1;
+        $auto_week = max(1, min($auto_week, $max_week));
+    }
+} else {
+    // No start date configured → treat as not started
+    $not_started = true;
+}
+
+// Use the auto-detected week as default if no week specified
 if ($week_num <= 0 || !isset($weeks[$week_num])) {
-    $week_num = 1;
+    $week_num = $auto_week;
 }
 
 $week_start = $weeks[$week_num]['start'] ?? '';
@@ -176,6 +205,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_sup_eval'])) {
         ");
         $upsert->execute([$student_id, $week_num, $sup_id, $grade, $comments]);
 
+        // Update the main report status to approved_by_supervisor
+        $update_status = $pdo->prepare("
+            UPDATE report_evaluations SET report_status = 'approved_by_supervisor'
+            WHERE student_id = ? AND week_number = ?
+        ");
+        $update_status->execute([$student_id, $week_num]);
+
         // Re-fetch current week evaluation
         $gq = $pdo->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
         $gq->execute([$student_id, $week_num]);
@@ -195,6 +231,24 @@ $grade_labels = [
     'average'           => ['Average',            'text-amber-600',   'bg-amber-50'],
     'needs_improvement' => ['Needs Improvement',  'text-red-600',     'bg-red-50'],
 ];
+
+// Compute attendance rate
+$attendance_rate = $total_logs > 0 ? round(($total_present / $total_logs) * 100) : 0;
+
+// Compute overall GPA for this student
+$student_gpa = 0;
+$student_graded = 0;
+$gpa_weighted = 0;
+foreach ($all_weeks_grades as $wg) {
+    if ($wg && isset($wg['weekly_grade'])) {
+        $student_graded++;
+        $gpa_weighted += ($grade_point_map[$wg['weekly_grade']] ?? 0);
+    }
+}
+if ($student_graded > 0) {
+    $student_gpa = round($gpa_weighted / $student_graded, 2);
+}
+$grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -229,10 +283,98 @@ $grade_labels = [
             menu.classList.add('hidden');
         }
     });
+    function toggleProfileDropdown(e) {
+        e.stopPropagation();
+        document.getElementById('profile-dropdown-menu').classList.toggle('hidden');
+    }
+    document.addEventListener('click', function(e) {
+        var dd = document.getElementById('profile-dropdown-menu');
+        var btn = document.getElementById('profile-avatar-btn');
+        if (dd && !dd.contains(e.target) && !btn.contains(e.target)) {
+            dd.classList.add('hidden');
+        }
+    });
     </script>
 </head>
-<body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased p-6">
-<div class="max-w-7xl mx-auto space-y-6">
+<body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
+
+<div class="flex h-screen overflow-hidden">
+
+    <!-- ─── SIDEBAR ─── -->
+    <aside class="w-64 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 flex flex-col shrink-0 shadow-xl shadow-slate-200/20">
+        <div class="h-16 flex items-center px-6 border-b border-slate-100/80 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                    <span class="text-white text-sm">📋</span>
+                </div>
+                <div>
+                    <span class="text-sm font-extrabold text-slate-800 tracking-tight">InternReport</span>
+                    <span class="block text-sm font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mt-0.5">SUPERVISOR</span>
+                </div>
+            </div>
+        </div>
+        <nav class="flex-1 py-5 px-3 space-y-1">
+            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
+                <span class="text-base">📊</span> Dashboard
+            </a>
+            <a href="#" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-indigo-600 text-white shadow-lg shadow-indigo-500/30 transition-all duration-200">
+                <span class="text-base">🎓</span> Student Review
+            </a>
+            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-800 transition-all duration-200">
+                <span class="text-base">👤</span> Profile
+            </a>
+        </nav>
+        <div class="p-3 border-t border-slate-100/80">
+            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200">
+                <span class="text-base">🚪</span> Logout
+            </a>
+        </div>
+    </aside>
+
+    <!-- ─── MAIN ─── -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+
+        <!-- Top Bar -->
+        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm">
+            <div class="flex items-center gap-4">
+                <a href="supervisor-dashboard.php" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all duration-200">
+                    ← Back
+                </a>
+                <h1 class="text-base font-bold text-slate-800">Student Review — <?= htmlspecialchars($student_name) ?></h1>
+            </div>
+            <div class="flex items-center gap-5">
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
+                    <span class="text-xs font-bold text-indigo-700">📅 Week <?= $week_num ?>/12</span>
+                    <?php if ($week_num === $auto_week): ?>
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <?php endif; ?>
+                </div>
+                <div class="flex items-center gap-3 pl-5 border-l border-slate-200 relative">
+                    <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="relative focus:outline-none">
+                        <?php if (!empty($_SESSION['profile_pic'])): ?>
+                        <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-lg shadow-indigo-500/20">
+                        <?php else: ?>
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-bold shadow-lg shadow-indigo-500/20">
+                            <?= strtoupper(substr($_SESSION['username'], 0, 1)) ?>
+                        </div>
+                        <?php endif; ?>
+                    </button>
+                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-xl w-48 py-2">
+                        <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+                            <span>👤</span> My Profile
+                        </a>
+                        <div class="my-1 border-t border-slate-100"></div>
+                        <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition">
+                            <span>🚪</span> Logout
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <main class="flex-1 overflow-y-auto p-8">
+            <div class="max-w-7xl mx-auto space-y-6">
 
     <!-- ════ FLASH MESSAGE ════ -->
     <?php if ($msg === 'saved'): ?>
@@ -247,14 +389,7 @@ $grade_labels = [
     </div>
     <?php endif; ?>
 
-    <!-- ════ BACK BUTTON ════ -->
-    <div class="flex items-center justify-between flex-wrap gap-4">
-        <a href="supervisor-dashboard.php<?= isset($_GET['academic_year']) ? '?academic_year=' . urlencode($_GET['academic_year']) : '' ?>" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200/60 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:border-slate-300 rounded-xl transition-all duration-200 shadow-sm">
-            <span>←</span> Back to Dashboard
-        </a>
-    </div>
-
-    <!-- ════ STUDENT HEADER ════ -->
+    <!-- ════ STUDENT SUMMARY ════ -->
     <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
         <div class="flex items-start justify-between flex-wrap gap-5">
             <div class="flex items-center gap-5">
@@ -268,22 +403,75 @@ $grade_labels = [
                         <?php if ($student['major']): ?>
                             <span class="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg"><?= htmlspecialchars($student['major']) ?></span>
                         <?php endif; ?>
+                        <?php if ($student['job_role']): ?>
+                            <span class="text-xs font-semibold text-violet-600 bg-violet-50 px-3 py-1 rounded-lg border border-violet-200/60">💼 <?= htmlspecialchars($student['job_role']) ?></span>
+                        <?php endif; ?>
                         <?php if ($student['company_name']): ?>
                             <span class="text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-lg border border-blue-200/60">🏢 <?= htmlspecialchars($student['company_name']) ?></span>
+                        <?php endif; ?>
+                        <?php if ($student['phone']): ?>
+                            <span class="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">📱 <?= htmlspecialchars($student['phone']) ?></span>
+                        <?php endif; ?>
+                        <?php if ($student['instructor_email']): ?>
+                            <span class="text-xs font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200/60">✉️ <?= htmlspecialchars($student['instructor_email']) ?></span>
                         <?php endif; ?>
                         <?php if ($student['academic_year']): ?>
                             <span class="text-xs font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg font-mono border border-indigo-200/60"><?= htmlspecialchars($student['academic_year']) ?></span>
                         <?php endif; ?>
                     </div>
+                    <?php if ($student['internship_start_date'] || $student['internship_end_date']): ?>
+                    <div class="flex items-center gap-2 mt-1.5">
+                        <span class="text-xs font-semibold text-slate-500 bg-slate-50 px-3 py-1 rounded-lg border border-slate-200/60">
+                            📅 <?= $student['internship_start_date'] ? (new DateTime($student['internship_start_date']))->format('d M Y') : '—' ?> – <?= $student['internship_end_date'] ? (new DateTime($student['internship_end_date']))->format('d M Y') : '—' ?>
+                        </span>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
-            <div class="text-right">
-                <div class="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-200/60 px-4 py-2 rounded-xl">
-                    📅 Week <?= $week_num ?>
+        </div>
+    </div>
+
+    <!-- ════ STUDENT PERFORMANCE CARDS ════ -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center text-lg shadow-lg shadow-emerald-500/30">✅</div>
+                <div>
+                    <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Attendance</p>
+                    <p class="text-xl font-black text-slate-800"><?= $attendance_rate ?>%</p>
+                    <p class="text-sm text-emerald-500 font-bold"><?= $total_present ?>/<?= $total_logs ?> days</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-lg shadow-lg shadow-blue-500/30">📊</div>
+                <div>
+                    <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">GPA</p>
+                    <p class="text-xl font-black text-slate-800"><?= $student_gpa > 0 ? number_format($student_gpa, 1) : '—' ?></p>
+                    <p class="text-sm text-blue-500 font-bold"><?= $student_graded ?>/12 graded</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center text-lg shadow-lg shadow-indigo-500/30">📅</div>
+                <div>
+                    <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Current Week</p>
+                    <p class="text-xl font-black text-slate-800"><?= $week_num ?><span class="text-sm font-bold text-slate-400">/12</span></p>
                     <?php if ($week_date_range): ?>
-                        <span class="text-indigo-300">|</span>
-                        <?= $week_date_range ?>
+                    <p class="text-sm text-indigo-500 font-bold"><?= $week_date_range ?></p>
                     <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center text-lg shadow-lg shadow-amber-500/30">📝</div>
+                <div>
+                    <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Logs This Week</p>
+                    <p class="text-xl font-black text-slate-800"><?= count($daily_logs) ?></p>
+                    <p class="text-sm <?= count($daily_logs) >= 5 ? 'text-emerald-500' : 'text-amber-500' ?> font-bold"><?= count($daily_logs) >= 5 ? 'Complete' : count($daily_logs) . '/5 minimum' ?></p>
                 </div>
             </div>
         </div>
@@ -298,14 +486,14 @@ $grade_labels = [
                 <div class="relative" id="week-dropdown">
                     <button onclick="toggleWeekDropdown(event)" class="flex items-center gap-2 bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 hover:border-indigo-300 transition-all duration-200 cursor-pointer whitespace-nowrap shadow-sm">
                         📆 Week <?= $week_num ?>
-                        <span class="text-slate-400 text-[10px]">▾</span>
+                        <span class="text-slate-400 text-sm">▾</span>
                     </button>
                     <div id="week-menu" class="absolute left-0 top-full mt-2 w-52 bg-white border border-slate-200/60 rounded-xl shadow-xl z-50 hidden overflow-hidden">
                         <?php if (!empty($weeks)): ?>
                             <?php foreach ($weeks as $wn => $wr): ?>
                             <a href="?student_id=<?= $student_id ?>&week=<?= $wn ?>" class="flex items-center justify-between px-4 py-2.5 text-sm font-semibold <?= $wn === $week_num ? 'bg-gradient-to-r from-indigo-500 to-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-50' ?> transition">
-                                Week <?= $wn ?>
-                                <span class="text-[10px] <?= $wn === $week_num ? 'text-indigo-200' : 'text-slate-400' ?>"><?= $wr['start'] ?></span>
+                                Week <?= $wn ?><?= $wn === $auto_week ? ' ✓' : '' ?>
+                                <span class="text-sm <?= $wn === $week_num ? 'text-indigo-200' : 'text-slate-400' ?>"><?= $wr['start'] ?></span>
                             </a>
                             <?php endforeach; ?>
                         <?php else: ?>
@@ -331,7 +519,7 @@ $grade_labels = [
                     </div>
                     <div class="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200/60 rounded-xl shadow-xl z-50 hidden group-hover:block">
                         <div class="p-4">
-                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">All Present Dates</p>
+                            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">All Present Dates</p>
                             <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
                                 <?php if (!empty($present_dates)): ?>
                                     <?php foreach ($present_dates as $date): ?>
@@ -342,7 +530,7 @@ $grade_labels = [
                                     <p class="text-xs text-slate-400">No present days recorded.</p>
                                 <?php endif; ?>
                             </div>
-                            <p class="text-[11px] text-slate-400 mt-3 pt-3 border-t border-slate-100">Total: <?= count($present_dates) ?> day<?= count($present_dates) !== 1 ? 's' : '' ?></p>
+                            <p class="text-sm text-slate-400 mt-3 pt-3 border-t border-slate-100">Total: <?= count($present_dates) ?> day<?= count($present_dates) !== 1 ? 's' : '' ?></p>
                         </div>
                     </div>
                 </div>
@@ -354,7 +542,7 @@ $grade_labels = [
                     </div>
                     <div class="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200/60 rounded-xl shadow-xl z-50 hidden group-hover:block">
                         <div class="p-4">
-                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">All Absent Dates</p>
+                            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">All Absent Dates</p>
                             <div class="max-h-48 overflow-y-auto space-y-1.5 pr-1">
                                 <?php if (!empty($absent_logs)): ?>
                                     <?php foreach ($absent_logs as $log): ?>
@@ -365,7 +553,7 @@ $grade_labels = [
                                     <p class="text-xs text-slate-400">No absences recorded.</p>
                                 <?php endif; ?>
                             </div>
-                            <p class="text-[11px] text-slate-400 mt-3 pt-3 border-t border-slate-100">Total: <?= count($absent_logs) ?> day<?= count($absent_logs) !== 1 ? 's' : '' ?></p>
+                            <p class="text-sm text-slate-400 mt-3 pt-3 border-t border-slate-100">Total: <?= count($absent_logs) ?> day<?= count($absent_logs) !== 1 ? 's' : '' ?></p>
                         </div>
                     </div>
                 </div>
@@ -391,7 +579,7 @@ $grade_labels = [
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="bg-slate-50/80 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
+                            <tr class="bg-slate-50/80 text-slate-500 font-semibold uppercase tracking-wider text-sm">
                                 <th class="px-5 py-3 text-left">Date</th>
                                 <th class="px-5 py-3 text-left">Status</th>
                                 <th class="px-5 py-3 text-left">Intended Task</th>
@@ -414,10 +602,11 @@ $grade_labels = [
                                         <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200/60" title="<?= htmlspecialchars($log['reason_for_absence'] ?? '') ?>">❌ Absent</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="px-5 py-4 text-slate-600 max-w-[160px] truncate font-medium" title="<?= htmlspecialchars($log['task_title'] ?? '') ?>"><?= htmlspecialchars($log['task_title'] ?: '—') ?></td>
-                                <td class="px-5 py-4 text-slate-600 max-w-[200px] truncate font-medium" title="<?= htmlspecialchars($log['tasks_performed'] ?? '') ?>"><?= htmlspecialchars($log['tasks_performed'] ?: '—') ?></td>
-                                <td class="px-5 py-4 text-slate-600 font-medium"><?= htmlspecialchars($log['tools_used'] ?: '—') ?></td>
-                                <td class="px-5 py-4 text-slate-600 font-medium"><?= htmlspecialchars($log['learnt_skills'] ?: '—') ?></td>
+                                <?php $is_absent = ($log['attendance_status'] ?? 'present') === 'absent'; ?>
+                                <td class="px-5 py-4 text-slate-600 max-w-[160px] truncate font-medium" title="<?= $is_absent ? '' : htmlspecialchars($log['task_title'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($log['task_title'] ?: '-') ?></td>
+                                <td class="px-5 py-4 text-slate-600 max-w-[200px] truncate font-medium" title="<?= $is_absent ? '' : htmlspecialchars($log['tasks_performed'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($log['tasks_performed'] ?: '-') ?></td>
+                                <td class="px-5 py-4 text-slate-600 font-medium"><?= $is_absent ? '-' : htmlspecialchars($log['tools_used'] ?: '-') ?></td>
+                                <td class="px-5 py-4 text-slate-600 font-medium"><?= $is_absent ? '-' : htmlspecialchars($log['learnt_skills'] ?: '-') ?></td>
                                 <td class="px-5 py-4 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($log['calculated_duration']) ?></td>
                             </tr>
                             <?php endforeach; ?>
@@ -468,7 +657,7 @@ $grade_labels = [
                 <div class="px-6 py-4 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-white">
                     <h2 class="text-sm font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm">🏢</span> Company Instructor Feedback
-                        <span class="ml-auto text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">✅ Approved</span>
+                        <span class="ml-auto text-sm font-bold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">✅ Approved</span>
                     </h2>
                 </div>
                 <div class="p-6 space-y-5">
@@ -476,7 +665,7 @@ $grade_labels = [
                     <div class="flex items-center gap-4 p-4 bg-gradient-to-br from-emerald-50 to-white border border-emerald-100 rounded-xl">
                         <div class="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-lg shrink-0">📊</div>
                         <div>
-                            <p class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">Assessment Score</p>
+                            <p class="text-sm font-bold text-emerald-600 uppercase tracking-wider">Assessment Score</p>
                             <?php $ig = $grade_labels[$instructor_eval['grade']] ?? ['—', 'text-slate-600', 'bg-slate-100']; ?>
                             <p class="text-lg font-black <?= $ig[1] ?> mt-0.5"><?= $ig[0] ?></p>
                         </div>
@@ -508,7 +697,7 @@ $grade_labels = [
                     <?php endif; ?>
                     <!-- Timestamp -->
                     <div class="flex items-center gap-2 pt-3 border-t border-slate-100">
-                        <span class="text-[11px] text-slate-400 font-medium">Evaluated on <?= (new DateTime($instructor_eval['evaluated_at']))->format('d M Y, h:i A') ?></span>
+                        <span class="text-sm text-slate-400 font-medium">Evaluated on <?= (new DateTime($instructor_eval['evaluated_at']))->format('d M Y, h:i A') ?></span>
                     </div>
                 </div>
             </div>
@@ -517,7 +706,7 @@ $grade_labels = [
                 <div class="px-6 py-4 border-b border-red-100 bg-gradient-to-r from-red-50 to-white">
                     <h2 class="text-sm font-bold text-red-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="w-8 h-8 rounded-lg bg-red-100 text-red-500 flex items-center justify-center text-sm">🏢</span> Company Instructor Feedback
-                        <span class="ml-auto text-[10px] font-bold text-red-600 bg-red-100 px-2.5 py-1 rounded-lg border border-red-200">❌ Rejected</span>
+                        <span class="ml-auto text-sm font-bold text-red-600 bg-red-100 px-2.5 py-1 rounded-lg border border-red-200">❌ Rejected</span>
                     </h2>
                 </div>
                 <div class="p-6 space-y-3">
@@ -559,50 +748,33 @@ $grade_labels = [
                     </h2>
                 </div>
 
-                <?php if ($supervisor_eval): ?>
-                <!-- ── Already Evaluated: Show Result ── -->
-                <div class="p-6 space-y-4">
-                    <div class="bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-xl p-5">
-                        <div class="flex items-center justify-between mb-3">
-                            <span class="text-xs font-bold text-indigo-500 uppercase tracking-wider">Final University Grade</span>
-                            <span class="text-3xl font-black <?= $supervisor_eval['weekly_grade'] === 'A' ? 'text-emerald-600' : ($supervisor_eval['weekly_grade'] === 'F' ? 'text-red-600' : 'text-indigo-600') ?>">
-                                <?= htmlspecialchars($supervisor_eval['weekly_grade']) ?>
-                            </span>
-                        </div>
-                        <?php if ($supervisor_eval['supervisor_comments']): ?>
-                        <div>
-                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Supervisor Comments</span>
-                            <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($supervisor_eval['supervisor_comments'])) ?></p>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="flex items-center gap-2 text-xs text-emerald-600 bg-gradient-to-r from-emerald-50 to-emerald-100/50 border border-emerald-200/60 px-4 py-2.5 rounded-xl font-bold">
-                        <div class="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px]">✅</div> Evaluation Recorded — Status: Final_Approved
-                    </div>
-                    <p class="text-[11px] text-slate-400 text-center font-medium">
-                        Evaluated on <?= (new DateTime($supervisor_eval['evaluated_at']))->format('d M Y, h:i A') ?>
-                    </p>
-                    <a href="?student_id=<?= $student_id ?>&week=<?= $week_num ?>" class="block text-center text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors">← Re-evaluate Week <?= $week_num ?></a>
-                </div>
-
-                <?php else: ?>
-                <!-- ── Fresh Evaluation Form ── -->
+                <!-- ── Editable Evaluation Form (always shown) ── -->
                 <form method="POST" class="p-6 space-y-5">
+                    <?php if ($supervisor_eval): ?>
+                    <div class="flex items-center gap-2 text-xs text-indigo-600 bg-gradient-to-r from-indigo-50 to-indigo-100/50 border border-indigo-200/60 px-4 py-2.5 rounded-xl font-bold mb-2">
+                        <div class="w-5 h-5 rounded-full bg-indigo-500 text-white flex items-center justify-center text-sm">✏️</div>
+                        Editing existing grade — previously evaluated on <?= (new DateTime($supervisor_eval['evaluated_at']))->format('d M Y, h:i A') ?>
+                    </div>
+                    <?php else: ?>
                     <div class="bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-200/60 rounded-xl p-4 mb-2">
                         <p class="text-xs font-bold text-amber-700 flex items-center gap-2">
                             <span>⚠️</span> Instructor has approved this report. Please enter your final university grade below.
                         </p>
                     </div>
+                    <?php endif; ?>
 
                     <!-- Weekly Grade -->
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-3">Weekly Grade</label>
                         <div class="grid grid-cols-5 gap-2">
-                            <?php foreach (['A', 'B', 'C', 'D', 'F'] as $g): ?>
+                            <?php
+                            $existing_grade = $supervisor_eval['weekly_grade'] ?? 'C';
+                            foreach (['A', 'B', 'C', 'D', 'F'] as $g):
+                            ?>
                             <label class="flex flex-col items-center gap-1.5 px-2 py-3 bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all duration-200 text-center">
-                                <input type="radio" name="weekly_grade" value="<?= $g ?>" <?= $g === 'C' ? 'checked' : '' ?> class="accent-indigo-600">
+                                <input type="radio" name="weekly_grade" value="<?= $g ?>" <?= $g === $existing_grade ? 'checked' : '' ?> class="accent-indigo-600">
                                 <span class="text-lg font-black <?= $g === 'A' ? 'text-emerald-600' : ($g === 'F' ? 'text-red-500' : 'text-slate-700') ?>"><?= $g ?></span>
-                                <span class="text-[9px] text-slate-400 uppercase font-medium">
+                                <span class="text-sm text-slate-400 uppercase font-medium">
                                     <?php
                                     $labels = ['A' => 'Excellent', 'B' => 'Good', 'C' => 'Satisfactory', 'D' => 'Pass', 'F' => 'Fail'];
                                     echo $labels[$g];
@@ -617,17 +789,16 @@ $grade_labels = [
                     <div>
                         <label class="block text-xs font-bold text-slate-500 mb-2">Supervisor Comments</label>
                         <textarea name="supervisor_comments" rows="5" placeholder="Write your assessment, feedback, and recommendations for the student…"
-                            class="w-full bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 resize-none shadow-sm"></textarea>
+                            class="w-full bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 resize-none shadow-sm"><?= htmlspecialchars($supervisor_eval['supervisor_comments'] ?? '') ?></textarea>
                     </div>
 
                     <button type="submit" name="submit_sup_eval" class="w-full px-5 py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-500/30 transition-all duration-200 cursor-pointer">
-                        📤 Submit & Approve (Final_Approved)
+                        <?= $supervisor_eval ? '✏️ Update Grade' : '📤 Submit & Approve' ?>
                     </button>
                 </form>
-                <?php endif; ?>
 
                 <div class="px-6 py-4 border-t border-slate-100 bg-gradient-to-r from-slate-50 to-white rounded-b-2xl">
-                    <p class="text-[11px] text-slate-400 text-center leading-relaxed font-medium">
+                    <p class="text-sm text-slate-400 text-center leading-relaxed font-medium">
                         This grade is the final assessment for this week's internship performance.
                     </p>
                 </div>
@@ -653,15 +824,15 @@ $grade_labels = [
                         <?php if ($week_num > 0): ?>
                         <input type="hidden" name="week" value="<?= $week_num ?>">
                         <?php endif; ?>
-                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Filter by Date Range</p>
+                        <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Filter by Date Range</p>
                         <div class="flex items-center gap-2">
                             <div class="flex-1">
-                                <label class="block text-[10px] text-slate-400 mb-1 font-medium">From</label>
+                                <label class="block text-sm text-slate-400 mb-1 font-medium">From</label>
                                 <input type="date" name="filter_start" value="<?= htmlspecialchars($filter_start_date) ?>"
                                     class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm">
                             </div>
                             <div class="flex-1">
-                                <label class="block text-[10px] text-slate-400 mb-1 font-medium">To</label>
+                                <label class="block text-sm text-slate-400 mb-1 font-medium">To</label>
                                 <input type="date" name="filter_end" value="<?= htmlspecialchars($filter_end_date) ?>"
                                     class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm">
                             </div>
@@ -677,7 +848,7 @@ $grade_labels = [
                             <?php endif; ?>
                         </div>
                         <?php if ($filter_start_date || $filter_end_date): ?>
-                        <p class="text-[10px] text-slate-400 text-center font-medium">
+                        <p class="text-sm text-slate-400 text-center font-medium">
                             Showing <?= count($visible_weeks) ?> of <?= count($weeks) ?> weeks
                         </p>
                         <?php endif; ?>
@@ -718,8 +889,8 @@ $grade_labels = [
                             $grade_display = 'F';
                         }
                     ?>
-                    <div class="text-center p-3 rounded-xl border-2 <?= $color_class ?> <?= $bg_class ?> <?= $i === $week_num ? 'ring-2 ring-indigo-500 ring-offset-2' : '' ?> transition-all duration-200 hover:scale-105 hover:shadow-md cursor-pointer" title="Week <?= $i ?>: <?= $grade_display !== '—' ? 'Grade ' . $grade_display . ' (' . date('d M Y', strtotime($week_data['evaluated_at'])) . ')' : 'Not evaluated yet' ?>">
-                        <p class="text-[9px] font-bold uppercase tracking-wider <?= $i === $week_num ? 'text-indigo-600' : 'text-slate-400' ?>">Wk <?= $i ?></p>
+                    <div class="text-center p-3 rounded-xl border-2 <?= $color_class ?> <?= $bg_class ?> <?= $i === $week_num ? 'ring-2 ring-indigo-500 ring-offset-2' : '' ?> <?= $i === $auto_week ? 'ring-2 ring-emerald-400 ring-offset-1' : '' ?> transition-all duration-200 hover:scale-105 hover:shadow-md cursor-pointer" title="Week <?= $i ?>: <?= $grade_display !== '—' ? 'Grade ' . $grade_display . ' (' . date('d M Y', strtotime($week_data['evaluated_at'])) . ')' : 'Not evaluated yet' ?><?= $i === $auto_week ? ' [Current Dynamic Week]' : '' ?>">
+                        <p class="text-sm font-bold uppercase tracking-wider <?= $i === $week_num ? 'text-indigo-600' : ($i === $auto_week ? 'text-emerald-600' : 'text-slate-400') ?>">Wk <?= $i ?><?= $i === $auto_week ? ' ✓' : '' ?></p>
                         <p class="text-xl font-black mt-1 <?= $g ? '' : 'text-slate-300' ?>"><?= $grade_display ?></p>
                         <?php if ($week_data): ?>
                             <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 mx-auto mt-1.5"></div>
@@ -736,9 +907,10 @@ $grade_labels = [
                     <?php endif; ?>
                 </div>
                 <div class="px-5 py-3 border-t border-slate-100 bg-gradient-to-r from-slate-50 to-white rounded-b-2xl">
-                    <div class="flex items-center justify-center gap-4 text-[10px] text-slate-400 font-medium">
+                    <div class="flex items-center justify-center gap-4 text-sm text-slate-400 font-medium flex-wrap">
                         <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Graded</span>
                         <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span> Pending</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-1 ring-emerald-600"></span> Dynamic Current Week</span>
                     </div>
                 </div>
             </div>
@@ -748,6 +920,10 @@ $grade_labels = [
     </div>
 
     <div class="text-center text-xs text-slate-400 py-3 font-medium">Powered by InternReport System</div>
+</div>
+
+        </main>
+    </div>
 </div>
 
 </body>

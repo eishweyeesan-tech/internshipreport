@@ -1,12 +1,21 @@
 # Deny execution of scripts in uploads directory
 <FilesMatch "\.(?i:php|phtml|php3|php4|php5|php7|phps|cgi|pl|asp|aspx|shtml|sh|lua)$">
-    Deny from all
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
-# Allow only image files
+# Allow image files
 <FilesMatch "\.(?i:jpg|jpeg|png|gif|webp)$">
-    Allow from all
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Allow from all
+    </IfModule>
 </FilesMatch>
 
-# Default deny
 Options -Indexes

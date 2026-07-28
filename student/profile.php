@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
 
 $user_id  = $_SESSION['user_id'];
@@ -11,16 +10,22 @@ if ($role !== 'student') {
     exit;
 }
 
+// ─── Database Connection (mysqli) ─────────────────────────────────────
+$conn = new mysqli('localhost', 'root', 'root', 'intern_report_db');
+if ($conn->connect_error) die("Connection failed: " . $conn->connect_error);
+$conn->set_charset('utf8mb4');
+
+$esc_uid = $conn->real_escape_string($user_id);
+
 // ── Fetch or create profile row ──────────────────────────────────
-$stmt = $pdo->prepare("SELECT * FROM student_profiles WHERE user_id = ?");
-$stmt->execute([$user_id]);
-$profile = $stmt->fetch();
+$profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
+$profile = $profile_r ? $profile_r->fetch_assoc() : null;
 
 if (!$profile) {
-    $pdo->prepare("INSERT INTO student_profiles (user_id, full_name) VALUES (?, ?)")
-        ->execute([$user_id, $username]);
-    $stmt->execute([$user_id]);
-    $profile = $stmt->fetch();
+    $esc_un = $conn->real_escape_string($username);
+    $conn->query("INSERT INTO student_profiles (user_id, full_name) VALUES ({$esc_uid}, '{$esc_un}')");
+    $profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
+    $profile = $profile_r ? $profile_r->fetch_assoc() : null;
 }
 
 // ── Fetch user data ─────────────────────────────────────────────
@@ -31,21 +36,18 @@ $linkedin_link = '';
 $portfolio_link = '';
 $last_login_at = '';
 
-try {
-    $user_stmt = $pdo->prepare("SELECT email, profile_pic, github_link, linkedin_link, portfolio_link, last_login_at FROM users WHERE id = ?");
-    $user_stmt->execute([$user_id]);
-    $user_data = $user_stmt->fetch();
-    $user_email    = $user_data['email'];
-    $profile_pic   = $user_data['profile_pic'] ?? '';
-    $github_link   = $user_data['github_link'] ?? '';
-    $linkedin_link = $user_data['linkedin_link'] ?? '';
+$user_r = $conn->query("SELECT email, profile_pic, github_link, linkedin_link, portfolio_link, last_login_at FROM users WHERE id = {$esc_uid}");
+if ($user_r && $user_r->num_rows > 0) {
+    $user_data = $user_r->fetch_assoc();
+    $user_email     = $user_data['email'];
+    $profile_pic    = $user_data['profile_pic'] ?? '';
+    $github_link    = $user_data['github_link'] ?? '';
+    $linkedin_link  = $user_data['linkedin_link'] ?? '';
     $portfolio_link = $user_data['portfolio_link'] ?? '';
-    $last_login_at = $user_data['last_login_at'] ?? '';
-} catch (PDOException $e) {
-    // Fallback if new columns don't exist yet
-    $email_stmt = $pdo->prepare("SELECT email FROM users WHERE id = ?");
-    $email_stmt->execute([$user_id]);
-    $user_email = $email_stmt->fetchColumn();
+    $last_login_at  = $user_data['last_login_at'] ?? '';
+} else {
+    $email_r = $conn->query("SELECT email FROM users WHERE id = {$esc_uid}");
+    $user_email = ($email_r && $email_r->num_rows > 0) ? $email_r->fetch_row()[0] : '';
 }
 
 // ── Handle Profile Update ────────────────────────────────────────
@@ -62,21 +64,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $instructor_phone  = trim($_POST['instructor_phone'] ?? '');
     $internship_start  = trim($_POST['internship_start_date'] ?? '');
 
-    $update = $pdo->prepare("UPDATE student_profiles SET
-        full_name = ?, student_roll = ?, major = ?, phone = ?,
-        company_name = ?, job_role = ?, instructor_name = ?,
-        instructor_email = ?, instructor_phone = ?, internship_start_date = ?
-        WHERE user_id = ?");
-    $update->execute([
-        $full_name, $student_roll, $major, $phone,
-        $company_name, $job_role, $instructor_name,
-        $instructor_email, $instructor_phone,
-        $internship_start ?: null, $user_id
-    ]);
+    $esc_fn  = $conn->real_escape_string($full_name);
+    $esc_sr  = $conn->real_escape_string($student_roll);
+    $esc_mj  = $conn->real_escape_string($major);
+    $esc_ph  = $conn->real_escape_string($phone);
+    $esc_cn  = $conn->real_escape_string($company_name);
+    $esc_jr  = $conn->real_escape_string($job_role);
+    $esc_in  = $conn->real_escape_string($instructor_name);
+    $esc_ie  = $conn->real_escape_string($instructor_email);
+    $esc_ip  = $conn->real_escape_string($instructor_phone);
+    $esc_is  = $conn->real_escape_string($internship_start ?: '');
+
+    $conn->query("UPDATE student_profiles SET
+        full_name = '{$esc_fn}', student_roll = '{$esc_sr}', major = '{$esc_mj}', phone = '{$esc_ph}',
+        company_name = '{$esc_cn}', job_role = '{$esc_jr}', instructor_name = '{$esc_in}',
+        instructor_email = '{$esc_ie}', instructor_phone = '{$esc_ip}', internship_start_date = " . ($internship_start ? "'{$esc_is}'" : "NULL") . "
+        WHERE user_id = {$esc_uid}");
 
     // Refresh profile data
-    $stmt->execute([$user_id]);
-    $profile = $stmt->fetch();
+    $profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
+    $profile = $profile_r ? $profile_r->fetch_assoc() : null;
     $profile_msg = 'saved';
 }
 
@@ -95,16 +102,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     } elseif ($new_pw !== $confirm) {
         $pw_err = 'New passwords do not match.';
     } else {
-        $check = $pdo->prepare("SELECT password FROM users WHERE id = ?");
-        $check->execute([$user_id]);
-        $hash = $check->fetchColumn();
+        $check_r = $conn->query("SELECT password FROM users WHERE id = {$esc_uid}");
+        $hash = ($check_r && $check_r->num_rows > 0) ? $check_r->fetch_row()[0] : '';
 
         if (!password_verify($current, $hash)) {
             $pw_err = 'Current password is incorrect.';
         } else {
             $new_hash = password_hash($new_pw, PASSWORD_DEFAULT);
-            $pdo->prepare("UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?")
-                ->execute([$new_hash, $user_id]);
+            $esc_nw = $conn->real_escape_string($new_hash);
+            $conn->query("UPDATE users SET password = '{$esc_nw}', is_first_login = 0 WHERE id = {$esc_uid}");
             $_SESSION['is_first_login'] = false;
             $pw_msg = 'Password updated successfully.';
         }
@@ -134,12 +140,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                     $old_path = $upload_dir . $profile_pic;
                     if (file_exists($old_path)) unlink($old_path);
                 }
-                try {
-                    $pdo->prepare("UPDATE users SET profile_pic = ? WHERE id = ?")
-                        ->execute([$filename, $user_id]);
-                } catch (PDOException $e) {
-                    $avatar_msg = 'Avatar uploaded but database column not ready. Run migration SQL.';
-                }
+                $esc_fn2 = $conn->real_escape_string($filename);
+                $conn->query("UPDATE users SET profile_pic = '{$esc_fn2}' WHERE id = {$esc_uid}");
                 $profile_pic = $filename;
                 $avatar_msg = 'Avatar updated successfully.';
             } else {
@@ -156,16 +158,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     $linkedin = trim($_POST['linkedin_link'] ?? '');
     $portfolio = trim($_POST['portfolio_link'] ?? '');
 
-    try {
-        $pdo->prepare("UPDATE users SET github_link = ?, linkedin_link = ?, portfolio_link = ? WHERE id = ?")
-            ->execute([$github, $linkedin, $portfolio, $user_id]);
-        $github_link   = $github;
-        $linkedin_link = $linkedin;
-        $portfolio_link = $portfolio;
-        $portfolio_msg = 'Portfolio links updated successfully.';
-    } catch (PDOException $e) {
-        $portfolio_msg = 'Database columns not ready yet. Run migration SQL first.';
-    }
+    $esc_gh = $conn->real_escape_string($github);
+    $esc_li = $conn->real_escape_string($linkedin);
+    $esc_pl = $conn->real_escape_string($portfolio);
+    $conn->query("UPDATE users SET github_link = '{$esc_gh}', linkedin_link = '{$esc_li}', portfolio_link = '{$esc_pl}' WHERE id = {$esc_uid}");
+    $github_link    = $github;
+    $linkedin_link  = $linkedin;
+    $portfolio_link = $portfolio;
+    $portfolio_msg  = 'Portfolio links updated successfully.';
 }
 ?>
 <!DOCTYPE html>
@@ -181,6 +181,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     })();
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+    .active-nav { background: rgba(255,255,255,0.15); color: #fff; border-right: 3px solid #a78bfa; }
+    .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
+    .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
+    .glass-sidebar { background: rgba(15,23,42,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.08); }
+    .glass-header { background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.4); }
+    .glass-card { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); box-shadow: 0 8px 32px rgba(0,0,0,0.06); }
+    @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+    .animated-bg { background: linear-gradient(-45deg, #e0e7ff, #ede9fe, #fce7f3, #dbeafe, #d1fae5); background-size: 400% 400%; animation: gradientShift 20s ease infinite; }
+    @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } .glass, .glass-card, .glass-strong, .glass-header, .glass-sidebar { background: white !important; backdrop-filter: none !important; border-color: #e2e8f0 !important; box-shadow: none !important; } }
+    </style>
     <script>
     tailwind.config = {
         darkMode: 'class',
@@ -215,33 +226,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     }
     </script>
 </head>
-<body class="bg-slate-50 dark:bg-slate-900 font-sans antialiased">
+<body class="animated-bg font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-slate-100">
-            <span class="text-sm font-black text-slate-800 tracking-tight">📋 InternReport</span>
+    <aside class="w-56 glass-sidebar flex flex-col shrink-0">
+        <div class="h-14 flex items-center px-5 border-b border-white/10">
+            <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
         </div>
         <nav class="flex-1 py-4 space-y-1 px-2">
-            <a href="student-dashboard.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
+            <a href="student-dashboard.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
                 <span>📝</span> Dashboard
             </a>
-            <a href="profile.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-600 border-r-3 transition" style="border-right:3px solid #4f46e5">
+            <a href="student-dashboard.php?section=analytics" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
+                <span>📊</span> Analytics
+            </a>
+            <a href="log-history.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
+                <span>📜</span> Log History
+            </a>
+            <a href="public-holiday.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
+                <span>📅</span> Public Holidays
+            </a>
+            <a href="instructions.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
+                <span>📋</span> Instructions
+            </a>
+            <a href="profile.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-white/60 hover:text-white hover:bg-white/10 transition">
                 <span>👤</span> Profile
             </a>
         </nav>
-        <div class="p-3 border-t border-slate-100">
-            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 rounded-lg transition">🚪 Logout</a>
+        <div class="p-3 border-t border-white/10">
+            <a href="../logout.php" class="flex items-center gap-2 px-3 py-2 text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition">🚪 Logout</a>
         </div>
     </aside>
 
     <!-- ─── MAIN ─── -->
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
-        <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
+        <header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50">
             <h1 class="text-sm font-bold text-slate-700">My Profile</h1>
             <div class="flex items-center gap-2 text-xs text-slate-400">
                 <span class="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold"><?= strtoupper($username[0]) ?></span>
@@ -287,11 +310,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                     </div>
                     <div>
                         <h2 class="text-sm font-black text-slate-800"><?= htmlspecialchars($profile['full_name'] ?: $username) ?></h2>
-                        <p class="text-[11px] text-slate-400 mt-0.5"><?= htmlspecialchars($user_email) ?></p>
+                        <p class="text-sm text-slate-400 mt-0.5"><?= htmlspecialchars($user_email) ?></p>
                         <div class="flex items-center gap-2 mt-1.5">
-                            <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded capitalize"><?= htmlspecialchars($role) ?></span>
+                            <span class="text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded capitalize"><?= htmlspecialchars($role) ?></span>
                             <?php if ($profile['student_roll']): ?>
-                            <span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($profile['student_roll']) ?></span>
+                            <span class="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($profile['student_roll']) ?></span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -327,9 +350,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                                 </div>
                             <?php endif; ?>
                             <div class="flex-1">
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Upload New Picture</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Upload New Picture</label>
                                 <input type="file" name="avatar" accept="image/jpeg,image/png" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 file:cursor-pointer">
-                                <p class="text-[9px] text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
+                                <p class="text-sm text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
                             </div>
                         </div>
                         <div class="flex justify-end pt-3">
@@ -349,15 +372,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <input type="hidden" name="update_portfolio" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">GitHub Link</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">GitHub Link</label>
                                 <input type="url" name="github_link" value="<?= htmlspecialchars($github_link) ?>" placeholder="https://github.com/username" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">LinkedIn Link</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">LinkedIn Link</label>
                                 <input type="url" name="linkedin_link" value="<?= htmlspecialchars($linkedin_link) ?>" placeholder="https://linkedin.com/in/username" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div class="sm:col-span-2">
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Personal Portfolio Website Link</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Personal Portfolio Website Link</label>
                                 <input type="url" name="portfolio_link" value="<?= htmlspecialchars($portfolio_link) ?>" placeholder="https://yourportfolio.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                         </div>
@@ -379,14 +402,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                                 <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-[10px] font-bold text-slate-500 uppercase">Account Status</p>
+                                    <p class="text-sm font-bold text-slate-500 uppercase">Account Status</p>
                                     <p class="text-xs font-semibold text-emerald-600">Active</p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                                 <span class="w-2.5 h-2.5 bg-blue-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-[10px] font-bold text-slate-500 uppercase">Last Login Detected</p>
+                                    <p class="text-sm font-bold text-slate-500 uppercase">Last Login Detected</p>
                                     <?php if ($last_login_at): ?>
                                         <p class="text-xs font-semibold text-slate-700"><?= date('d M Y, h:i A', strtotime($last_login_at)) ?></p>
                                     <?php else: ?>
@@ -404,30 +427,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                             <span class="p-1 bg-blue-50 text-blue-600 rounded">👤</span> Personal Information
                         </h3>
-                        <button type="button" onclick="toggleEdit('personal')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold rounded-lg transition cursor-pointer">✏️ Edit</button>
+                        <button type="button" onclick="toggleEdit('personal')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg transition cursor-pointer">✏️ Edit</button>
                     </div>
 
                     <!-- View Mode -->
                     <div class="view-mode p-5">
                         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Full Name</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Full Name</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['full_name'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Student Roll No</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Student Roll No</dt>
                                 <dd class="text-xs text-slate-700 font-semibold font-mono"><?= htmlspecialchars($profile['student_roll'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Major / Department</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Major / Department</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['major'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Phone</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Phone</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['phone'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Email</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Email</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($user_email) ?></dd>
                             </div>
                         </dl>
@@ -439,19 +462,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <div class="p-5 space-y-4">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Full Name</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Full Name</label>
                                     <input type="text" name="full_name" value="<?= htmlspecialchars($profile['full_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Student Roll No</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Student Roll No</label>
                                     <input type="text" name="student_roll" value="<?= htmlspecialchars($profile['student_roll']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Major / Department</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Major / Department</label>
                                     <input type="text" name="major" value="<?= htmlspecialchars($profile['major']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Phone</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Phone</label>
                                     <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                             </div>
@@ -475,34 +498,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                             <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🏢</span> Internship Details
                         </h3>
-                        <button type="button" onclick="toggleEdit('internship')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-[10px] font-bold rounded-lg transition cursor-pointer">✏️ Edit</button>
+                        <button type="button" onclick="toggleEdit('internship')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg transition cursor-pointer">✏️ Edit</button>
                     </div>
 
                     <!-- View Mode -->
                     <div class="view-mode p-5">
                         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Company Name</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Company Name</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['company_name'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Job Role</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Job Role</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['job_role'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Name</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Name</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['instructor_name'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Email</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Email</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['instructor_email'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Phone</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Phone</dt>
                                 <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['instructor_phone'] ?: '—') ?></dd>
                             </div>
                             <div>
-                                <dt class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Internship Start Date</dt>
+                                <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Internship Start Date</dt>
                                 <dd class="text-xs text-slate-700 font-semibold font-mono">
                                     <?php if ($profile['internship_start_date']): ?>
                                         <?= (new DateTime($profile['internship_start_date']))->format('d M Y') ?>
@@ -520,27 +543,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <div class="p-5 space-y-4">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Company Name</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Company Name</label>
                                     <input type="text" name="company_name" value="<?= htmlspecialchars($profile['company_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Job Role</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Job Role</label>
                                     <input type="text" name="job_role" value="<?= htmlspecialchars($profile['job_role']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Instructor Name</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Name</label>
                                     <input type="text" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Instructor Email</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Email</label>
                                     <input type="email" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Instructor Phone</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Phone</label>
                                     <input type="text" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
-                                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Internship Start Date</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Internship Start Date</label>
                                     <input type="date" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                             </div>
@@ -567,16 +590,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <input type="hidden" name="change_password" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Current Password</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Current Password</label>
                                 <input type="password" name="current_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">New Password</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
                                 <input type="password" name="new_password" required minlength="8" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                                <p class="text-[9px] text-slate-400 mt-0.5">Min 8 characters</p>
+                                <p class="text-sm text-slate-400 mt-0.5">Min 8 characters</p>
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Confirm New Password</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>
                                 <input type="password" name="confirm_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                         </div>

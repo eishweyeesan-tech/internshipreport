@@ -1,15 +1,47 @@
 -- ============================================================
 -- InternReport System - Complete Database Schema
 -- ============================================================
+-- ER DIAGRAM RELATIONSHIPS (read top-to-bottom for FK order):
+--
+--   users ──1:1──> student_profiles
+--   users ──1:N──> student_profiles         (as supervisor)
+--   users ──1:N──> student_profiles         (as instructor)
+--   companies ──1:N──> student_profiles     (FK: company_id)
+--   users ──1:N──> daily_logs               (FK: student_profiles.internship_id)
+--   users ──1:N──> weekly_reflections       (FK: student_profiles.internship_id)
+--   users ──1:N──> magic_links              (FK: student_profiles.internship_id)
+--   users ──1:N──> instructor_magic_links   (FK: student_id)
+--   users ──1:N──> report_evaluations       (FK: student_id)
+--   users ──1:N──> supervisor_evaluations   (FK: student_id)
+--   users ──1:N──> supervisor_alerts        (FK: supervisor_id, student_id)
+--   users ──1:N──> supervisor_weekly_evaluations (FK: student_id, supervisor_id)
+--   users ──1:N──> announcements            (FK: created_by)
+--   users ──1:N──> notifications            (FK: user_id)
+-- ============================================================
 
 CREATE DATABASE IF NOT EXISTS intern_report_db;
 USE intern_report_db;
 
 -- ============================================================
--- CORE TABLES
+-- INDEPENDENT TABLES (no foreign keys)
 -- ============================================================
 
+-- Users table (admins, students, supervisors, instructors)
+-- PK: id
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('admin', 'student', 'supervisor', 'instructor') NOT NULL DEFAULT 'student',
+    is_first_login TINYINT(1) NOT NULL DEFAULT 1,
+    academic_year VARCHAR(15) DEFAULT NULL,
+    status ENUM('Active', 'Archived') NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Companies table
+-- PK: id
 CREATE TABLE IF NOT EXISTS companies (
     id INT AUTO_INCREMENT PRIMARY KEY,
     company_name VARCHAR(150) NOT NULL UNIQUE,
@@ -22,24 +54,30 @@ CREATE TABLE IF NOT EXISTS companies (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Users table (admins, students, supervisors)
-CREATE TABLE users (
+-- System settings
+-- PK: id
+CREATE TABLE IF NOT EXISTS system_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(100) NOT NULL UNIQUE,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'student', 'supervisor') NOT NULL DEFAULT 'student',
-    is_first_login TINYINT(1) NOT NULL DEFAULT 1,
-    academic_year VARCHAR(15) DEFAULT NULL,
-    status ENUM('Active', 'Archived') NOT NULL DEFAULT 'Active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    setting_key VARCHAR(100) NOT NULL UNIQUE,
+    setting_value TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- ============================================================
+-- STUDENT PROFILE TABLES (depends on: users, companies)
+-- ============================================================
+
 -- Student profiles table
+-- PK: id
+-- FK: user_id      -> users.id          (CASCADE)
+-- FK: supervisor_id -> users.id          (SET NULL)
+-- FK: instructor_id -> users.id          (SET NULL)
+-- FK: company_id   -> companies.id       (SET NULL)
 CREATE TABLE IF NOT EXISTS student_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
     supervisor_id INT DEFAULT NULL,
+    instructor_id INT DEFAULT NULL,
     company_id INT DEFAULT NULL,
     full_name VARCHAR(150) DEFAULT '',
     student_roll VARCHAR(50) DEFAULT '',
@@ -55,14 +93,18 @@ CREATE TABLE IF NOT EXISTS student_profiles (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
 );
 
 -- ============================================================
--- LOGGING TABLES
+-- LOGGING TABLES (depends on: student_profiles via internship_id)
 -- ============================================================
 
 -- Daily logs table
+-- PK: id
+-- FK: internship_id -> student_profiles.id  (CASCADE)
 CREATE TABLE daily_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     internship_id INT NOT NULL,
@@ -78,12 +120,15 @@ CREATE TABLE daily_logs (
     challenges VARCHAR(255),
     start_time VARCHAR(5) NOT NULL DEFAULT '09:00',
     end_time VARCHAR(5) NOT NULL DEFAULT '17:00',
-    calculated_duration VARCHAR(5) NOT NULL DEFAULT '08:00',
+    calculated_duration VARCHAR(20) NOT NULL DEFAULT '00:00',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_log (internship_id, log_date)
+    UNIQUE KEY unique_log (internship_id, log_date),
+    FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
 );
 
 -- Weekly reflections table
+-- PK: id
+-- FK: internship_id -> student_profiles.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS weekly_reflections (
     id INT AUTO_INCREMENT PRIMARY KEY,
     internship_id INT NOT NULL,
@@ -92,14 +137,17 @@ CREATE TABLE IF NOT EXISTS weekly_reflections (
     how_done TEXT NOT NULL,
     why_done TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_week (internship_id, week_number)
+    UNIQUE KEY unique_week (internship_id, week_number),
+    FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
 );
 
 -- ============================================================
--- LINK & EVALUATION TABLES
+-- LINK & EVALUATION TABLES (depends on: users, student_profiles)
 -- ============================================================
 
 -- Magic links for students
+-- PK: id
+-- FK: internship_id -> student_profiles.id  (CASCADE)
 CREATE TABLE magic_links (
     id INT AUTO_INCREMENT PRIMARY KEY,
     internship_id INT NOT NULL,
@@ -107,20 +155,26 @@ CREATE TABLE magic_links (
     token VARCHAR(64) NOT NULL UNIQUE,
     expires_at DATETIME NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_week_link (internship_id, week_number)
+    UNIQUE KEY unique_week_link (internship_id, week_number),
+    FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
 );
 
 -- Instructor magic links
+-- PK: id
+-- FK: student_id -> users.id  (CASCADE)
 CREATE TABLE instructor_magic_links (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     week_number INT NOT NULL,
     magic_token VARCHAR(64) NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NULL
+    expires_at DATETIME NULL,
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Report evaluations (instructor grading)
+-- PK: id
+-- FK: student_id -> users.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS report_evaluations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
@@ -130,6 +184,8 @@ CREATE TABLE IF NOT EXISTS report_evaluations (
     instructor_comments TEXT DEFAULT NULL,
     signature_type ENUM('typed', 'uploaded') DEFAULT NULL,
     signature_value VARCHAR(500) DEFAULT NULL,
+    student_signature_type ENUM('typed', 'uploaded') DEFAULT NULL,
+    student_signature_value VARCHAR(500) DEFAULT NULL,
     report_status ENUM('pending', 'approved_by_instructor', 'approved_by_supervisor', 'rejected') NOT NULL DEFAULT 'pending',
     evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_eval (student_id, week_number),
@@ -137,6 +193,8 @@ CREATE TABLE IF NOT EXISTS report_evaluations (
 );
 
 -- Supervisor evaluations (university grading)
+-- PK: id
+-- FK: student_id -> users.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS supervisor_evaluations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
@@ -149,10 +207,13 @@ CREATE TABLE IF NOT EXISTS supervisor_evaluations (
 );
 
 -- ============================================================
--- SYSTEM TABLES
+-- SYSTEM & NOTIFICATION TABLES (depends on: users)
 -- ============================================================
 
 -- Supervisor email alerts (to track sent notifications)
+-- PK: id
+-- FK: supervisor_id -> users.id  (CASCADE)
+-- FK: student_id    -> users.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS supervisor_alerts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     supervisor_id INT NOT NULL,
@@ -169,6 +230,9 @@ CREATE TABLE IF NOT EXISTS supervisor_alerts (
 );
 
 -- Weekly grading evaluations by supervisor
+-- PK: id
+-- FK: student_id    -> users.id  (CASCADE)
+-- FK: supervisor_id -> users.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS supervisor_weekly_evaluations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
@@ -183,6 +247,8 @@ CREATE TABLE IF NOT EXISTS supervisor_weekly_evaluations (
 );
 
 -- Announcements
+-- PK: id
+-- FK: created_by -> users.id  (SET NULL)
 CREATE TABLE IF NOT EXISTS announcements (
     id INT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(200) NOT NULL,
@@ -193,13 +259,20 @@ CREATE TABLE IF NOT EXISTS announcements (
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- System settings
-CREATE TABLE IF NOT EXISTS system_settings (
+-- Notifications table (in-app notifications for students)
+-- PK: id
+-- FK: user_id -> users.id  (CASCADE)
+CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    setting_key VARCHAR(100) NOT NULL UNIQUE,
-    setting_value TEXT NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+    user_id INT NOT NULL,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    type ENUM('instructor_approved', 'instructor_rejected', 'supervisor_approved', 'info') NOT NULL DEFAULT 'info',
+    related_week INT DEFAULT NULL,
+    is_read TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- SEED DATA
@@ -212,9 +285,7 @@ INSERT INTO system_settings (setting_key, setting_value) VALUES
 
 -- Default test accounts (password for all: "password")
 INSERT INTO users (username, email, password, role, is_first_login) VALUES
-('admin',  'admin@example.com',  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin',      0),
-('supervisor1', 'sup@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'supervisor', 1),
-('john_doe',    'john@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'student',    1);
+('admin',  'admin@example.com',  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin',      0);
 
 -- ============================================================
 -- MIGRATION for existing databases (run if tables already exist)
@@ -240,4 +311,27 @@ ALTER TABLE users ADD COLUMN github_link VARCHAR(255) DEFAULT NULL AFTER profile
 ALTER TABLE users ADD COLUMN linkedin_link VARCHAR(255) DEFAULT NULL AFTER github_link;
 ALTER TABLE users ADD COLUMN portfolio_link VARCHAR(255) DEFAULT NULL AFTER linkedin_link;
 ALTER TABLE users ADD COLUMN last_login_at DATETIME DEFAULT NULL AFTER portfolio_link;
-    
+ALTER TABLE users ADD COLUMN is_warned TINYINT(1) DEFAULT 0;
+
+
+-- ============================================================
+-- MIGRATION: Instructor Role & Linking
+-- Run on existing databases to add instructor support
+-- ============================================================
+-- ALTER TABLE users MODIFY COLUMN role ENUM('admin', 'student', 'supervisor', 'instructor') NOT NULL DEFAULT 'student';
+-- ALTER TABLE student_profiles ADD COLUMN instructor_id INT DEFAULT NULL AFTER supervisor_id;
+-- ALTER TABLE student_profiles ADD FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL;
+
+-- ============================================================
+-- MIGRATION: Public Holidays (Myanmar Calendar)
+-- Run on existing databases to add holiday support
+-- ============================================================
+CREATE TABLE IF NOT EXISTS holidays (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    holiday_date DATE NOT NULL,
+    holiday_name VARCHAR(200) NOT NULL,
+    holiday_name_mm VARCHAR(200) DEFAULT NULL,
+    note TEXT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_holiday_date (holiday_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

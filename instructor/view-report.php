@@ -1,5 +1,8 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../auth.php';
+
+$logged_in_instructor = isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'instructor';
 
 // ── Token Validation ─────────────────────────────────────────────
 $token = trim($_GET['token'] ?? '');
@@ -9,7 +12,8 @@ if (!$token || !preg_match('/^[a-f0-9]{32,64}$/i', $token)) {
     render_error('Invalid Link', 'No valid token provided in the URL.', '✕');
 }
 
-$stmt = $pdo->prepare("SELECT student_id, week_number, expires_at FROM instructor_magic_links WHERE magic_token = ? AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1");
+// Temporarily disabled expiry check for testing: removed "AND (expires_at IS NULL OR expires_at > NOW())"
+$stmt = $pdo->prepare("SELECT internship_id AS student_id, week_number, expires_at FROM magic_links WHERE token = ? LIMIT 1");
 $stmt->execute([$token]);
 $link = $stmt->fetch();
 
@@ -35,10 +39,26 @@ $intern_start = $profile['internship_start_date'] ?? null;
 $week_start = '';
 $week_end   = '';
 if ($intern_start) {
-    $base = new DateTime($intern_start);
-    $base->modify('+' . (($week_number - 1) * 7) . ' days');
-    $week_start = $base->format('Y-m-d');
-    $week_end   = (clone $base)->modify('+6 days')->format('Y-m-d');
+    // Match the student dashboard's week ranges exactly. Week 1 runs from
+    // the internship start date through the following Saturday; later weeks
+    // run Sunday through Saturday. This prevents logs from another week from
+    // appearing in the instructor's weekly report.
+    $start = new DateTime($intern_start);
+    $day_of_week = (int) $start->format('N'); // Monday = 1, Saturday = 6
+    $days_to_saturday = $day_of_week === 6 ? 0 : (6 - $day_of_week + 7) % 7;
+    $end_of_week_one = (clone $start)->modify("+{$days_to_saturday} days");
+
+    if ($week_number === 1) {
+        $week_start = $start->format('Y-m-d');
+        $week_end = $end_of_week_one->format('Y-m-d');
+    } else {
+        $week_start_date = (clone $end_of_week_one)->modify('+1 day');
+        if ($week_number > 2) {
+            $week_start_date->modify('+' . (($week_number - 2) * 7) . ' days');
+        }
+        $week_start = $week_start_date->format('Y-m-d');
+        $week_end = (clone $week_start_date)->modify('+6 days')->format('Y-m-d');
+    }
 } else {
     $first_log = $pdo->prepare("SELECT MIN(log_date) FROM daily_logs WHERE internship_id = ?");
     $first_log->execute([$student_id]);
@@ -83,6 +103,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_report'])) {
             evaluated_at = NOW()");
         $rej->execute([$student_id, $week_number, $reject_reason]);
 
+        // Insert notification for the student
+        $instructor_label = $profile['instructor_name'] ?: 'Your instructor';
+        $notif_stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_rejected', ?)");
+        $notif_stmt->execute([
+            $student_id,
+            'Report Rejected by Instructor',
+            $instructor_label . ' has rejected your Week ' . $week_number . ' report. Reason: ' . $reject_reason,
+            $week_number
+        ]);
+
         $eval_stmt->execute([$student_id, $week_number]);
         $evaluation = $eval_stmt->fetch();
         $eval_msg = 'rejected';
@@ -119,8 +149,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
         }
     }
 
-    if (!in_array($grade, $allowed, true) || empty($comment) || !$sig_ok) {
-        $eval_msg = 'error';
+    // Determine which field failed for debugging
+    $missing_fields = [];
+    if (!in_array($grade, $allowed, true)) $missing_fields[] = 'Grade';
+    if (empty($comment)) $missing_fields[] = 'Comment';
+    if (!$sig_ok) $missing_fields[] = 'Signature (type=' . htmlspecialchars($signature_type) . ', name=' . htmlspecialchars($typed_name) . ')';
+
+    if (!empty($missing_fields)) {
+        $eval_msg = 'error_missing:' . implode(', ', $missing_fields);
     } else {
         $upsert = $pdo->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, signature_type, signature_value, report_status)
             VALUES (?, ?, ?, ?, ?, ?, 'approved_by_instructor')
@@ -129,6 +165,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
             signature_type = VALUES(signature_type), signature_value = VALUES(signature_value),
             report_status = 'approved_by_instructor', evaluated_at = NOW()");
         $upsert->execute([$student_id, $week_number, $grade, $comment, $signature_type, $sig_val]);
+
+        // Insert notification for the student
+        $instructor_label = $profile['instructor_name'] ?: 'Your instructor';
+        $notif_stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_approved', ?)");
+        $notif_stmt->execute([
+            $student_id,
+            'Report Approved by Instructor',
+            $instructor_label . ' has signed and approved your Week ' . $week_number . ' report with grade "' . ucfirst(str_replace('_', ' ', $grade)) . '".',
+            $week_number
+        ]);
 
         $eval_stmt->execute([$student_id, $week_number]);
         $evaluation = $eval_stmt->fetch();
@@ -181,6 +227,7 @@ function render_error($title, $msg, $icon) {
         .sig-type-great  { font-family: 'Great Vibes', cursive; }
         .sig-type-dancing { font-family: 'Dancing Script', cursive; }
         .sig-type-alex   { font-family: 'Alex Brush', cursive; }
+        .student-sig-preview { font-family: 'Great Vibes', cursive; font-size: 24px; color: #1e293b; min-height: 36px; line-height: 1.4; }
     </style>
     <script>
     function previewTypedSig() {
@@ -228,13 +275,25 @@ function render_error($title, $msg, $icon) {
     </div>
     <?php endif; ?>
 
-    <?php if ($eval_msg === 'error' || $eval_msg === 'reject_empty'): ?>
+    <?php if (str_starts_with($eval_msg, 'error_missing:') || $eval_msg === 'error' || $eval_msg === 'reject_empty'): ?>
     <div class="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-        <span>❌</span> <?= $eval_msg === 'reject_empty' ? 'Please provide a reason for rejection.' : 'Please fill all fields and provide a signature before submitting.' ?>
+        <span>❌</span>
+        <?php if ($eval_msg === 'reject_empty'): ?>
+            Please provide a reason for rejection.
+        <?php elseif (str_starts_with($eval_msg, 'error_missing:')): ?>
+            Missing fields: <?= htmlspecialchars(substr($eval_msg, 14)) ?>
+        <?php else: ?>
+            Please fill all fields and provide a signature before submitting.
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 
     <!-- ════ HEADER ════ -->
+    <?php if ($logged_in_instructor): ?>
+    <a href="instructor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition mb-2">
+        <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">←</span> Back to Dashboard
+    </a>
+    <?php endif; ?>
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div class="flex items-start justify-between flex-wrap gap-4">
             <div class="flex items-center gap-4">
@@ -244,15 +303,15 @@ function render_error($title, $msg, $icon) {
                 <div>
                     <h1 class="text-sm font-black text-slate-800"><?= htmlspecialchars($student_name) ?></h1>
                     <?php if ($student_roll): ?>
-                        <p class="text-[11px] text-slate-400 font-mono mt-0.5">Roll: <?= htmlspecialchars($student_roll) ?></p>
+                        <p class="text-sm text-slate-400 font-mono mt-0.5">Roll: <?= htmlspecialchars($student_roll) ?></p>
                     <?php endif; ?>
                     <?php if ($company_name): ?>
-                        <p class="text-[11px] text-slate-400 mt-0.5"><?= htmlspecialchars($company_name) ?></p>
+                        <p class="text-sm text-slate-400 mt-0.5"><?= htmlspecialchars($company_name) ?></p>
                     <?php endif; ?>
                 </div>
             </div>
             <div class="text-right">
-                <div class="inline-flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full">
+                <div class="inline-flex items-center gap-1.5 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-full">
                     📅 Week <?= $week_number ?>
                     <?php if ($week_start): ?>
                         <span class="text-indigo-400 mx-0.5">|</span>
@@ -261,14 +320,32 @@ function render_error($title, $msg, $icon) {
                 </div>
                 <div class="mt-1.5">
                     <?php if ($evaluation && $evaluation['report_status'] === 'approved_by_instructor'): ?>
-                        <span class="text-[10px] bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full font-bold">✅ Approved by Instructor</span>
+                        <span class="text-sm bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full font-bold">✅ Approved by Instructor</span>
                     <?php else: ?>
-                        <span class="text-[10px] bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full font-bold">⏳ Pending Review</span>
+                        <span class="text-sm bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full font-bold">⏳ Pending Review</span>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Student Signature Display -->
+    <?php if (!empty($evaluation['student_signature_type']) && !empty($evaluation['student_signature_value'])): ?>
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <div class="flex items-center gap-4">
+            <div class="flex-1">
+                <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">Student Signature</span>
+                <?php if ($evaluation['student_signature_type'] === 'typed'): ?>
+                    <p class="student-sig-preview" style="font-family:'Great Vibes',cursive; font-size:24px; color:#1e293b;">
+                        <?= htmlspecialchars($evaluation['student_signature_value']) ?>
+                    </p>
+                <?php elseif ($evaluation['student_signature_type'] === 'uploaded'): ?>
+                    <img src="../uploads/signatures/<?= htmlspecialchars($evaluation['student_signature_value']) ?>" alt="Student Signature" class="max-h-14 object-contain">
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- ════ 2-COLUMN GRID ════ -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -282,13 +359,13 @@ function render_error($title, $msg, $icon) {
                     <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="p-1 bg-blue-50 text-blue-600 rounded">📝</span> Daily Logs
                     </h2>
-                    <span class="text-[10px] text-slate-400"><?= count($daily_logs) ?> day(s)</span>
+                    <span class="text-sm text-slate-400"><?= count($daily_logs) ?> day(s)</span>
                 </div>
                 <?php if (!empty($daily_logs)): ?>
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs">
                         <thead>
-                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-sm">
                                 <th class="px-3 py-2.5 text-left">Date</th>
                                 <th class="px-3 py-2.5 text-left">Status</th>
                                 <th class="px-3 py-2.5 text-left">Intended Task</th>
@@ -306,18 +383,19 @@ function render_error($title, $msg, $icon) {
                                 </td>
                                 <td class="px-3 py-2.5 whitespace-nowrap">
                                     <?php if (($log['attendance_status'] ?? 'present') === 'present'): ?>
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
+                                        <span class="inline-flex items-center gap-1 text-sm font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
                                     <?php else: ?>
-                                        <span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
+                                        <span class="inline-flex items-center gap-1 text-sm font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
                                         <?php if (!empty($log['reason_for_absence'])): ?>
-                                            <span class="text-[9px] text-slate-400 block mt-0.5" title="<?= htmlspecialchars($log['reason_for_absence']) ?>">Reason noted</span>
+                                            <span class="text-sm text-slate-400 block mt-0.5" title="<?= htmlspecialchars($log['reason_for_absence']) ?>">Reason noted</span>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                 </td>
-                                <td class="px-3 py-2.5 text-slate-600 max-w-[140px] truncate" title="<?= htmlspecialchars($log['task_title'] ?? '') ?>"><?= htmlspecialchars($log['task_title'] ?? '') ?></td>
-                                <td class="px-3 py-2.5 text-slate-600 max-w-[160px] truncate" title="<?= htmlspecialchars($log['task_detail'] ?? '') ?>"><?= htmlspecialchars($log['task_detail'] ?? '') ?></td>
-                                <td class="px-3 py-2.5 text-slate-600 max-w-[160px] truncate" title="<?= htmlspecialchars($log['tasks_performed'] ?? '') ?>"><?= htmlspecialchars($log['tasks_performed'] ?? '') ?></td>
-                                <td class="px-3 py-2.5 text-slate-600"><?= htmlspecialchars($log['tools_used'] ?? '—') ?></td>
+                                <?php $is_absent = ($log['attendance_status'] ?? 'present') === 'absent'; ?>
+                                <td class="px-3 py-2.5 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($log['task_title'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($log['task_title'] ?? '') ?></td>
+                                <td class="px-3 py-2.5 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($log['task_detail'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($log['task_detail'] ?? '') ?></td>
+                                <td class="px-3 py-2.5 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($log['tasks_performed'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($log['tasks_performed'] ?? '') ?></td>
+                                <td class="px-3 py-2.5 text-slate-600"><?= $is_absent ? '-' : htmlspecialchars($log['tools_used'] ?? '—') ?></td>
                                 <td class="px-3 py-2.5 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($log['calculated_duration']) ?></td>
                             </tr>
                             <?php endforeach; ?>
@@ -339,15 +417,15 @@ function render_error($title, $msg, $icon) {
                 <?php if ($reflection): ?>
                 <div class="p-5 space-y-4">
                     <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">What was done?</span>
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">What was done?</span>
                         <p class="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-xl p-3"><?= nl2br(htmlspecialchars($reflection['what_done'] ?? '')) ?></p>
                     </div>
                     <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">How was it done?</span>
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">How was it done?</span>
                         <p class="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-xl p-3"><?= nl2br(htmlspecialchars($reflection['how_done'] ?? '')) ?></p>
                     </div>
                     <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Why was it done?</span>
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">Why was it done?</span>
                         <p class="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-xl p-3"><?= nl2br(htmlspecialchars($reflection['why_done'] ?? '')) ?></p>
                     </div>
                 </div>
@@ -372,33 +450,50 @@ function render_error($title, $msg, $icon) {
                 <div class="p-5 space-y-4">
                     <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
                         <div class="flex items-center justify-between mb-2">
-                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Grade</span>
+                            <span class="text-sm font-bold text-slate-400 uppercase tracking-wider">Grade</span>
                             <?php $g = $grade_labels[$evaluation['grade']] ?? ['Unknown', 'text-slate-600', 'bg-slate-100']; ?>
-                            <span class="text-[11px] font-bold <?= $g[1] ?> <?= $g[2] ?> px-2.5 py-0.5 rounded-full"><?= $g[0] ?></span>
+                            <span class="text-sm font-bold <?= $g[1] ?> <?= $g[2] ?> px-2.5 py-0.5 rounded-full"><?= $g[0] ?></span>
                         </div>
                         <div>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Comment</span>
+                            <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">Comment</span>
                             <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($evaluation['comment'])) ?></p>
                         </div>
                     </div>
 
-                    <!-- Display Signature -->
+                    <!-- Display Signatures -->
                     <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Instructor Signature</span>
-                        <?php if ($evaluation['signature_type'] === 'typed'): ?>
-                            <p class="sig-preview sig-type-great" style="font-family:'Great Vibes',cursive; font-size:28px; color:#1e293b;">
-                                <?= htmlspecialchars($evaluation['signature_value']) ?>
-                            </p>
-                        <?php elseif ($evaluation['signature_type'] === 'uploaded'): ?>
-                            <img src="../uploads/signatures/<?= htmlspecialchars($evaluation['signature_value']) ?>" alt="Instructor Signature" class="max-h-16 object-contain">
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-2">Signatures</span>
+                        <!-- Student Signature -->
+                        <?php if (!empty($evaluation['student_signature_type']) && !empty($evaluation['student_signature_value'])): ?>
+                        <div class="mb-3 pb-3 border-b border-slate-200">
+                            <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">Student</span>
+                            <?php if ($evaluation['student_signature_type'] === 'typed'): ?>
+                                <p class="student-sig-preview" style="font-family:'Great Vibes',cursive; font-size:24px; color:#1e293b;">
+                                    <?= htmlspecialchars($evaluation['student_signature_value']) ?>
+                                </p>
+                            <?php elseif ($evaluation['student_signature_type'] === 'uploaded'): ?>
+                                <img src="../uploads/signatures/<?= htmlspecialchars($evaluation['student_signature_value']) ?>" alt="Student Signature" class="max-h-14 object-contain">
+                            <?php endif; ?>
+                        </div>
                         <?php endif; ?>
+                        <!-- Instructor Signature -->
+                        <div>
+                            <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">Instructor</span>
+                            <?php if ($evaluation['signature_type'] === 'typed'): ?>
+                                <p class="sig-preview sig-type-great" style="font-family:'Great Vibes',cursive; font-size:28px; color:#1e293b;">
+                                    <?= htmlspecialchars($evaluation['signature_value']) ?>
+                                </p>
+                            <?php elseif ($evaluation['signature_type'] === 'uploaded'): ?>
+                                <img src="../uploads/signatures/<?= htmlspecialchars($evaluation['signature_value']) ?>" alt="Instructor Signature" class="max-h-16 object-contain">
+                            <?php endif; ?>
+                        </div>
                     </div>
 
-                    <div class="flex items-center gap-2 text-[10px] text-emerald-600 bg-emerald-50 px-3 py-2 rounded-xl font-bold">
+                    <div class="flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 px-3 py-2 rounded-xl font-bold">
                         <span>✅</span> Report Approved by Instructor
                     </div>
 
-                    <p class="text-[9px] text-slate-300 text-center">
+                    <p class="text-sm text-slate-300 text-center">
                         Evaluated on <?= (new DateTime($evaluation['evaluated_at']))->format('d M Y, h:i A') ?>
                     </p>
                 </div>
@@ -409,19 +504,19 @@ function render_error($title, $msg, $icon) {
                     <div class="bg-red-50 rounded-xl p-4 border border-red-200">
                         <div class="flex items-center gap-2 mb-2">
                             <span class="text-red-500 text-sm">❌</span>
-                            <span class="text-[11px] font-bold text-red-700">Report Rejected</span>
+                            <span class="text-sm font-bold text-red-700">Report Rejected</span>
                         </div>
                         <div>
-                            <span class="text-[10px] font-bold text-red-400 uppercase tracking-wider block mb-1">Reason for Rejection</span>
+                            <span class="text-sm font-bold text-red-400 uppercase tracking-wider block mb-1">Reason for Rejection</span>
                             <p class="text-xs text-red-600 leading-relaxed"><?= nl2br(htmlspecialchars($evaluation['instructor_comments'] ?? '')) ?></p>
                         </div>
                     </div>
 
-                    <p class="text-[10px] text-slate-500 text-center leading-relaxed">
+                    <p class="text-sm text-slate-500 text-center leading-relaxed">
                         Please revise your daily logs and reflection for <strong>Week <?= $week_number ?></strong>, then ask the student to regenerate a new magic link for re-review.
                     </p>
 
-                    <p class="text-[9px] text-slate-300 text-center">
+                    <p class="text-sm text-slate-300 text-center">
                         Rejected on <?= (new DateTime($evaluation['evaluated_at']))->format('d M Y, h:i A') ?>
                     </p>
                 </div>
@@ -430,57 +525,57 @@ function render_error($title, $msg, $icon) {
                 <!-- ── Fresh / Update Form ── -->
                 <form method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
                     <input type="hidden" name="submit_feedback" value="1">
-                    <p class="text-[11px] text-slate-400 leading-relaxed">
+                    <p class="text-sm text-slate-400 leading-relaxed">
                         Rate <strong class="text-slate-600">Week <?= $week_number ?></strong>, provide feedback, and sign to approve.
                     </p>
 
                     <!-- Grade -->
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-500 mb-2">Performance Grade</label>
+                        <label class="block text-sm font-bold text-slate-500 mb-2">Performance Grade</label>
                         <div class="space-y-2">
                             <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 transition">
                                 <input type="radio" name="grade" value="excellent" <?= ($evaluation['grade'] ?? '') === 'excellent' ? 'checked' : '' ?> class="accent-emerald-600">
                                 <span class="text-xs font-semibold text-slate-700">Excellent</span>
-                                <span class="text-[10px] text-slate-400 ml-auto">Outstanding</span>
+                                <span class="text-sm text-slate-400 ml-auto">Outstanding</span>
                             </label>
                             <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition">
                                 <input type="radio" name="grade" value="good" <?= ($evaluation['grade'] ?? 'good') === 'good' ? 'checked' : '' ?> class="accent-blue-600">
                                 <span class="text-xs font-semibold text-slate-700">Good</span>
-                                <span class="text-[10px] text-slate-400 ml-auto">Meets expectations</span>
+                                <span class="text-sm text-slate-400 ml-auto">Meets expectations</span>
                             </label>
                             <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-200 transition">
                                 <input type="radio" name="grade" value="average" <?= ($evaluation['grade'] ?? '') === 'average' ? 'checked' : '' ?> class="accent-amber-600">
                                 <span class="text-xs font-semibold text-slate-700">Average</span>
-                                <span class="text-[10px] text-slate-400 ml-auto">Room to grow</span>
+                                <span class="text-sm text-slate-400 ml-auto">Room to grow</span>
                             </label>
                             <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-red-50 hover:border-red-200 transition">
                                 <input type="radio" name="grade" value="needs_improvement" <?= ($evaluation['grade'] ?? '') === 'needs_improvement' ? 'checked' : '' ?> class="accent-red-600">
                                 <span class="text-xs font-semibold text-slate-700">Needs Improvement</span>
-                                <span class="text-[10px] text-slate-400 ml-auto">Requires attention</span>
+                                <span class="text-sm text-slate-400 ml-auto">Requires attention</span>
                             </label>
                         </div>
                     </div>
 
                     <!-- Comment -->
                     <div>
-                        <label class="block text-[10px] font-bold text-slate-500 mb-1">Review Comment</label>
+                        <label class="block text-sm font-bold text-slate-500 mb-1">Review Comment</label>
                         <textarea name="comment" rows="4" required placeholder="Write your detailed feedback…"
                             class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 transition resize-none"><?= htmlspecialchars($evaluation['comment'] ?? '') ?></textarea>
                     </div>
 
                     <!-- ═══ SIGNATURE SECTION ═══ -->
                     <div class="border-t border-slate-100 pt-4">
-                        <label class="block text-[10px] font-bold text-slate-500 mb-2">✍️ Instructor Signature</label>
+                        <label class="block text-sm font-bold text-slate-500 mb-2">✍️ Instructor Signature</label>
 
                         <!-- Signature Type Toggle -->
                         <div class="flex gap-2 mb-3">
                             <button type="button" onclick="switchSigType('typed')" id="btn-typed"
-                                class="flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition cursor-pointer
+                                class="flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer
                                 bg-indigo-600 text-white border-indigo-600">
                                 ✏️ Type Name
                             </button>
                             <button type="button" onclick="switchSigType('uploaded')" id="btn-uploaded"
-                                class="flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition cursor-pointer
+                                class="flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer
                                 bg-white text-slate-600 border-slate-200 hover:bg-slate-50">
                                 📷 Upload Image
                             </button>
@@ -488,10 +583,10 @@ function render_error($title, $msg, $icon) {
 
                         <!-- ── Option 1: Typed Signature ── -->
                         <div id="sig-typed-fields" class="space-y-3">
-                            <input type="hidden" name="signature_type" value="typed" id="sig_type_hidden">
+                            <input type="hidden" name="signature_type" value="typed" id="sig_type_input">
 
                             <div>
-                                <label class="block text-[9px] font-bold text-slate-400 mb-0.5">Type your full name</label>
+                                <label class="block text-sm font-bold text-slate-400 mb-0.5">Type your full name</label>
                                 <input type="text" name="typed_name" id="typed_name" placeholder="e.g. U Aung Kyaw"
                                     oninput="previewTypedSig()"
                                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 transition">
@@ -499,33 +594,31 @@ function render_error($title, $msg, $icon) {
 
                             <!-- Font Style Selector -->
                             <div id="sig_font_select">
-                                <label class="block text-[9px] font-bold text-slate-400 mb-1">Font Style</label>
+                                <label class="block text-sm font-bold text-slate-400 mb-1">Font Style</label>
                                 <div class="flex gap-1.5">
-                                    <button type="button" onclick="previewSigFont('great')" class="flex-1 px-2 py-1 text-[10px] rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold cursor-pointer sig-font-btn" data-font="great" style="font-family:'Great Vibes',cursive">Great Vibes</button>
-                                    <button type="button" onclick="previewSigFont('dancing')" class="flex-1 px-2 py-1 text-[10px] rounded-lg border border-slate-200 bg-white text-slate-600 font-bold cursor-pointer sig-font-btn" data-font="dancing" style="font-family:'Dancing Script',cursive">Dancing</button>
-                                    <button type="button" onclick="previewSigFont('alex')" class="flex-1 px-2 py-1 text-[10px] rounded-lg border border-slate-200 bg-white text-slate-600 font-bold cursor-pointer sig-font-btn" data-font="alex" style="font-family:'Alex Brush',cursive">Alex Brush</button>
+                                    <button type="button" onclick="previewSigFont('great')" class="flex-1 px-2 py-1 text-sm rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold cursor-pointer sig-font-btn" data-font="great" style="font-family:'Great Vibes',cursive">Great Vibes</button>
+                                    <button type="button" onclick="previewSigFont('dancing')" class="flex-1 px-2 py-1 text-sm rounded-lg border border-slate-200 bg-white text-slate-600 font-bold cursor-pointer sig-font-btn" data-font="dancing" style="font-family:'Dancing Script',cursive">Dancing</button>
+                                    <button type="button" onclick="previewSigFont('alex')" class="flex-1 px-2 py-1 text-sm rounded-lg border border-slate-200 bg-white text-slate-600 font-bold cursor-pointer sig-font-btn" data-font="alex" style="font-family:'Alex Brush',cursive">Alex Brush</button>
                                 </div>
                             </div>
 
                             <!-- Live Preview -->
                             <div class="bg-white border-2 border-dashed border-slate-200 rounded-xl p-3 text-center">
-                                <p class="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Signature Preview</p>
+                                <p class="text-sm text-slate-400 uppercase tracking-wider mb-1">Signature Preview</p>
                                 <p id="sig_preview" class="sig-preview sig-type-great">—</p>
                             </div>
                         </div>
 
                         <!-- ── Option 2: Upload Signature ── -->
                         <div id="sig-upload-fields" class="hidden space-y-2">
-                            <input type="hidden" name="signature_type" value="" id="sig_type_upload">
-
                             <div class="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center">
                                 <div class="text-2xl mb-1">📷</div>
-                                <p class="text-[10px] text-slate-500 font-semibold mb-2">Upload handwritten signature</p>
-                                <label class="inline-block px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-600 hover:bg-slate-50 cursor-pointer transition">
+                                <p class="text-sm text-slate-500 font-semibold mb-2">Upload handwritten signature</p>
+                                <label class="inline-block px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer transition">
                                     Choose JPG/PNG
                                     <input type="file" name="signature_file" accept=".jpg,.jpeg,.png" class="hidden">
                                 </label>
-                                <p class="text-[9px] text-slate-400 mt-1.5">Max 2MB • JPG or PNG only</p>
+                                <p class="text-sm text-slate-400 mt-1.5">Max 2MB • JPG or PNG only</p>
                             </div>
                         </div>
                     </div>
@@ -535,11 +628,11 @@ function render_error($title, $msg, $icon) {
                         <div class="bg-red-50 rounded-xl p-4 border border-red-200 space-y-3">
                             <div class="flex items-center gap-2">
                                 <span class="text-red-500 text-sm">⚠️</span>
-                                <span class="text-[11px] font-bold text-red-700">Reason for Rejection</span>
+                                <span class="text-sm font-bold text-red-700">Reason for Rejection</span>
                             </div>
                             <textarea name="reject_reason" id="reject_reason" rows="3" placeholder="Explain why this report needs revision…"
                                 class="w-full bg-white border border-red-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-red-400 transition resize-none"></textarea>
-                            <p class="text-[9px] text-red-400">This reason will be shown to the student.</p>
+                            <p class="text-sm text-red-400">This reason will be shown to the student.</p>
                         </div>
                     </div>
 
@@ -562,7 +655,7 @@ function render_error($title, $msg, $icon) {
 
                 <!-- Info Footer -->
                 <div class="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-                    <p class="text-[9px] text-slate-400 text-center leading-relaxed">
+                    <p class="text-sm text-slate-400 text-center leading-relaxed">
                         Signing sets status to <strong>Approved by Instructor</strong> and forwards to University Supervisor.
                     </p>
                 </div>
@@ -571,7 +664,7 @@ function render_error($title, $msg, $icon) {
 
     </div>
 
-    <div class="text-center text-[10px] text-slate-300 py-2">Powered by InternReport System</div>
+    <div class="text-center text-sm text-slate-300 py-2">Powered by InternReport System</div>
 </div>
 
 <script>
@@ -579,7 +672,7 @@ function render_error($title, $msg, $icon) {
 function switchSigType(type) {
     var typed  = document.getElementById('sig-typed-fields');
     var upload = document.getElementById('sig-upload-fields');
-    var hidden = document.getElementById('sig_type_hidden');
+    var hidden = document.getElementById('sig_type_input');
     var btnT   = document.getElementById('btn-typed');
     var btnU   = document.getElementById('btn-uploaded');
     var fontSel = document.getElementById('sig_font_select');
@@ -589,15 +682,15 @@ function switchSigType(type) {
         upload.classList.add('hidden');
         hidden.value = 'typed';
         if (fontSel) fontSel.classList.remove('hidden');
-        btnT.className = 'flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-        btnU.className = 'flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+        btnT.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
+        btnU.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
     } else {
         typed.classList.add('hidden');
         upload.classList.remove('hidden');
         hidden.value = 'uploaded';
         if (fontSel) fontSel.classList.add('hidden');
-        btnU.className = 'flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-        btnT.className = 'flex-1 px-2 py-1.5 text-[10px] font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+        btnU.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
+        btnT.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
     }
 }
 

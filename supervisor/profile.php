@@ -184,7 +184,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     <aside class="w-56 bg-white border-r border-slate-200 flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-slate-100">
             <span class="text-sm font-black text-slate-800 tracking-tight">📋 InternReport</span>
-            <span class="ml-2 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">SUPERVISOR</span>
+            <span class="ml-2 text-sm font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">SUPERVISOR</span>
         </div>
         <nav class="flex-1 py-4 space-y-1 px-2">
             <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition">
@@ -242,8 +242,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                     </div>
                     <div>
                         <h2 class="text-sm font-black text-slate-800"><?= htmlspecialchars($sup['username']) ?></h2>
-                        <p class="text-[11px] text-slate-400 mt-0.5"><?= htmlspecialchars($sup['email']) ?></p>
-                        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded mt-1.5 inline-block">👨‍🏫 University Supervisor</span>
+                        <p class="text-sm text-slate-400 mt-0.5"><?= htmlspecialchars($sup['email']) ?></p>
+                        <span class="text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded mt-1.5 inline-block">👨‍🏫 University Supervisor</span>
                     </div>
                 </div>
 
@@ -277,9 +277,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                                 </div>
                             <?php endif; ?>
                             <div class="flex-1">
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Upload New Picture</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Upload New Picture</label>
                                 <input type="file" name="avatar" accept="image/jpeg,image/png" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 file:cursor-pointer">
-                                <p class="text-[9px] text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
+                                <p class="text-sm text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
                             </div>
                         </div>
                         <div class="flex justify-end pt-3">
@@ -299,15 +299,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <input type="hidden" name="update_portfolio" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">GitHub Link</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">GitHub Link</label>
                                 <input type="url" name="github_link" value="<?= htmlspecialchars($github_link) ?>" placeholder="https://github.com/username" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">LinkedIn Link</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">LinkedIn Link</label>
                                 <input type="url" name="linkedin_link" value="<?= htmlspecialchars($linkedin_link) ?>" placeholder="https://linkedin.com/in/username" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div class="sm:col-span-2">
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Personal Portfolio Website Link</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Personal Portfolio Website Link</label>
                                 <input type="url" name="portfolio_link" value="<?= htmlspecialchars($portfolio_link) ?>" placeholder="https://yourportfolio.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                         </div>
@@ -329,14 +329,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                                 <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-[10px] font-bold text-slate-500 uppercase">Account Status</p>
+                                    <p class="text-sm font-bold text-slate-500 uppercase">Account Status</p>
                                     <p class="text-xs font-semibold text-emerald-600">Active</p>
                                 </div>
                             </div>
                             <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
                                 <span class="w-2.5 h-2.5 bg-blue-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-[10px] font-bold text-slate-500 uppercase">Last Login Detected</p>
+                                    <p class="text-sm font-bold text-slate-500 uppercase">Last Login Detected</p>
                                     <?php if ($last_login_at): ?>
                                         <p class="text-xs font-semibold text-slate-700"><?= date('d M Y, h:i A', strtotime($last_login_at)) ?></p>
                                     <?php else: ?>
@@ -359,15 +359,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <input type="hidden" name="update_profile" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Full Name</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Full Name</label>
                                 <input type="text" name="new_name" value="<?= htmlspecialchars($sup['username']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Email Address</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Email Address</label>
                                 <input type="email" name="new_email" value="<?= htmlspecialchars($sup['email']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Role</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Role</label>
                                 <div class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 font-semibold cursor-default select-none">
                                     👨‍🏫 University Supervisor
                                 </div>
@@ -390,16 +390,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <input type="hidden" name="change_password" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Current Password</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Current Password</label>
                                 <input type="password" name="current_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">New Password</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
                                 <input type="password" name="new_password" required minlength="8" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                                <p class="text-[9px] text-slate-400 mt-0.5">Min 8 characters</p>
+                                <p class="text-sm text-slate-400 mt-0.5">Min 8 characters</p>
                             </div>
                             <div>
-                                <label class="block text-[10px] font-bold text-slate-500 mb-1">Confirm New Password</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>
                                 <input type="password" name="confirm_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                         </div>

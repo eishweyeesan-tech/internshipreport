@@ -119,7 +119,7 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
 <div class="max-w-5xl mx-auto space-y-6">
 
     <!-- Back Link -->
-    <a href="<?= htmlspecialchars($back_url) ?>" class="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-700 transition">
+    <a href="<?= htmlspecialchars($back_url) ?>" class="inline-flex items-center gap-1.5 text-sm font-bold text-slate-500 hover:text-slate-700 transition">
         ← Back to Dashboard
     </a>
 
@@ -132,22 +132,22 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
                 </div>
                 <div>
                     <h1 class="text-sm font-black text-slate-800"><?= htmlspecialchars($student_name) ?></h1>
-                    <p class="text-[11px] text-slate-400 font-mono mt-0.5">Roll: <?= htmlspecialchars($student['student_roll'] ?: '—') ?> · <?= htmlspecialchars($student['email']) ?></p>
+                    <p class="text-sm text-slate-400 font-mono mt-0.5">Roll: <?= htmlspecialchars($student['student_roll'] ?: '—') ?> · <?= htmlspecialchars($student['email']) ?></p>
                     <div class="flex items-center gap-2 mt-1.5 flex-wrap">
                         <?php if ($student['company_name']): ?>
-                            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"><?= htmlspecialchars($student['company_name']) ?></span>
+                            <span class="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"><?= htmlspecialchars($student['company_name']) ?></span>
                         <?php endif; ?>
                         <?php if ($student['academic_year']): ?>
-                            <span class="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($student['academic_year']) ?></span>
+                            <span class="text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($student['academic_year']) ?></span>
                         <?php endif; ?>
                         <?php if ($student['supervisor_name']): ?>
-                            <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Sup: <?= htmlspecialchars($student['supervisor_name']) ?></span>
+                            <span class="text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Sup: <?= htmlspecialchars($student['supervisor_name']) ?></span>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
             <div class="text-right">
-                <p class="text-[10px] text-slate-400">Member since <?= (new DateTime($student['created_at']))->format('d M Y') ?></p>
+                <p class="text-sm text-slate-400">Member since <?= (new DateTime($student['created_at']))->format('d M Y') ?></p>
             </div>
         </div>
     </div>
@@ -156,19 +156,19 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
             <p class="text-2xl font-black text-slate-800"><?= $total_logs ?></p>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Logs</p>
+            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Total Logs</p>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
             <p class="text-2xl font-black text-emerald-600"><?= $total_present ?></p>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Present Days</p>
+            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Present Days</p>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
             <p class="text-2xl font-black text-red-500"><?= $total_absent ?></p>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Absent Days</p>
+            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Absent Days</p>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
             <p class="text-2xl font-black text-indigo-600"><?= $total_weeks ?></p>
-            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Weeks Logged</p>
+            <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Weeks Logged</p>
         </div>
     </div>
 
@@ -193,13 +193,13 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
                 <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider">
                     📅 Week <?= $wn ?>
                 </h2>
-                <span class="text-[10px] text-slate-400">
+                <span class="text-sm text-slate-400">
                     <?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M Y') ?>
                 </span>
             </div>
             <div class="flex items-center gap-2">
-                <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $week_present ?></span>
-                <span class="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $week_absent ?></span>
+                <span class="text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $week_present ?></span>
+                <span class="text-sm font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $week_absent ?></span>
                 <?php if ($week_eval): ?>
                     <?php
                     $gmap = [
@@ -210,7 +210,7 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
                     ];
                     $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
                     ?>
-                    <span class="text-[10px] font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                    <span class="text-sm font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
                 <?php endif; ?>
             </div>
         </div>
@@ -219,11 +219,11 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
             <!-- Daily Logs -->
             <?php if (!empty($week_logs)): ?>
             <div>
-                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">📝 Daily Logs</h3>
+                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">📝 Daily Logs</h3>
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs">
                         <thead>
-                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-sm">
                                 <th class="px-3 py-2 text-left">Date</th>
                                 <th class="px-3 py-2 text-left">Status</th>
                                 <th class="px-3 py-2 text-left">Task</th>
@@ -240,17 +240,18 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
                                 </td>
                                 <td class="px-3 py-2 whitespace-nowrap">
                                     <?php if ($wl['attendance_status'] === 'present'): ?>
-                                        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
+                                        <span class="text-sm font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
                                     <?php else: ?>
-                                        <span class="text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
+                                        <span class="text-sm font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
                                         <?php if (!empty($wl['reason_for_absence'])): ?>
-                                            <span class="text-[9px] text-slate-400 block mt-0.5" title="<?= htmlspecialchars($wl['reason_for_absence']) ?>">Reason noted</span>
+                                            <span class="text-sm text-slate-400 block mt-0.5" title="<?= htmlspecialchars($wl['reason_for_absence']) ?>">Reason noted</span>
                                         <?php endif; ?>
                                     <?php endif; ?>
                                 </td>
-                                <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= htmlspecialchars($wl['task_title'] ?? '') ?>"><?= htmlspecialchars($wl['task_title'] ?: '—') ?></td>
-                                <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= htmlspecialchars($wl['task_detail'] ?? '') ?>"><?= htmlspecialchars($wl['task_detail'] ?: '—') ?></td>
-                                <td class="px-3 py-2 text-slate-600"><?= htmlspecialchars($wl['tools_used'] ?: '—') ?></td>
+                                <?php $is_absent = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
+                                <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($wl['task_title'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($wl['task_detail'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($wl['task_detail'] ?: '-') ?></td>
+                                <td class="px-3 py-2 text-slate-600"><?= $is_absent ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
                                 <td class="px-3 py-2 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
                             </tr>
                             <?php endforeach; ?>
@@ -259,25 +260,25 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
                 </div>
             </div>
             <?php else: ?>
-            <p class="text-[11px] text-slate-400 text-center py-2">No logs submitted for this week.</p>
+            <p class="text-sm text-slate-400 text-center py-2">No logs submitted for this week.</p>
             <?php endif; ?>
 
             <!-- Weekly Reflection -->
             <?php if ($week_ref): ?>
             <div class="border-t border-slate-100 pt-4">
-                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">📊 Weekly Reflection</h3>
+                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">📊 Weekly Reflection</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div class="bg-slate-50 rounded-xl p-3">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">What was done?</span>
-                        <p class="text-[11px] text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['what_done'] ?? '')) ?></p>
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-0.5">What was done?</span>
+                        <p class="text-sm text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['what_done'] ?? '')) ?></p>
                     </div>
                     <div class="bg-slate-50 rounded-xl p-3">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">How was it done?</span>
-                        <p class="text-[11px] text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['how_done'] ?? '')) ?></p>
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-0.5">How was it done?</span>
+                        <p class="text-sm text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['how_done'] ?? '')) ?></p>
                     </div>
                     <div class="bg-slate-50 rounded-xl p-3">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Why was it done?</span>
-                        <p class="text-[11px] text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['why_done'] ?? '')) ?></p>
+                        <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Why was it done?</span>
+                        <p class="text-sm text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['why_done'] ?? '')) ?></p>
                     </div>
                 </div>
             </div>
@@ -286,23 +287,23 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
             <!-- Evaluation -->
             <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
             <div class="border-t border-slate-100 pt-4">
-                <h3 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">⭐ Instructor Evaluation</h3>
+                <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">⭐ Instructor Evaluation</h3>
                 <div class="bg-slate-50 rounded-xl p-3 flex items-start gap-4">
                     <div class="flex-1">
                         <div class="flex items-center gap-2 mb-1">
                             <?php
                             $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
                             ?>
-                            <span class="text-[10px] font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
-                            <span class="text-[10px] font-bold <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
+                            <span class="text-sm font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                            <span class="text-sm font-bold <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
                         </div>
                         <?php if ($week_eval['comment']): ?>
-                            <p class="text-[11px] text-slate-600 leading-relaxed mt-1"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
+                            <p class="text-sm text-slate-600 leading-relaxed mt-1"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
                         <?php endif; ?>
                         <?php if ($week_eval['instructor_comments']): ?>
                             <div class="bg-red-50 border border-red-100 rounded-lg p-2 mt-2">
-                                <p class="text-[10px] font-bold text-red-500 mb-0.5">Rejection Reason:</p>
-                                <p class="text-[11px] text-red-600"><?= nl2br(htmlspecialchars($week_eval['instructor_comments'])) ?></p>
+                                <p class="text-sm font-bold text-red-500 mb-0.5">Rejection Reason:</p>
+                                <p class="text-sm text-red-600"><?= nl2br(htmlspecialchars($week_eval['instructor_comments'])) ?></p>
                             </div>
                         <?php endif; ?>
                         <?php if ($week_eval['signature_type'] === 'typed' && $week_eval['signature_value']): ?>
@@ -311,7 +312,7 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
                             <img src="uploads/signatures/<?= htmlspecialchars($week_eval['signature_value']) ?>" alt="Signature" class="h-10 mt-2">
                         <?php endif; ?>
                     </div>
-                    <span class="text-[9px] text-slate-300 shrink-0"><?= (new DateTime($week_eval['evaluated_at']))->format('d M Y') ?></span>
+                    <span class="text-sm text-slate-300 shrink-0"><?= (new DateTime($week_eval['evaluated_at']))->format('d M Y') ?></span>
                 </div>
             </div>
             <?php endif; ?>
@@ -324,7 +325,7 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
     </div>
     <?php endif; ?>
 
-    <div class="text-center text-[10px] text-slate-300 py-2">Powered by InternReport System</div>
+    <div class="text-center text-sm text-slate-300 py-2">Powered by InternReport System</div>
 </div>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">

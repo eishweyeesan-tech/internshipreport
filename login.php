@@ -14,6 +14,9 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
         case 'supervisor':
             header('Location: supervisor/supervisor-dashboard.php');
             break;
+        case 'instructor':
+            header('Location: instructor/instructor-dashboard.php');
+            break;
         default:
             header('Location: dashboard.php');
     }
@@ -61,6 +64,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 case 'supervisor':
                     header('Location: supervisor/supervisor-dashboard.php');
+                    break;
+                case 'instructor':
+                    header('Location: instructor/instructor-dashboard.php');
                     break;
                 default:
                     header('Location: dashboard.php');
@@ -203,25 +209,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <a href="index.php" class="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
                             ← Back to Home
                         </a>
-                    </div>
-
-                    <!-- Demo Credentials -->
-                    <div class="mt-8 p-4 bg-slate-50 rounded-xl border border-slate-200/60">
-                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Demo Credentials</p>
-                        <div class="space-y-2 text-xs text-slate-600">
-                            <div class="flex items-center justify-between">
-                                <span class="font-medium">Admin:</span>
-                                <code class="bg-slate-200 px-2 py-0.5 rounded font-mono">admin / password</code>
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <span class="font-medium">Supervisor:</span>
-                                <code class="bg-slate-200 px-2 py-0.5 rounded font-mono">supervisor1 / password</code>
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <span class="font-medium">Student:</span>
-                                <code class="bg-slate-200 px-2 py-0.5 rounded font-mono">john_doe / password</code>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>

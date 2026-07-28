@@ -13,6 +13,9 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
         case 'supervisor':
             header('Location: supervisor/supervisor-dashboard.php');
             break;
+        case 'instructor':
+            header('Location: instructor/instructor-dashboard.php');
+            break;
         default:
             header('Location: dashboard.php');
     }
@@ -280,7 +283,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 </p>
             </div>
 
-            <div class="grid lg:grid-cols-3 gap-8">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
                 <!-- Student Card -->
                 <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden card-hover transition-all duration-300">
                     <div class="h-2 bg-gradient-to-r from-indigo-500 to-indigo-600"></div>
@@ -336,6 +339,32 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                         <a href="login.php" class="block w-full text-center px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white font-bold rounded-xl shadow-lg shadow-purple-500/30 transition-all duration-200">
                             Supervisor Login →
                         </a>
+                    </div>
+                </div>
+
+                <!-- Instructor Card -->
+                <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden card-hover transition-all duration-300">
+                    <div class="h-2 bg-gradient-to-r from-amber-500 to-amber-600"></div>
+                    <div class="p-8">
+                        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-3xl text-white shadow-lg shadow-amber-500/30 mb-6">👨‍🏫</div>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-3">Instructors</h3>
+                        <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+                            Review student reports, provide feedback with digital signatures, and approve or reject submissions.
+                        </p>
+                        <ul class="space-y-3 mb-8">
+                            <li class="flex items-center gap-3 text-sm text-slate-600">
+                                <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">✓</span>
+                                Report review
+                            </li>
+                            <li class="flex items-center gap-3 text-sm text-slate-600">
+                                <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">✓</span>
+                                Digital signatures
+                            </li>
+                            <li class="flex items-center gap-3 text-sm text-slate-600">
+                                <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">✓</span>
+                                Approve / Reject
+                            </li>
+                        </ul>
                     </div>
                 </div>
 

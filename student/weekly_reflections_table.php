@@ -16,21 +16,21 @@
                     </div>
                     <div>
                         <span class="text-sm font-bold text-slate-700">Week <?= (int) $ref['week_number'] ?></span>
-                        <p class="text-[11px] text-slate-400">Weekly Reflection</p>
+                        <p class="text-sm text-slate-400">Weekly Reflection</p>
                     </div>
                 </div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                 <div class="bg-gradient-to-br from-slate-50 to-white border border-slate-100 rounded-xl p-4">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">❓ What was done?</span>
+                    <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-2">❓ What was done?</span>
                     <p class="text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($ref['what_done'] ?? '')) ?></p>
                 </div>
                 <div class="bg-gradient-to-br from-slate-50 to-white border border-slate-100 rounded-xl p-4">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">⚙️ How was it done?</span>
+                    <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-2">⚙️ How was it done?</span>
                     <p class="text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($ref['how_done'] ?? '')) ?></p>
                 </div>
                 <div class="bg-gradient-to-br from-slate-50 to-white border border-slate-100 rounded-xl p-4">
-                    <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">🎯 Why was it done?</span>
+                    <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-2">🎯 Why was it done?</span>
                     <p class="text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($ref['why_done'] ?? '')) ?></p>
                 </div>
             </div>
