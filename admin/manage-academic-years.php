@@ -99,7 +99,7 @@ if (!empty($selected_year['id'])) {
 
         <?php $pageTitle = 'Academic Year Management'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
 
             <!-- Success/Error Toast -->
             <div id="toast" class="hidden fixed top-6 right-6 z-[100] max-w-sm"></div>

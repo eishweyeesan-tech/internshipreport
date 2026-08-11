@@ -228,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
         <?php $pageTitle = 'Admin Profile Settings'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
             <div class="max-w-3xl mx-auto space-y-6">
 
                 <?php if ($msg): ?>

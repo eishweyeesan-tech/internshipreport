@@ -1204,7 +1204,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             <?= $wf_step1_done ? '✅' : '📝' ?>
                         </div>
                         <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Daily Logs</p>
-                        <p class="text-caption text-slate-400 text-center"><?= $weekly_log_count ?>/3 min</p>
+                        <p class="text-caption text-slate-400 text-center"><?= $weekly_log_count ?></p>
                     </div>
                     <div class="flex-1 h-0.5 <?= $wf_step2_done ? 'bg-emerald-400' : 'bg-slate-200/60 border-dashed border-slate-300/60' ?> rounded-full mx-1 mt-[-22px]"></div>
                     <!-- Step 2: Reflection -->

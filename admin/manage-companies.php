@@ -121,10 +121,10 @@ if (isset($_GET['edit'])) {
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <?php $pageTitle = 'Manage Companies'; require_once __DIR__ . '/../includes/topbar.php'; ?>
+        <?php $pageTitle = 'Companies'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
             <div class="max-w-6xl mx-auto space-y-6">
 
                 <?php if ($msg): ?>

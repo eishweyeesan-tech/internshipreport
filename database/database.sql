@@ -289,15 +289,22 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- TRIGGERS
 -- ============================================================
 
--- Enforce only one academic year has is_current = 1
+-- Enforce only one academic year has is_current = 1.
+-- NOTE: a trigger cannot issue UPDATE/INSERT/DELETE against the same table it
+-- fires on (MySQL error 1442), so this trigger only *guards* (SIGNAL) instead
+-- of rewriting sibling rows. The application's transition code
+-- (admin/transition_year.php) is responsible for the actual flip, using
+-- row-level locks and explicit clearing of the previous current year.
 DROP TRIGGER IF EXISTS trg_enforce_single_current_year;
 DELIMITER //
 CREATE TRIGGER trg_enforce_single_current_year
 BEFORE UPDATE ON academic_years
 FOR EACH ROW
 BEGIN
-    IF NEW.is_current = 1 AND OLD.is_current = 0 THEN
-        UPDATE academic_years SET is_current = 0 WHERE id != NEW.id AND is_current = 1;
+    IF NEW.is_current = 1 THEN
+        IF (SELECT COUNT(*) FROM academic_years WHERE is_current = 1 AND id <> NEW.id) > 0 THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only one academic year can be marked as current';
+        END IF;
     END IF;
 END //
 DELIMITER ;

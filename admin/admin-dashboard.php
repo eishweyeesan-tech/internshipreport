@@ -398,6 +398,7 @@ foreach ($recent_holiday_activity as $item) {
 $recent_announcement_activity = $pdo->query(
     "SELECT 'announcement' AS type, 'Announcement published' AS title, title AS detail, created_at
      FROM announcements
+     WHERE is_active = 1
      ORDER BY created_at DESC LIMIT 5"
 )->fetchAll();
 foreach ($recent_announcement_activity as $item) {
@@ -474,10 +475,10 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <?php $pageTitle = 'Admin Control Panel'; require_once __DIR__ . '/../includes/topbar.php'; ?>
+        <?php $pageTitle = 'Dashboard'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
 
             <?php if ($msg): ?>
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center gap-2 mb-6">
@@ -655,7 +656,11 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-slate-500 mb-1">Major / Department</label>
-                            <input type="text" name="s_major" placeholder="e.g. Computer Science" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                            <select name="s_major" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <option value="">— Select Major / Department —</option>
+                                <option value="Computer Science">Computer Science</option>
+                                <option value="Computer Technology">Computer Technology</option>
+                            </select>
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-slate-500 mb-1">Email *</label>

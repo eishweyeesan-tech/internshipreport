@@ -9,64 +9,6 @@
     </div>
     <div class="flex items-center gap-4 shrink-0 h-full justify-end">
 
-        <!-- Academic Year Switcher (submit-on-change select) -->
-        <?php
-        $ay_list = $all_academic_years ?? [];
-        $ay_current = $current_academic_year ?? false;
-        $ay_label = $_SESSION['selected_academic_year_label'] ?? ($ay_current ? $ay_current['year_label'] : 'N/A');
-        $ay_selected_id = (int) ($_SESSION['selected_academic_year_id'] ?? 0);
-        // Build current query string preserving tab and other params
-        $ay_base_params = $_GET;
-        unset($ay_base_params['year_id']);
-        ?>
-        <form method="GET" action="" id="yearSwitcherForm" class="flex items-center gap-1.5">
-            <?php foreach ($ay_base_params as $k => $v): ?>
-                <?php if ($k !== 'year_id'): ?>
-                <input type="hidden" name="<?= htmlspecialchars($k) ?>" value="<?= htmlspecialchars($v) ?>">
-                <?php endif; ?>
-            <?php endforeach; ?>
-            <div class="relative">
-                <label for="yearSwitcherSelect" class="sr-only">Academic Year</label>
-                <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                    </svg>
-                </div>
-                <select
-                    id="yearSwitcherSelect"
-                    name="year_id"
-                    onchange="this.form.submit()"
-                    class="appearance-none bg-slate-50 border border-slate-200/60 rounded-xl pl-8 pr-8 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-100 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition-all cursor-pointer select-none"
-                >
-                    <?php foreach ($ay_list as $ay): ?>
-                    <?php
-                        $is_sel = ((int)($ay['id'] ?? 0) === $ay_selected_id);
-                        $badge = match($ay['status'] ?? '') {
-                            'ACTIVE'   => ' ●',
-                            'UPCOMING' => ' ○',
-                            'ARCHIVED' => ' ◌',
-                            default    => '',
-                        };
-                    ?>
-                    <option value="<?= (int)$ay['id'] ?>" <?= $is_sel ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($ay['year_label']) ?><?= $badge ?> — <?= htmlspecialchars($ay['status']) ?>
-                    </option>
-                    <?php endforeach; ?>
-                    <?php if (empty($ay_list)): ?>
-                    <option value="" disabled selected>No years configured</option>
-                    <?php endif; ?>
-                </select>
-                <div class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
-                    <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                    </svg>
-                </div>
-            </div>
-            <?php if (($_SESSION['role'] ?? '') === 'admin'): ?>
-            <a href="manage-academic-years.php" class="text-micro font-bold text-indigo-500 hover:text-indigo-700 transition whitespace-nowrap" title="Manage Academic Years">⚙</a>
-            <?php endif; ?>
-        </form>
-
         <!-- Notification Bell -->
         <div class="relative" id="notif-bell-wrapper">
             <button onclick="toggleNotifDropdown()" class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition cursor-pointer">
