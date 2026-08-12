@@ -138,18 +138,18 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <!-- Stats -->
                     <div class="flex items-center gap-8 pt-4">
                         <div class="text-center">
-                            <p class="text-3xl font-black text-slate-800">500+</p>
+                            <p id="stat-students" class="text-3xl font-black text-slate-800">0</p>
                             <p class="text-xs text-slate-500 font-medium">Students</p>
                         </div>
                         <div class="w-px h-12 bg-slate-200"></div>
                         <div class="text-center">
-                            <p class="text-3xl font-black text-slate-800">50+</p>
-                            <p class="text-xs text-slate-500 font-medium">Companies</p>
+                            <p id="stat-supervisors" class="text-3xl font-black text-slate-800">0</p>
+                            <p class="text-xs text-slate-500 font-medium">Supervisors</p>
                         </div>
                         <div class="w-px h-12 bg-slate-200"></div>
                         <div class="text-center">
-                            <p class="text-3xl font-black text-slate-800">100%</p>
-                            <p class="text-xs text-slate-500 font-medium">Digital</p>
+                            <p id="stat-companies" class="text-3xl font-black text-slate-800">0</p>
+                            <p class="text-xs text-slate-500 font-medium">Companies</p>
                         </div>
                     </div>
                 </div>
@@ -558,6 +558,17 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
             </div>
         </div>
     </footer>
+
+    <script>
+        fetch('api/homepage_stats.php')
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                document.getElementById('stat-students').textContent = data.students;
+                document.getElementById('stat-supervisors').textContent = data.supervisors;
+                document.getElementById('stat-companies').textContent = data.companies;
+            })
+            .catch(function () {});
+    </script>
 
 </body>
 </html>
