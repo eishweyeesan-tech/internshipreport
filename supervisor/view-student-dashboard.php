@@ -326,50 +326,7 @@ if ($student_id <= 0) {
 <body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
 <div class="flex h-screen overflow-hidden">
     <!-- SIDEBAR -->
-    <aside class="w-64 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 flex flex-col shrink-0 shadow-xl shadow-slate-200/20">
-        <div class="h-16 flex items-center px-6 border-b border-slate-100/80 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                    <span class="text-white text-sm">📋</span>
-                </div>
-                <div>
-                    <span class="text-sm font-extrabold text-slate-800 tracking-tight">InternReport</span>
-                    <span class="block text-sm font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mt-0.5">SUPERVISOR</span>
-                </div>
-            </div>
-        </div>
-        <nav class="flex-1 py-5 px-3 space-y-1">
-            <div class="px-4 mb-1">
-                <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Academic Year (2025-2026)</h3>
-            </div>
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
-            </a>
-            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
-            </a>
-            <a href="announcements.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📢</span> Announcements
-            </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
-            </a>
-        </nav>
-
-        <!-- ─── PAST TRAINEES ─── -->
-        <div class="px-4 mb-1">
-            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Past Academic Years</h3>
-        </div>
-        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> Archived Records
-        </a>
-
-        <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
-            </a>
-        </div>
-    </aside>
+    <?php $active_page = 'students'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
     <!-- MAIN -->
     <div class="flex-1 flex flex-col min-h-0">
         <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-[1050]">
@@ -739,28 +696,6 @@ if ($intern_start) {
     $not_started = true;
 }
 
-$wf_log_count = 0;
-if (!empty($weeks)) {
-    $wf_lr = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
-    $wf_lr->execute([$student_id, $weeks[$selected_week]['start'], $weeks[$selected_week]['end']]);
-    $wf_log_count = (int) $wf_lr->fetchColumn();
-}
-$wf_step1_done = $wf_log_count >= 3;
-
-$wf_ref_r = $pdo->prepare("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-$wf_ref_r->execute([$student_id, $selected_week]);
-$wf_step2_done = (int) $wf_ref_r->fetchColumn() > 0;
-
-$wf_step4_status = 'pending';
-if ($evaluation) {
-    if ($evaluation['report_status'] === 'approved_by_instructor' || $evaluation['report_status'] === 'approved_by_supervisor') {
-        $wf_step4_status = 'approved';
-    } elseif ($evaluation['report_status'] === 'rejected') {
-        $wf_step4_status = 'rejected';
-    }
-}
-
-$wf_step5_done = $sup_evaluation !== false;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -964,9 +899,6 @@ $wf_step5_done = $sup_evaluation !== false;
     </script>
     <style>
     .glow-indigo { box-shadow: 0 4px 20px rgba(99,102,241,0.25); }
-    .glow-emerald { box-shadow: 0 4px 20px rgba(16,185,129,0.25); }
-    .glow-red { box-shadow: 0 4px 20px rgba(239,68,68,0.25); }
-    .glow-amber { box-shadow: 0 4px 20px rgba(245,158,11,0.25); }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
@@ -974,50 +906,7 @@ $wf_step5_done = $sup_evaluation !== false;
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 flex flex-col shrink-0 shadow-xl shadow-slate-200/20">
-        <div class="h-16 flex items-center px-6 border-b border-slate-100/80 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                    <span class="text-white text-sm">📋</span>
-                </div>
-                <div>
-                    <span class="text-sm font-extrabold text-slate-800 tracking-tight">InternReport</span>
-                    <span class="block text-sm font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mt-0.5">SUPERVISOR</span>
-                </div>
-            </div>
-        </div>
-        <nav class="flex-1 py-5 px-3 space-y-1">
-            <div class="px-4 mb-1">
-                <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Academic Year (2025-2026)</h3>
-            </div>
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
-            </a>
-            <a href="view-student-dashboard.php?id=<?= $student_id ?>" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
-            </a>
-            <a href="announcements.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📢</span> Announcements
-            </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
-            </a>
-        </nav>
-
-        <!-- ─── PAST TRAINEES ─── -->
-        <div class="px-4 mb-1">
-            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Past Academic Years</h3>
-        </div>
-        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> Archived Records
-        </a>
-
-        <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
-            </a>
-        </div>
-    </aside>
+    <?php $active_page = 'students'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
     <div class="flex-1 flex flex-col min-h-0">
@@ -1228,54 +1117,6 @@ $wf_step5_done = $sup_evaluation !== false;
                             </div>
                         </div>
                         <?php endif; ?>
-                    </div>
-                </div>
-
-                <!-- Workflow Status Chain -->
-                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5">
-                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <span class="p-1 bg-indigo-50 text-indigo-600 rounded">🔗</span> Week <?= $selected_week ?> Workflow Status
-                    </h3>
-                    <div class="flex items-center justify-between gap-1">
-                        <div class="flex flex-col items-center flex-1 min-w-0">
-                            <div class="w-10 h-10 rounded-full <?= $wf_step1_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
-                                <?= $wf_step1_done ? '✅' : '📝' ?>
-                            </div>
-                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Daily Logs</p>
-                            <p class="text-caption text-slate-400 text-center"><?= $wf_log_count ?>/3 min</p>
-                        </div>
-                        <div class="flex-1 h-0.5 <?= $wf_step2_done ? 'bg-emerald-400' : 'bg-slate-200' ?> rounded-full mx-1 mt-[-22px]"></div>
-                        <div class="flex flex-col items-center flex-1 min-w-0">
-                            <div class="w-10 h-10 rounded-full <?= $wf_step2_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
-                                <?= $wf_step2_done ? '✅' : '📊' ?>
-                            </div>
-                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Reflection</p>
-                            <p class="text-caption text-slate-400 text-center"><?= $wf_step2_done ? 'Done' : 'Pending' ?></p>
-                        </div>
-                        <div class="flex-1 h-0.5 <?= ($evaluation && !empty($evaluation['student_signature_value'])) ? 'bg-emerald-400' : 'bg-slate-200' ?> rounded-full mx-1 mt-[-22px]"></div>
-                        <div class="flex flex-col items-center flex-1 min-w-0">
-                            <div class="w-10 h-10 rounded-full <?= ($evaluation && !empty($evaluation['student_signature_value'])) ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
-                                <?= ($evaluation && !empty($evaluation['student_signature_value'])) ? '✅' : '✍️' ?>
-                            </div>
-                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Sign & Submit</p>
-                            <p class="text-caption text-slate-400 text-center"><?= ($evaluation && !empty($evaluation['student_signature_value'])) ? 'Done' : 'Pending' ?></p>
-                        </div>
-                        <div class="flex-1 h-0.5 <?= $wf_step4_status === 'approved' ? 'bg-emerald-400' : ($wf_step4_status === 'rejected' ? 'bg-red-400' : 'bg-slate-200') ?> rounded-full mx-1 mt-[-22px]"></div>
-                        <div class="flex flex-col items-center flex-1 min-w-0">
-                            <div class="w-10 h-10 rounded-full <?= $wf_step4_status === 'approved' ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : ($wf_step4_status === 'rejected' ? 'bg-red-500 text-white shadow-lg glow-red' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300') ?> flex items-center justify-center text-sm font-bold">
-                                <?= $wf_step4_status === 'approved' ? '✅' : ($wf_step4_status === 'rejected' ? '❌' : '👨‍🏫') ?>
-                            </div>
-                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Instructor</p>
-                            <p class="text-caption text-slate-400 text-center"><?= $wf_step4_status === 'approved' ? 'Approved' : ($wf_step4_status === 'rejected' ? 'Rejected' : 'Pending') ?></p>
-                        </div>
-                        <div class="flex-1 h-0.5 <?= $wf_step5_done ? 'bg-emerald-400' : 'bg-slate-200' ?> rounded-full mx-1 mt-[-22px]"></div>
-                        <div class="flex flex-col items-center flex-1 min-w-0">
-                            <div class="w-10 h-10 rounded-full <?= $wf_step5_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-slate-100 text-slate-400 border-2 border-dashed border-slate-300' ?> flex items-center justify-center text-sm font-bold">
-                                <?= $wf_step5_done ? '✅' : '👩‍🏫' ?>
-                            </div>
-                            <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Supervisor</p>
-                            <p class="text-caption text-slate-400 text-center"><?= $wf_step5_done ? 'Graded' : 'Pending' ?></p>
-                        </div>
                     </div>
                 </div>
 

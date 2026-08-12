@@ -90,7 +90,7 @@ $profile_pic   = '';
 $last_login_at = '';
 
 try {
-    $sup = $pdo->prepare("SELECT id, username, email, role, profile_pic, last_login_at FROM users WHERE id = ?");
+    $sup = $pdo->prepare("SELECT id, username, email, phone, department, position, role, profile_pic, last_login_at FROM users WHERE id = ?");
     $sup->execute([$sup_id]);
     $sup = $sup->fetch();
     $profile_pic   = $sup['profile_pic'] ?? '';
@@ -107,8 +107,11 @@ try {
 
 // Update Profile
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
-    $new_name  = trim($_POST['new_name'] ?? '');
-    $new_email = trim($_POST['new_email'] ?? '');
+    $new_name     = trim($_POST['new_name'] ?? '');
+    $new_email    = trim($_POST['new_email'] ?? '');
+    $new_phone    = trim($_POST['phone'] ?? '');
+    $new_dept     = trim($_POST['department'] ?? '');
+    $new_position = trim($_POST['position'] ?? '');
 
     if (empty($new_name) || empty($new_email)) {
         $err = 'Name and Email are required.';
@@ -120,13 +123,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         if ($chk->fetch()) {
             $err = 'This email is already in use.';
         } else {
-            $pdo->prepare("UPDATE users SET username = ?, email = ? WHERE id = ?")
-                ->execute([$new_name, $new_email, $sup_id]);
-            $_SESSION['username'] = $new_name;
-            $sup['username'] = $new_name;
-            $sup['email'] = $new_email;
-            $sup_name = $new_name;
-            $msg = 'Profile updated successfully.';
+            try {
+                $pdo->prepare("UPDATE users SET username = ?, email = ?, phone = ?, department = ?, position = ? WHERE id = ?")
+                    ->execute([$new_name, $new_email, $new_phone, $new_dept, $new_position, $sup_id]);
+                $_SESSION['username'] = $new_name;
+                $sup['username'] = $new_name;
+                $sup['email'] = $new_email;
+                $sup['phone'] = $new_phone;
+                $sup['department'] = $new_dept;
+                $sup['position'] = $new_position;
+                $sup_name = $new_name;
+                $msg = 'Profile updated successfully.';
+            } catch (PDOException $e) {
+                $err = 'Could not save all fields. Please run the migration database/migrate_supervisor_profile_fields.sql to add the Phone / Department / Position columns, then try again.';
+            }
         }
     }
 }
@@ -233,53 +243,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 flex flex-col shrink-0 shadow-xl shadow-slate-200/20">
-        <div class="h-16 flex items-center px-6 border-b border-slate-100/80 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                    <span class="text-white text-sm">📋</span>
-                </div>
-                <div>
-                    <span class="text-sm font-extrabold text-slate-800 tracking-tight">InternReport</span>
-                    <span class="block text-sm font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mt-0.5">SUPERVISOR</span>
-                </div>
-            </div>
-        </div>
-        <nav class="flex-1 py-5 px-3 space-y-1">
-            <div class="px-4 mb-1">
-                <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Academic Year (2025-2026)</h3>
-            </div>
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
-            </a>
-            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
-            </a>
-            <a href="announcements.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📢</span> Announcements
-            </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
-            </a>
-        </nav>
-
-        <!-- ─── PAST TRAINEES ─── -->
-        <div class="px-4 mb-1">
-            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Past Academic Years</h3>
-        </div>
-        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> Archived Records
-        </a>
-
-        <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
-            </a>
-        </div>
-    </aside>
+    <?php $active_page = 'profile'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
-    <div class="flex-1 flex flex-col min-h-0">
+    <div id="top" class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
         <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-[1050]">
@@ -475,6 +442,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                     </form>
                 </div>
 
+                <!-- ════ SUPERVISOR INFORMATION ════ -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="px-5 py-3 border-b border-slate-100">
+                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                            <span class="p-1 bg-indigo-50 text-indigo-600 rounded">🧑‍💼</span> Supervisor Information
+                        </h3>
+                    </div>
+                    <div class="p-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="p-3 bg-slate-50 rounded-xl">
+                                <p class="text-sm font-bold text-slate-500 uppercase">Full Name</p>
+                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['username']) ?></p>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-xl">
+                                <p class="text-sm font-bold text-slate-500 uppercase">Username</p>
+                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['username']) ?></p>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-xl">
+                                <p class="text-sm font-bold text-slate-500 uppercase">Email</p>
+                                <p class="text-xs font-semibold text-slate-800 mt-0.5 break-all"><?= htmlspecialchars($sup['email']) ?></p>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-xl">
+                                <p class="text-sm font-bold text-slate-500 uppercase">Phone</p>
+                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['phone'] ?? '') ?: '—' ?></p>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-xl">
+                                <p class="text-sm font-bold text-slate-500 uppercase">Department</p>
+                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['department'] ?? '') ?: '—' ?></p>
+                            </div>
+                            <div class="p-3 bg-slate-50 rounded-xl">
+                                <p class="text-sm font-bold text-slate-500 uppercase">Position / Job Title</p>
+                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['position'] ?? '') ?: '—' ?></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ════ SECURITY & LAST LOGIN ════ -->
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
@@ -523,6 +527,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Email Address</label>
                                 <input type="email" name="new_email" value="<?= htmlspecialchars($sup['email']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Phone</label>
+                                <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09-123456789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Department</label>
+                                <input type="text" name="department" value="<?= htmlspecialchars($sup['department'] ?? '') ?>" placeholder="e.g. Computer Science" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Position / Job Title</label>
+                                <input type="text" name="position" value="<?= htmlspecialchars($sup['position'] ?? '') ?>" placeholder="e.g. Senior Lecturer" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Role</label>
@@ -594,6 +610,10 @@ function toggleNotifDropdown() {
     dd.style.transform  = isVisible ? 'translateY(-8px) scale(0.95)' : 'translateY(0) scale(1)';
     document.getElementById('profile-dropdown-menu').classList.add('hidden');
 }
+function openNotifFromSidebar() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(function() { toggleNotifDropdown(); }, 300);
+}
 document.addEventListener('click', function(e) {
     var bellWrapper = document.getElementById('notif-bell-wrapper');
     var dd = document.getElementById('notif-dropdown');
@@ -627,8 +647,5 @@ function updateNotifTimestamps() {
 updateNotifTimestamps();
 setInterval(updateNotifTimestamps, 60000);
 </script>
-
-
-
 </body>
 </html>

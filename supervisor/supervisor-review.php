@@ -139,39 +139,13 @@ $ad_stmt->execute([$student_id]);
 $absent_logs = $ad_stmt->fetchAll();
 
 // ══════════════════════════════════════════════════════════════════════
-// METHOD 1: WEEKLY GRADING HISTORY FOR ALL 12 WEEKS
+// WEEKLY GRADING HISTORY (used for current-week grade prefill + GPA card)
 // ══════════════════════════════════════════════════════════════════════
-$filter_start_date = $_GET['filter_start'] ?? '';
-$filter_end_date   = $_GET['filter_end'] ?? '';
-
 $all_weeks_grades = [];
 for ($i = 1; $i <= 12; $i++) {
     $gq = $pdo->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
     $gq->execute([$student_id, $i]);
     $all_weeks_grades[$i] = $gq->fetch();
-}
-
-// Determine which weeks to display based on date range filter
-$visible_weeks = [];
-foreach ($weeks as $wn => $wr) {
-    $show_week = true;
-
-    // Apply date range filter if set
-    if ($filter_start_date && $filter_end_date) {
-        $week_start_dt = new DateTime($wr['start']);
-        $week_end_dt   = new DateTime($wr['end']);
-        $filter_start_dt = new DateTime($filter_start_date);
-        $filter_end_dt   = new DateTime($filter_end_date);
-
-        // Show week if it overlaps with the filter range
-        if ($week_end_dt < $filter_start_dt || $week_start_dt > $filter_end_dt) {
-            $show_week = false;
-        }
-    }
-
-    if ($show_week) {
-        $visible_weeks[$wn] = $wr;
-    }
 }
 
 // ── Fetch Data for Active Week ─────────────────────────────────────
@@ -317,50 +291,7 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 flex flex-col shrink-0 shadow-xl shadow-slate-200/20">
-        <div class="h-16 flex items-center px-6 border-b border-slate-100/80 bg-gradient-to-r from-indigo-500/5 to-purple-500/5">
-            <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                    <span class="text-white text-sm">📋</span>
-                </div>
-                <div>
-                    <span class="text-sm font-extrabold text-slate-800 tracking-tight">InternReport</span>
-                    <span class="block text-sm font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded mt-0.5">SUPERVISOR</span>
-                </div>
-            </div>
-        </div>
-        <nav class="flex-1 py-5 px-3 space-y-1">
-            <div class="px-4 mb-1">
-                <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Academic Year (2025-2026)</h3>
-            </div>
-            <a href="supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
-            </a>
-            <a href="view-student-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🎓</span> Student View
-            </a>
-            <a href="announcements.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📢</span> Announcements
-            </a>
-            <a href="profile.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
-            </a>
-        </nav>
-
-        <!-- ─── PAST TRAINEES ─── -->
-        <div class="px-4 mb-1">
-            <h3 class="text-xs font-bold text-slate-500 tracking-wider uppercase">Past Academic Years</h3>
-        </div>
-        <a href="supervisor-dashboard.php?tab=trainee-archive" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
-            <span class="w-5 h-5 flex items-center justify-center shrink-0">⏪</span> Archived Records
-        </a>
-
-        <div class="p-3 border-t border-slate-100/80">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
-            </a>
-        </div>
-    </aside>
+    <?php $active_page = 'students'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
     <div class="flex-1 flex flex-col overflow-hidden">
@@ -604,11 +535,11 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
         </div>
     </div>
 
-    <!-- ════ 2-COLUMN LAYOUT ════ -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- ════ CONTENT LAYOUT ════ -->
+    <div class="space-y-6">
 
-        <!-- ─── LEFT (2/3): Daily Logs + Reflection ─── -->
-        <div class="lg:col-span-2 space-y-6">
+        <!-- ─── Daily Logs + Reflection ─── -->
+        <div class="space-y-6">
 
             <!-- Daily Logs -->
             <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
@@ -844,117 +775,6 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                     <p class="text-sm text-slate-400 text-center leading-relaxed font-medium">
                         This grade is the final assessment for this week's internship performance.
                     </p>
-                </div>
-            </div>
-
-        </div>
-
-        <!-- ─── RIGHT (1/3): Grading History ─── -->
-        <div class="lg:col-span-1 space-y-6">
-
-            <!-- ═══ 12-WEEK GRADING HISTORY SIDEBAR ═══ -->
-            <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
-                    <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center text-sm">📋</span> Grading History
-                    </h2>
-                </div>
-
-                <!-- Date Range Filter -->
-                <div class="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/50 to-white">
-                    <form method="GET" class="space-y-3">
-                        <input type="hidden" name="student_id" value="<?= $student_id ?>">
-                        <?php if ($week_num > 0): ?>
-                        <input type="hidden" name="week" value="<?= $week_num ?>">
-                        <?php endif; ?>
-                        <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Filter by Date Range</p>
-                        <div class="flex items-center gap-2">
-                            <div class="flex-1">
-                                <label class="block text-sm text-slate-400 mb-1 font-medium">From</label>
-                                <input type="date" name="filter_start" value="<?= htmlspecialchars($filter_start_date) ?>"
-                                    class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm">
-                            </div>
-                            <div class="flex-1">
-                                <label class="block text-sm text-slate-400 mb-1 font-medium">To</label>
-                                <input type="date" name="filter_end" value="<?= htmlspecialchars($filter_end_date) ?>"
-                                    class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm">
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button type="submit" class="flex-1 px-3 py-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white text-xs font-bold rounded-xl transition-all duration-200 shadow-md shadow-indigo-500/20">
-                                Apply
-                            </button>
-                            <?php if ($filter_start_date || $filter_end_date): ?>
-                            <a href="?student_id=<?= $student_id ?>&week=<?= $week_num ?>" class="flex-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition-all duration-200 text-center">
-                                Clear
-                            </a>
-                            <?php endif; ?>
-                        </div>
-                        <?php if ($filter_start_date || $filter_end_date): ?>
-                        <p class="text-sm text-slate-400 text-center font-medium">
-                            Showing <?= count($visible_weeks) ?> of <?= count($weeks) ?> weeks
-                        </p>
-                        <?php endif; ?>
-                    </form>
-                </div>
-
-                <!-- Week Grid -->
-                <div class="p-5 grid grid-cols-4 gap-2.5">
-                    <?php if (!empty($visible_weeks)): ?>
-                    <?php foreach ($visible_weeks as $i => $wr):
-                        $week_data = $all_weeks_grades[$i];
-                        $g = $week_data['weekly_grade'] ?? null;
-
-                        // Color logic per grade
-                        $color_class = 'border-slate-200 text-slate-400';
-                        $bg_class = 'bg-slate-50';
-                        $grade_display = '—';
-
-                        if ($g === 'A') {
-                            $color_class = 'border-emerald-300 text-emerald-700';
-                            $bg_class = 'bg-gradient-to-br from-emerald-50 to-emerald-100/50';
-                            $grade_display = 'A';
-                        } elseif ($g === 'B') {
-                            $color_class = 'border-blue-300 text-blue-700';
-                            $bg_class = 'bg-gradient-to-br from-blue-50 to-blue-100/50';
-                            $grade_display = 'B';
-                        } elseif ($g === 'C') {
-                            $color_class = 'border-amber-300 text-amber-700';
-                            $bg_class = 'bg-gradient-to-br from-amber-50 to-amber-100/50';
-                            $grade_display = 'C';
-                        } elseif ($g === 'D') {
-                            $color_class = 'border-orange-300 text-orange-700';
-                            $bg_class = 'bg-gradient-to-br from-orange-50 to-orange-100/50';
-                            $grade_display = 'D';
-                        } elseif ($g === 'F') {
-                            $color_class = 'border-red-300 text-red-700';
-                            $bg_class = 'bg-gradient-to-br from-red-50 to-red-100/50';
-                            $grade_display = 'F';
-                        }
-                    ?>
-                    <div class="text-center p-3 rounded-xl border-2 <?= $color_class ?> <?= $bg_class ?> <?= $i === $week_num ? 'ring-2 ring-indigo-500 ring-offset-2' : '' ?> <?= $i === $auto_week ? 'ring-2 ring-emerald-400 ring-offset-1' : '' ?> transition-all duration-200 hover:scale-105 hover:shadow-md cursor-pointer" title="Week <?= $i ?>: <?= $grade_display !== '—' ? 'Grade ' . $grade_display . ' (' . date('d M Y', strtotime($week_data['evaluated_at'])) . ')' : 'Not evaluated yet' ?><?= $i === $auto_week ? ' [Current Dynamic Week]' : '' ?>">
-                        <p class="text-sm font-bold uppercase tracking-wider <?= $i === $week_num ? 'text-indigo-600' : ($i === $auto_week ? 'text-emerald-600' : 'text-slate-400') ?>">Wk <?= $i ?><?= $i === $auto_week ? ' ✓' : '' ?></p>
-                        <p class="text-xl font-black mt-1 <?= $g ? '' : 'text-slate-300' ?>"><?= $grade_display ?></p>
-                        <?php if ($week_data): ?>
-                            <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 mx-auto mt-1.5"></div>
-                        <?php else: ?>
-                            <div class="w-1.5 h-1.5 rounded-full bg-slate-300 mx-auto mt-1.5"></div>
-                        <?php endif; ?>
-                    </div>
-                    <?php endforeach; ?>
-                    <?php else: ?>
-                    <div class="col-span-4 text-center py-6">
-                        <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-2xl mx-auto mb-3">📭</div>
-                        <p class="text-xs text-slate-400 font-medium">No weeks found in selected range.</p>
-                    </div>
-                    <?php endif; ?>
-                </div>
-                <div class="px-5 py-3 border-t border-slate-100 bg-gradient-to-r from-slate-50 to-white rounded-b-2xl">
-                    <div class="flex items-center justify-center gap-4 text-sm text-slate-400 font-medium flex-wrap">
-                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Graded</span>
-                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-300"></span> Pending</span>
-                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-1 ring-emerald-600"></span> Dynamic Current Week</span>
-                    </div>
                 </div>
             </div>
 
