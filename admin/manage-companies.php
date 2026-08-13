@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/phone_validation.php';
 
 if ($_SESSION['role'] !== 'admin') {
     header('Location: ../dashboard.php');
@@ -23,7 +24,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_company'])) {
 
     if (empty($company_name)) {
         $err = 'Company name is required.';
+    } elseif (($phone_err = phone_validation_error($contact_phone)) !== null) {
+        $err = $phone_err;
     } else {
+        $contact_phone = normalize_phone($contact_phone);
         $check = $pdo->prepare("SELECT id FROM companies WHERE company_name = ?");
         $check->execute([$company_name]);
         if ($check->fetch()) {
@@ -46,7 +50,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_company'])) {
     $contact_phone = trim($_POST['contact_phone'] ?? '');
     $website       = trim($_POST['website'] ?? '');
 
-    if ($cid > 0 && !empty($company_name)) {
+    if ($cid <= 0) {
+        $err = 'Invalid company.';
+    } elseif (empty($company_name)) {
+        $err = 'Company name is required.';
+    } elseif (($phone_err = phone_validation_error($contact_phone)) !== null) {
+        $err = $phone_err;
+    } else {
+        $contact_phone = normalize_phone($contact_phone);
         $check = $pdo->prepare("SELECT id FROM companies WHERE company_name = ? AND id != ?");
         $check->execute([$company_name, $cid]);
         if ($check->fetch()) {
@@ -176,7 +187,7 @@ if (isset($_GET['edit'])) {
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Contact Phone</label>
-                                <input type="text" name="contact_phone" value="<?= htmlspecialchars($edit_company['contact_phone'] ?? '') ?>" placeholder="+959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="text" name="contact_phone" value="<?= htmlspecialchars($edit_company['contact_phone'] ?? '') ?>" placeholder="+959 123 456 789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div class="md:col-span-2 lg:col-span-3">
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Address</label>

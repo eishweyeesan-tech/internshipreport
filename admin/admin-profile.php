@@ -83,8 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
     if (empty($current) || empty($new_pw) || empty($confirm)) {
         $err = 'All password fields are required.';
-    } elseif (strlen($new_pw) < 8) {
-        $err = 'New password must be at least 8 characters.';
+    } elseif (strlen($new_pw) < 6) {
+        $err = 'New password must be at least 6 characters.';
     } elseif ($new_pw !== $confirm) {
         $err = 'New passwords do not match.';
     } else {
@@ -411,8 +411,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
-                                <input type="password" name="new_password" required minlength="8" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                                <p class="text-sm text-slate-400 mt-0.5">Min 8 characters</p>
+                                <input type="password" name="new_password" required minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <p class="text-sm text-slate-400 mt-0.5">Min 6 characters</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>

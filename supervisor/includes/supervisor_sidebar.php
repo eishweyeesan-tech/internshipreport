@@ -5,7 +5,7 @@
  *   <?php $active_page = 'profile'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
  *
  * Valid $active_page values:
- *   dashboard, students, reports, companies, profile, archive
+ *   dashboard, students, reports, companies, notifications, profile, archive
  *
  * Optional vars read (all guarded):
  *   $unread_notif_count  → red badge on the Notifications item
@@ -47,7 +47,7 @@ $pending_reviews    = (int) ($pending_reviews ?? 0);
             <a href="supervisor-companies.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 <?= $active_page === 'companies' ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30' : 'font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900' ?>">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">🏢</span> Companies
             </a>
-            <a href="#top" onclick="if (typeof openNotifFromSidebar === 'function') { openNotifFromSidebar(); return false; }" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+            <a href="notifications.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 <?= $active_page === 'notifications' ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30' : 'font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900' ?>">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">🔔</span> Notifications
                 <?php if ($unread_notif_count > 0): ?>
                 <span class="ml-auto text-micro font-bold text-white bg-red-500 rounded-full w-5 h-5 flex items-center justify-center shadow-sm"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>

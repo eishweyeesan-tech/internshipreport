@@ -340,7 +340,7 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
     </div>
     <?php endif; ?>
 
-    <div class="text-center text-sm text-slate-300 py-2">Powered by InternReport System</div>
+    <div class="text-center text-sm text-slate-300 py-2">Powered by InternReport</div>
 </div>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">

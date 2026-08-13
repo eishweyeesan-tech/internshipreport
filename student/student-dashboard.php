@@ -20,7 +20,7 @@ $esc_iid = $conn->real_escape_string($internship_id);
 // ══════════════════════════════════════════════════════════════════════
 // FETCH INTERNSHIP DATE RANGE + PROFILE INFO
 // ══════════════════════════════════════════════════════════════════════
-$profile_r = $conn->query("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date, sup_u.username AS supervisor_name, u.profile_pic,
+$profile_r = $conn->query("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date, sup_u.username AS supervisor_name, sp.supervisor_id, u.profile_pic,
            sp.instructor_name, sp.instructor_email, sp.instructor_id
     FROM student_profiles sp
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
@@ -497,6 +497,20 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
             report_status = 'pending', evaluated_at = NOW()");
         $message = 'signature_saved';
 
+        // Notify the assigned supervisor that this report was submitted
+        if (!empty($profile_row['supervisor_id'])) {
+            require_once __DIR__ . '/../config/notify.php';
+            notify_user_once(
+                $pdo,
+                (int) $profile_row['supervisor_id'],
+                'New Report Submitted',
+                $student_name . ' has submitted Week ' . $esc_sw . ' report and it is awaiting review.',
+                'new_report_submitted',
+                (int) $esc_sw,
+                (int) $esc_iid
+            );
+        }
+
         $rej_r = $conn->query("SELECT report_status, instructor_comments, student_signature_type, student_signature_value FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_sw}");
         $rejection = ($rej_r && $rej_r->num_rows > 0) ? $rej_r->fetch_assoc() : null;
         $is_rejected = $rejection && $rejection['report_status'] === 'rejected';
@@ -687,7 +701,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Dashboard – Intern Report</title>
+    <title>Student Dashboard – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
     tailwind.config = {
@@ -1945,7 +1959,7 @@ function exportAsHTML() {
     content += '<p><strong>How it was done:</strong> <?= nl2br(htmlspecialchars($rf["how_done"])) ?></p>';
     content += '<p><strong>Why it was done:</strong> <?= nl2br(htmlspecialchars($rf["why_done"])) ?></p>';
     <?php endforeach; ?>
-    content += '<p style="margin-top:40px;font-size:11px;color:#94a3b8;">Generated on <?= date('d M Y, h:i A') ?> via InternReport System</p>';
+    content += '<p style="margin-top:40px;font-size:11px;color:#94a3b8;">Generated on <?= date('d M Y, h:i A') ?> via InternReport</p>';
     content += '</body></html>';
     printWin.document.write(content);
     printWin.document.close();

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
+require_once __DIR__ . '/../config/internship_progress.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -32,17 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
 }
 
 // ── Notification redirect URL helper ────────────────────────────
-function notif_redirect_url($type, $related_week) {
-    switch ($type) {
-        case 'instructor_approved':
-        case 'instructor_rejected':
-        case 'supervisor_approved':
-            if ($related_week) return 'supervisor-dashboard.php?week=' . (int)$related_week;
-            return 'supervisor-dashboard.php';
-        default:
-            return 'supervisor-dashboard.php';
-    }
-}
+require_once __DIR__ . '/../config/notify.php';
 
 // ── Mark notification as read ──────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
@@ -65,6 +56,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
         header('Content-Type: application/json');
         echo json_encode(['unread_count' => 0]);
+        exit;
+    }
+    header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
+    $notif_id = (int) ($_POST['notification_id'] ?? 0);
+    $deleted  = false;
+    if ($notif_id > 0) {
+        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
+        $del->execute([$notif_id, $sup_id]);
+        $deleted = $del->rowCount() > 0;
+    }
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        $count_q->execute([$sup_id]);
+        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
         exit;
     }
     header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
@@ -115,7 +124,7 @@ function sendRedBadgeAlert($pdo, $supervisor_id, $supervisor_name, $supervisor_e
         <div class='container'>
             <div class='header'>
                 <h2 style='margin:0;'>⚠️ Student Behind Schedule Alert</h2>
-                <p style='margin:5px 0 0; opacity:0.9;'>InternReport System Notification</p>
+                <p style='margin:5px 0 0; opacity:0.9;'>InternReport Notification</p>
             </div>
             <div class='content'>
                 <p>Dear <strong>" . htmlspecialchars($supervisor_name) . "</strong>,</p>
@@ -156,7 +165,7 @@ function sendRedBadgeAlert($pdo, $supervisor_id, $supervisor_name, $supervisor_e
                 </p>
             </div>
             <div class='footer'>
-                <p>This is an automated notification from InternReport System.</p>
+                <p>This is an automated notification from InternReport.</p>
                 <p>© " . date('Y') . " InternReport. All rights reserved.</p>
             </div>
         </div>
@@ -170,6 +179,20 @@ function sendRedBadgeAlert($pdo, $supervisor_id, $supervisor_name, $supervisor_e
     // Record alert in database
     $insert = $pdo->prepare("INSERT INTO supervisor_alerts (supervisor_id, student_id, alert_type, alert_date, email_sent, sent_at) VALUES (?, ?, 'red_badge', ?, ?, NOW())");
     $insert->execute([$supervisor_id, $student_id, $today, $email_sent ? 1 : 0]);
+
+    // In-app notification (once per day — guarded above by supervisor_alerts)
+    require_once __DIR__ . '/../config/notify.php';
+    notify_user_once(
+        $pdo,
+        $supervisor_id,
+        'Student Behind Schedule',
+        $student_name . ' (' . ($student_roll ?: 'No roll no.') . ') has not submitted any daily logs this week and is behind schedule.',
+        'student_behind_schedule',
+        null,
+        $student_id,
+        null,
+        true
+    );
 
     return $email_sent;
 }
@@ -282,38 +305,44 @@ $all_students_detail = $stu_detail_stmt->fetchAll();
 
 $today_obj = new DateTime();
 $today_str = $today_obj->format('Y-m-d');
-$max_week = 12;
 
 $student_dynamic_week = [];
 $student_not_started = [];
+$student_progress = [];
 
 foreach ($all_students_detail as $sd) {
     $uid = $sd['uid'];
-    $dynamic_week = 1;
     $not_started = false;
 
     if ($sd['internship_start_date']) {
-        $start_date = new DateTime($sd['internship_start_date']);
-        $end_date = $sd['internship_end_date'] ? new DateTime($sd['internship_end_date']) : null;
+        $start_date = $sd['internship_start_date'];
+        $end_date   = $sd['internship_end_date'] ?: null;
+        $dynamic_week = internship_current_week($start_date, $end_date, $today_obj);
 
-        if ($today_obj < $start_date) {
-            $dynamic_week = 1;
+        if ($today_obj < new DateTime($start_date)) {
             $not_started = true;
         }
-        elseif ($end_date && $today_obj > $end_date) {
-            $dynamic_week = $max_week;
-        }
-        else {
-            $days_elapsed = (int) $today_obj->diff($start_date)->days;
-            $dynamic_week = (int) floor($days_elapsed / 7) + 1;
-            $dynamic_week = max(1, min($dynamic_week, $max_week));
+        elseif ($end_date && $today_obj > new DateTime($end_date)) {
+            // Notify supervisor that this student's internship is over (once)
+            require_once __DIR__ . '/../config/notify.php';
+            notify_user_once(
+                $pdo,
+                $sup_id,
+                'Internship Completed',
+                ($sd['full_name'] ?: $sd['username']) . ' has completed their internship (ended ' . $sd['internship_end_date'] . ').',
+                'internship_completed',
+                null,
+                $uid
+            );
         }
     } else {
         $not_started = true;
+        $dynamic_week = 1;
     }
 
-    $student_dynamic_week[$uid] = $dynamic_week;
-    $student_not_started[$uid] = $not_started;
+    $student_dynamic_week[$uid]  = $dynamic_week;
+    $student_not_started[$uid]   = $not_started;
+    $student_progress[$uid]      = internship_progress($pdo, $uid, $sd['internship_start_date'], $sd['internship_end_date']);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -385,13 +414,12 @@ foreach ($all_students_detail as $sd) {
     }
 }
 
-// Per-student progress percentage (dynamic week / 12)
+// Per-student progress percentage (completed weeks / total internship weeks)
 $progress_pct = [];
 foreach ($all_students_detail as $sd) {
     $uid = $sd['uid'];
-    $dw = $student_dynamic_week[$uid] ?? 1;
     $not_started = $student_not_started[$uid] ?? false;
-    $progress_pct[$uid] = $not_started ? 0 : min(100, (int) round(($dw / $max_week) * 100));
+    $progress_pct[$uid] = $not_started ? 0 : ($student_progress[$uid]['pct'] ?? 0);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -481,14 +509,14 @@ $pending_reviews_q = $pdo->prepare("
       AND re.student_id IN (
           SELECT u.id FROM users u
           JOIN student_profiles sp ON sp.user_id = u.id
-          WHERE u.role = 'student' AND sp.supervisor_id = ?
+          WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay_sql . "
       )
       AND NOT EXISTS (
           SELECT 1 FROM supervisor_weekly_evaluations swe
           WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
-$pending_reviews_q->execute([$sup_id]);
+$pending_reviews_q->execute(array_merge([$sup_id], $ay_params));
 $pending_reviews = (int) $pending_reviews_q->fetchColumn();
 
 // 3. Total graded weeks across all students
@@ -615,9 +643,10 @@ foreach ($all_students_detail as $sd) {
     }
 }
 
-// c) Final evaluations due (internship ended without full 12-week grading)
+// c) Final evaluations due (internship ended without full grading)
 $final_task_q = $pdo->prepare("
-    SELECT u.id AS student_id, u.username, sp.full_name, sp.internship_end_date,
+    SELECT u.id AS student_id, u.username, sp.full_name,
+           sp.internship_start_date, sp.internship_end_date,
            (SELECT COUNT(*) FROM supervisor_weekly_evaluations swe WHERE swe.student_id = u.id) AS graded_weeks
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
@@ -627,11 +656,12 @@ $final_task_q = $pdo->prepare("
 $final_task_q->execute([$sup_id]);
 foreach ($final_task_q->fetchAll() as $ftr) {
     $graded = (int) $ftr['graded_weeks'];
-    if ($graded < $max_week) {
+    $ftr_total = internship_total_weeks($ftr['internship_start_date'], $ftr['internship_end_date']);
+    if ($ftr_total > 0 && $graded < $ftr_total) {
         $tasks[] = [
             'type'    => 'final',
             'label'   => 'Final evaluation',
-            'text'    => htmlspecialchars($ftr['full_name'] ?: $ftr['username']) . ' – internship completed (' . $graded . '/12 weeks graded)',
+            'text'    => htmlspecialchars($ftr['full_name'] ?: $ftr['username']) . ' – internship completed (' . $graded . '/' . $ftr_total . ' weeks graded)',
             'url'     => 'supervisor-review.php?student_id=' . (int) $ftr['student_id'],
         ];
     }
@@ -735,13 +765,90 @@ function progress_bar_color($pct) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
+        /* Print helper: on-screen hidden, shown only inside @media print below. */
+        .print-only { display: none; }
+
         @media print {
-            aside, header, .no-print, nav, form, #profile-dropdown-menu, #notif-dropdown { display: none !important; }
-            body { background: white !important; }
-            .print-only { display: block !important; }
-            #student-table .overflow-x-auto { overflow: visible !important; }
+            /* Hide every dashboard element except the My Students print section. */
+            body * { visibility: hidden; }
+            #my-students-print-section,
+            #my-students-print-section * { visibility: visible; }
+
+            #my-students-print-section {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                color: #000;
+                background: #fff;
+            }
+
+            /* Belt-and-suspenders: drop major UI chrome as well. */
+            aside, header, nav, form, footer, .no-print,
+            #profile-dropdown-menu, #notif-dropdown { display: none !important; }
+
+            body { background: #fff !important; }
+
+            @page { margin: 15mm; }
+
+            /* Print-friendly table */
+            #my-students-print-section table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+                color: #000;
+                background: #fff;
+            }
+            #my-students-print-section th,
+            #my-students-print-section td {
+                border: 1px solid #333;
+                padding: 7px 10px;
+                text-align: left;
+                vertical-align: top;
+            }
+            #my-students-print-section th {
+                background: #f1f1f1 !important;
+                font-weight: 700;
+                text-transform: uppercase;
+                font-size: 11px;
+                letter-spacing: 0.04em;
+            }
+            #my-students-print-section tbody tr:nth-child(even) { background: #fafafa !important; }
+
+            /* Print header */
+            #my-students-print-section .print-title {
+                font-size: 16px;
+                font-weight: 800;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                margin: 0 0 6px;
+            }
+            #my-students-print-section .print-meta {
+                font-size: 12px;
+                margin: 0 0 2px;
+            }
+            #my-students-print-section .print-divider {
+                border: 0;
+                border-top: 2px solid #000;
+                margin: 10px 0 14px;
+            }
+            #my-students-print-section .print-sub { font-size: 10px; color: #555; font-weight: 400; }
+            #my-students-print-section .print-empty { font-size: 12px; color: #000; }
+
+            /* Repeat the header row on every printed page; never split a row in half. */
+            #my-students-print-section thead { display: table-header-group; }
+            #my-students-print-section tr {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+
+            #my-students-print-section a { text-decoration: none; color: #000; }
         }
         .scroll-margin { scroll-margin-top: 88px; }
+        #dashboard-student-search::-webkit-search-cancel-button { -webkit-appearance: none; }
     </style>
     <script>
         tailwind.config = {
@@ -926,16 +1033,19 @@ function progress_bar_color($pct) {
                 <h1 class="text-base font-bold text-slate-800 hidden sm:block"><?= $tab === 'trainee-archive' ? 'Past Academic Years' : 'University Supervisor Dashboard' ?></h1>
 
                 <!-- Search -->
-                <form method="GET" class="relative flex-1 max-w-xs hidden md:block ml-4 no-print">
-                    <?php if ($filter_status): ?><input type="hidden" name="status" value="<?= htmlspecialchars($filter_status) ?>"><?php endif; ?>
-                    <?php if ($filter_year): ?><input type="hidden" name="academic_year" value="<?= htmlspecialchars($filter_year) ?>"><?php endif; ?>
-                    <input type="search" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Search students…"
-                        class="w-full bg-slate-100/80 border border-transparent focus:border-indigo-300 rounded-xl pl-9 pr-9 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all duration-200">
-                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">🔍</span>
-                    <?php if ($search): ?>
-                    <a href="?<?= http_build_query(array_merge($_GET, ['search' => '', 'page' => ''])) ?>" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold px-1.5 py-0.5 rounded-full hover:bg-slate-200 transition" title="Clear search">✕</a>
-                    <?php endif; ?>
-                </form>
+                <div id="dash-search" class="relative flex-1 max-w-xs hidden md:block ml-4 no-print">
+                    <form method="GET" class="relative">
+                        <?php if ($filter_status): ?><input type="hidden" name="status" value="<?= htmlspecialchars($filter_status) ?>"><?php endif; ?>
+                        <?php if ($filter_year): ?><input type="hidden" name="academic_year" value="<?= htmlspecialchars($filter_year) ?>"><?php endif; ?>
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">🔍</span>
+                        <input type="search" name="search" id="dashboard-student-search" value="<?= htmlspecialchars($search) ?>" placeholder="Search students…" autocomplete="off" spellcheck="false"
+                            data-search-url="supervisor-student-search-api.php"
+                            class="w-full bg-slate-100/80 border border-transparent focus:border-indigo-300 rounded-xl pl-9 pr-9 py-2 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all duration-200">
+                        <button type="button" id="dashboard-search-clear" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold px-1.5 py-0.5 rounded-full hover:bg-slate-200 transition cursor-pointer" title="Clear search">✕</button>
+                    </form>
+                    <!-- Live search results dropdown -->
+                    <div id="dashboard-search-dropdown" class="hidden absolute left-0 right-0 top-full mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-[1060] overflow-hidden"></div>
+                </div>
             </div>
 
             <div class="flex items-center gap-5 shrink-0">
@@ -970,7 +1080,7 @@ function progress_bar_color($pct) {
                             <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null); ?>
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
                                 <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
                                     <?php if ($notif['type'] === 'instructor_approved'): ?>
                                     <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
@@ -1013,6 +1123,11 @@ function progress_bar_color($pct) {
                                                     Already read
                                                 </div>
                                                 <?php endif; ?>
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    Delete
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -1027,6 +1142,9 @@ function progress_bar_color($pct) {
                                     <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
                             </div>
                         </div>
                     </div>
@@ -1100,8 +1218,8 @@ function progress_bar_color($pct) {
                 </section>
 
                 <!-- ═══ STATISTICS CARDS ═══ -->
-                <div class="grid grid-cols-2 lg:grid-cols-4 gap-5">
-                    <a href="#my-students" class="group bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300 block">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <a href="my-students.php" class="group bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300 block">
                         <div class="flex items-center gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30">🎓</div>
                             <div class="min-w-0">
@@ -1112,7 +1230,7 @@ function progress_bar_color($pct) {
                             <span class="ml-auto text-xs font-bold text-indigo-600 bg-indigo-50 group-hover:bg-indigo-100 border border-indigo-200/60 px-2.5 py-1 rounded-lg shrink-0 transition-all duration-200">View All →</span>
                         </div>
                     </a>
-                    <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300">
+                    <a href="supervisor-reports.php" class="group bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300 block">
                         <div class="flex items-center gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-xl shadow-lg shadow-purple-500/30">📄</div>
                             <div class="min-w-0">
@@ -1120,9 +1238,10 @@ function progress_bar_color($pct) {
                                 <p class="text-2xl font-black text-slate-800"><?= $total_reports ?></p>
                                 <p class="text-sm text-purple-500 font-bold truncate">Submitted by your students</p>
                             </div>
+                            <span class="ml-auto text-xs font-bold text-purple-600 bg-purple-50 group-hover:bg-purple-100 border border-purple-200/60 px-2.5 py-1 rounded-lg shrink-0 transition-all duration-200">View Reports →</span>
                         </div>
-                    </div>
-                    <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300">
+                    </a>
+                    <a href="supervisor-companies.php" class="group bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300 block">
                         <div class="flex items-center gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-xl shadow-lg shadow-blue-500/30">🏢</div>
                             <div class="min-w-0">
@@ -1130,23 +1249,25 @@ function progress_bar_color($pct) {
                                 <p class="text-2xl font-black text-slate-800"><?= $company_count ?></p>
                                 <p class="text-sm text-blue-500 font-bold truncate">Active placements</p>
                             </div>
+                            <span class="ml-auto text-xs font-bold text-blue-600 bg-blue-50 group-hover:bg-blue-100 border border-blue-200/60 px-2.5 py-1 rounded-lg shrink-0 transition-all duration-200">View Companies →</span>
                         </div>
-                    </div>
-                    <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300">
+                    </a>
+                    <a href="supervisor-reports.php?status=approved_by_instructor" class="group bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5 hover:shadow-md transition-shadow duration-300 block">
                         <div class="flex items-center gap-4">
                             <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center text-xl shadow-lg shadow-amber-500/30">📩</div>
                             <div class="min-w-0">
                                 <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Pending Reviews</p>
                                 <p class="text-2xl font-black text-slate-800"><?= $pending_reviews ?></p>
-                                <p class="text-sm <?= $pending_reviews > 0 ? 'text-amber-500' : 'text-slate-400' ?> font-bold truncate"><?= $pending_reviews > 0 ? 'Needs attention' : 'All caught up' ?></p>
+                                <p class="text-sm <?= $pending_reviews > 0 ? 'text-amber-500' : 'text-slate-400' ?> font-bold truncate">Reports awaiting your review</p>
                             </div>
+                            <span class="ml-auto text-xs font-bold text-amber-600 bg-amber-50 group-hover:bg-amber-100 border border-amber-200/60 px-2.5 py-1 rounded-lg shrink-0 transition-all duration-200">Review Reports →</span>
                         </div>
-                    </div>
+                    </a>
                 </div>
 
                 <!-- ═══ MY STUDENTS ═══ -->
                 <div id="my-students" class="scroll-margin bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between flex-wrap gap-4">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between flex-wrap gap-4 no-print">
                         <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                             <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center text-sm">🎓</span> My Students
                             <span class="ml-2 text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-200/60"><?= $total_assigned ?> assigned</span>
@@ -1210,7 +1331,7 @@ function progress_bar_color($pct) {
                                             </div>
                                             <span class="text-xs font-bold text-slate-600"><?= $pct ?>%</span>
                                         </div>
-                                        <p class="text-[11px] text-slate-400 mt-1"><?= $student_not_started[$uid] ?? false ? 'Not started' : 'Week ' . ($student_dynamic_week[$uid] ?? 1) . '/12' ?></p>
+                                        <p class="text-[11px] text-slate-400 mt-1"><?= $student_not_started[$uid] ?? false ? 'Not started' : 'Week ' . ($student_progress[$uid]['completed'] ?? 0) . '/' . ($student_progress[$uid]['total'] ?? 0) ?></p>
                                     </td>
                                     <td class="px-5 py-4">
                                         <span class="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
@@ -1449,9 +1570,10 @@ function progress_bar_color($pct) {
                             <?php foreach ($all_students_detail as $sd):
                                 $uid = $sd['uid'];
                                 $pct = $progress_pct[$uid] ?? 0;
-                                $dw = $student_dynamic_week[$uid] ?? 1;
                                 $ns = $student_not_started[$uid] ?? false;
                                 $nm = $sd['full_name'] ?: $sd['username'];
+                                $wcomp = $student_progress[$uid]['completed'] ?? 0;
+                                $wtot = $student_progress[$uid]['total'] ?? 0;
                             ?>
                             <div>
                                 <div class="flex items-center justify-between mb-1.5">
@@ -1462,7 +1584,7 @@ function progress_bar_color($pct) {
                                     <div class="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden">
                                         <div class="h-2.5 rounded-full bg-gradient-to-r <?= progress_bar_color($pct) ?> transition-all duration-700" style="width: <?= $pct ?>%"></div>
                                     </div>
-                                    <span class="text-[11px] font-bold text-slate-400 shrink-0 w-14 text-right"><?= $ns ? '—' : 'Wk ' . $dw . '/12' ?></span>
+                                    <span class="text-[11px] font-bold text-slate-400 shrink-0 w-14 text-right"><?= $ns ? '—' : 'Wk ' . $wcomp . '/' . $wtot ?></span>
                                 </div>
                             </div>
                             <?php endforeach; ?>
@@ -1787,11 +1909,218 @@ function progress_bar_color($pct) {
     </div>
 </div>
 
+<?php if ($tab === 'dashboard'): ?>
+<!-- ═══ PRINT-ONLY: MY STUDENTS TABLE ═══ -->
+<div id="my-students-print-section" class="print-only">
+    <h1 class="print-title">Internship Report Management System</h1>
+    <p class="print-meta"><strong>MY STUDENTS</strong></p>
+    <p class="print-meta">Supervisor: <?= htmlspecialchars($sup_name) ?></p>
+    <p class="print-meta">Academic Year: <?= htmlspecialchars($selected_year ?: '—') ?></p>
+    <hr class="print-divider">
+
+    <?php if (!empty($students)): ?>
+    <table>
+        <thead>
+            <tr>
+                <th>Student</th>
+                <th>Company</th>
+                <th>Internship Role</th>
+                <th>Progress</th>
+                <th>Reports</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach ($students as $s):
+                $uid = $s['uid'];
+                $st = $progress_status[$uid] ?? 'none';
+                [$status_label] = progress_status_label($st);
+                $pct = $progress_pct[$uid] ?? 0;
+                $rep_count = $report_counts[$uid] ?? 0;
+                $wc = $student_progress[$uid]['completed'] ?? 0;
+                $wt = $student_progress[$uid]['total'] ?? 0;
+            ?>
+            <tr>
+                <td>
+                    <strong><?= htmlspecialchars($s['full_name'] ?: $s['username']) ?></strong>
+                    <?php if (!empty($s['student_roll']) || !empty($s['email'])): ?>
+                    <br><span class="print-sub"><?= htmlspecialchars($s['student_roll'] ?: $s['email']) ?></span>
+                    <?php endif; ?>
+                </td>
+                <td><?= htmlspecialchars($s['company_name'] ?: '—') ?></td>
+                <td><?= htmlspecialchars($s['job_role'] ?: '—') ?></td>
+                <td>
+                    <?= $pct ?>%
+                    <?php if ($wt > 0): ?><br><span class="print-sub">Week <?= $wc ?>/<?= $wt ?></span><?php endif; ?>
+                </td>
+                <td><?= $rep_count ?></td>
+                <td><?= htmlspecialchars($status_label) ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+    <?php else: ?>
+    <p class="print-empty">No students to display.</p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if (!empty($_GET['warned'])): ?>
 <script>
     showToast('Warning sent to student.', 'success');
 </script>
 <?php endif; ?>
 
+<script>
+(function() {
+    var input = document.getElementById('dashboard-student-search');
+    if (!input) return;
+
+    var wrapper   = document.getElementById('dash-search');
+    var dropdown  = document.getElementById('dashboard-search-dropdown');
+    var clearBtn  = document.getElementById('dashboard-search-clear');
+    var searchUrl = input.getAttribute('data-search-url') || 'supervisor-student-search-api.php';
+
+    var debounceTimer = null;
+    var requestSeq    = 0;
+    var results       = [];
+    var activeIndex   = -1;
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function showDropdown(html) {
+        dropdown.innerHTML = html;
+        dropdown.classList.remove('hidden');
+    }
+
+    function hideDropdown() {
+        dropdown.classList.add('hidden');
+        dropdown.innerHTML = '';
+        results = [];
+        activeIndex = -1;
+    }
+
+    function doSearch(q) {
+        q = q.trim();
+        if (q === '') { hideDropdown(); return; }
+        var seq = ++requestSeq;
+        fetch(searchUrl + '?q=' + encodeURIComponent(q), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (seq !== requestSeq || input.value.trim() !== q) return;
+            results = data.results || [];
+            activeIndex = results.length ? 0 : -1;
+            renderDropdown(q, !!data.has_more);
+        })
+        .catch(function() {});
+    }
+
+    function renderDropdown(q, hasMore) {
+        var html = '';
+
+        if (results.length === 0) {
+            html += '<div class="px-4 py-6 text-center">'
+                  +   '<div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-lg mx-auto mb-2">🔍</div>'
+                  +   '<p class="text-sm font-semibold text-slate-500">No students found</p>'
+                  +   '<p class="text-xs text-slate-400 mt-1">No assigned student matches "' + esc(q) + '".</p>'
+                  + '</div>';
+        } else {
+            html += '<div class="py-1">';
+            results.forEach(function(r, i) {
+                var cls = i === activeIndex ? 'bg-indigo-50' : '';
+                var subtitle = esc(r.student_roll || '—');
+                if (r.company_name) subtitle += ' · ' + esc(r.company_name);
+                html += '<a href="view-student-dashboard.php?id=' + r.uid + '" data-index="' + i + '" class="flex items-center gap-3 px-3 py-2.5 hover:bg-indigo-50 transition ' + cls + '">'
+                      +   '<div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-bold shrink-0">' + esc(r.initials) + '</div>'
+                      +   '<div class="min-w-0 flex-1">'
+                      +     '<p class="text-sm font-semibold text-slate-800 truncate">' + esc(r.full_name || r.username) + '</p>'
+                      +     '<p class="text-xs text-slate-400 truncate">' + subtitle + '</p>'
+                      +   '</div>'
+                      +   '<span class="text-slate-300 shrink-0">→</span>'
+                      + '</a>';
+            });
+            html += '</div>';
+            if (hasMore) {
+                html += '<a href="my-students.php?search=' + encodeURIComponent(q) + '" class="block text-center text-xs font-bold text-indigo-600 bg-gradient-to-r from-indigo-50/60 to-purple-50/60 hover:bg-indigo-100 py-2.5 border-t border-slate-100 transition">View all matching students →</a>';
+            }
+        }
+
+        showDropdown(html);
+    }
+
+    function rehighlight() {
+        var anchors = dropdown.querySelectorAll('a[data-index]');
+        anchors.forEach(function(a, i) {
+            a.classList.toggle('bg-indigo-50', i === activeIndex);
+        });
+    }
+
+    function updateClearBtn() {
+        clearBtn.classList.toggle('hidden', input.value.trim() === '');
+    }
+
+    input.addEventListener('input', function() {
+        updateClearBtn();
+        clearTimeout(debounceTimer);
+        var q = input.value;
+        if (q.trim() === '') { hideDropdown(); return; }
+        debounceTimer = setTimeout(function() { doSearch(q); }, 250);
+    });
+
+    input.addEventListener('focus', function() {
+        updateClearBtn();
+        var q = input.value;
+        if (q.trim() !== '') doSearch(q);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (results.length) { activeIndex = (activeIndex + 1) % results.length; rehighlight(); }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (results.length) { activeIndex = (activeIndex - 1 + results.length) % results.length; rehighlight(); }
+        } else if (e.key === 'Enter') {
+            if (results.length && activeIndex >= 0 && results[activeIndex]) {
+                e.preventDefault();
+                window.location.href = 'view-student-dashboard.php?id=' + results[activeIndex].uid;
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            hideDropdown();
+            input.blur();
+        }
+    });
+
+    clearBtn.addEventListener('click', function() {
+        input.value = '';
+        hideDropdown();
+        updateClearBtn();
+        input.focus();
+        var params = new URLSearchParams(window.location.search);
+        if (params.has('search')) {
+            var parts = [];
+            params.forEach(function(v, k) {
+                if (k !== 'search' && k !== 'page' && v !== '') parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(v));
+            });
+            window.location.href = window.location.pathname + (parts.length ? '?' + parts.join('&') : '');
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!wrapper.contains(e.target)) hideDropdown();
+    });
+
+    updateClearBtn();
+})();
+</script>
+
+<?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 </html>

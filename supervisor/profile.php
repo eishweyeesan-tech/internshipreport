@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
+require_once __DIR__ . '/../includes/phone_validation.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -17,18 +18,7 @@ $err = '';
 // ══════════════════════════════════════════════════════════════════
 // NOTIFICATION REDIRECT URL HELPER
 // ══════════════════════════════════════════════════════════════════
-function notif_redirect_url($type, $related_week, $announcement_id = null) {
-    if ($announcement_id) return 'announcement-detail.php?id=' . (int)$announcement_id;
-    switch ($type) {
-        case 'instructor_approved':
-        case 'instructor_rejected':
-        case 'supervisor_approved':
-            if ($related_week) return 'supervisor-dashboard.php?week=' . (int)$related_week;
-            return 'supervisor-dashboard.php';
-        default:
-            return 'supervisor-dashboard.php';
-    }
-}
+require_once __DIR__ . '/../config/notify.php';
 
 // ══════════════════════════════════════════════════════════════════
 // MARK NOTIFICATION AS READ POST HANDLERS
@@ -53,6 +43,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
         header('Content-Type: application/json');
         echo json_encode(['unread_count' => 0]);
+        exit;
+    }
+    header('Location: profile.php');
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
+    $notif_id = (int) ($_POST['notification_id'] ?? 0);
+    $deleted  = false;
+    if ($notif_id > 0) {
+        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
+        $del->execute([$notif_id, $sup_id]);
+        $deleted = $del->rowCount() > 0;
+    }
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        $count_q->execute([$sup_id]);
+        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
         exit;
     }
     header('Location: profile.php');
@@ -117,7 +125,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         $err = 'Name and Email are required.';
     } elseif (!filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
         $err = 'Invalid email format.';
+    } elseif (($phone_err = phone_validation_error($new_phone)) !== null) {
+        $err = $phone_err;
     } else {
+        $new_phone = normalize_phone($new_phone);
         $chk = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
         $chk->execute([$new_email, $sup_id]);
         if ($chk->fetch()) {
@@ -149,8 +160,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
     if (empty($current) || empty($new_pw) || empty($confirm)) {
         $err = 'All password fields are required.';
-    } elseif (strlen($new_pw) < 8) {
-        $err = 'New password must be at least 8 characters.';
+    } elseif (strlen($new_pw) < 6) {
+        $err = 'New password must be at least 6 characters.';
     } elseif ($new_pw !== $confirm) {
         $err = 'New passwords do not match.';
     } else {
@@ -281,7 +292,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null); ?>
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
                                 <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-announcement-id="<?= (int)($notif['announcement_id'] ?? 0) ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
                                     <?php if ($notif['type'] === 'instructor_approved'): ?>
                                     <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
@@ -324,6 +335,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                                     Already read
                                                 </div>
                                                 <?php endif; ?>
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    Delete
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -338,6 +354,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
                             </div>
                         </div>
                     </div>
@@ -530,7 +549,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Phone</label>
-                                <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09-123456789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09-123456789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Department</label>
@@ -569,8 +588,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
-                                <input type="password" name="new_password" required minlength="8" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                                <p class="text-sm text-slate-400 mt-0.5">Min 8 characters</p>
+                                <input type="password" name="new_password" required minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <p class="text-sm text-slate-400 mt-0.5">Min 6 characters</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>
@@ -647,5 +666,6 @@ function updateNotifTimestamps() {
 updateNotifTimestamps();
 setInterval(updateNotifTimestamps, 60000);
 </script>
+<?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 </html>

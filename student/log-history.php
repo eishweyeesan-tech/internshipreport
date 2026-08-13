@@ -746,7 +746,7 @@ $back_url = 'student-dashboard.php';
                 <?php endif; ?>
             <?php endif; ?>
 
-            <div class="text-center text-sm text-slate-300 py-4 no-print">Powered by InternReport System</div>
+            <div class="text-center text-sm text-slate-300 py-4 no-print">Powered by InternReport</div>
         </main>
     </div>
 </div>

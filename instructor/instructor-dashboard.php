@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/internship_progress.php';
 
 if ($_SESSION['role'] !== 'instructor') {
     header('Location: ../dashboard.php');
@@ -40,7 +41,6 @@ $all_students = $stu_stmt->fetchAll();
 // ══════════════════════════════════════════════════════════════════════
 $today = new DateTime();
 $today_str = $today->format('Y-m-d');
-$max_week = 12;
 
 $student_status = [];
 foreach ($all_students as $stu) {
@@ -49,18 +49,12 @@ foreach ($all_students as $stu) {
     $not_started = false;
 
     if ($stu['internship_start_date']) {
-        $start_date = new DateTime($stu['internship_start_date']);
-        $end_date = $stu['internship_end_date'] ? new DateTime($stu['internship_end_date']) : null;
+        $start_date = $stu['internship_start_date'];
+        $end_date   = $stu['internship_end_date'] ?: null;
+        $dw = internship_current_week($start_date, $end_date, $today);
 
-        if ($today < $start_date) {
-            $dw = 1;
+        if ($today < new DateTime($start_date)) {
             $not_started = true;
-        } elseif ($end_date && $today > $end_date) {
-            $dw = $max_week;
-        } else {
-            $days_elapsed = (int) $today->diff($start_date)->days;
-            $dw = (int) floor($days_elapsed / 7) + 1;
-            $dw = max(1, min($dw, $max_week));
         }
     } else {
         $not_started = true;

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
+require_once __DIR__ . '/../config/internship_progress.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -49,8 +50,9 @@ $selected_year_label = $_SESSION['selected_academic_year_label'] ?? '';
 $weeks = [];
 if ($student['internship_start_date']) {
     $start_dt = new DateTime($student['internship_start_date']);
-    // Generate 12 weeks from start date
-    for ($i = 1; $i <= 12; $i++) {
+    $total_w = internship_total_weeks($student['internship_start_date'], $student['internship_end_date'] ?? null);
+    // Generate weeks from start date
+    for ($i = 1; $i <= $total_w; $i++) {
         $ws = clone $start_dt;
         if ($i > 1) $ws->modify('+' . (($i - 1) * 7) . ' days');
         $we = (clone $ws)->modify('+6 days');
@@ -79,23 +81,18 @@ if ($student['internship_start_date']) {
 // DYNAMIC CURRENT WEEK AUTO-DETECTION
 // ══════════════════════════════════════════════════════════════════════
 $auto_week = 1;
-$max_week = 12;
+$total_weeks = 12;
 $not_started = false;
 
 if ($student['internship_start_date']) {
     $today_obj = new DateTime();
-    $start_date = new DateTime($student['internship_start_date']);
-    $end_date = !empty($student['internship_end_date']) ? new DateTime($student['internship_end_date']) : null;
+    $start_date = $student['internship_start_date'];
+    $end_date = !empty($student['internship_end_date']) ? $student['internship_end_date'] : null;
+    $total_weeks = internship_total_weeks($start_date, $end_date);
+    $auto_week = internship_current_week($start_date, $end_date, $today_obj);
 
-    if ($today_obj < $start_date) {
-        $auto_week = 1;
+    if ($today_obj < new DateTime($start_date)) {
         $not_started = true;
-    } elseif ($end_date && $today_obj > $end_date) {
-        $auto_week = $max_week;
-    } else {
-        $days_elapsed = (int) $today_obj->diff($start_date)->days;
-        $auto_week = (int) floor($days_elapsed / 7) + 1;
-        $auto_week = max(1, min($auto_week, $max_week));
     }
 } else {
     // No start date configured → treat as not started
@@ -142,7 +139,7 @@ $absent_logs = $ad_stmt->fetchAll();
 // WEEKLY GRADING HISTORY (used for current-week grade prefill + GPA card)
 // ══════════════════════════════════════════════════════════════════════
 $all_weeks_grades = [];
-for ($i = 1; $i <= 12; $i++) {
+for ($i = 1; $i <= $total_weeks; $i++) {
     $gq = $pdo->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
     $gq->execute([$student_id, $i]);
     $all_weeks_grades[$i] = $gq->fetch();
@@ -167,6 +164,16 @@ if ($week_start && $week_end) {
     $ie->execute([$student_id, $week_num]);
     $instructor_eval = $ie->fetch();
 }
+
+// ── Week Attendance & Logs (summary cards) ─────────────────────────
+// Shared with view-student-dashboard.php via config/internship_progress.php
+$week_att = ($week_start && $week_end)
+    ? internship_attendance($pdo, $student_id, $week_start, $week_end)
+    : ['present' => 0, 'absent' => 0, 'expected' => 0, 'rate' => 0];
+$week_present         = $week_att['present'];
+$week_expected        = $week_att['expected'];
+$week_attendance_rate = $week_att['rate'];
+$week_log_days        = $week_att['expected'];
 
 // ── Handle Supervisor Evaluation Submission (Method 1) ─────────────
 $msg = '';
@@ -215,23 +222,14 @@ $grade_labels = [
     'needs_improvement' => ['Needs Improvement',  'text-red-600',     'bg-red-50'],
 ];
 
-// Compute attendance rate
-$attendance_rate = $total_logs > 0 ? round(($total_present / $total_logs) * 100) : 0;
-
-// Compute overall GPA for this student
-$student_gpa = 0;
+// ── Weekly Grades Count (summary card) ─────────────────────────────
+// Counts only weekly reports that have an actual supervisor grade
 $student_graded = 0;
-$gpa_weighted = 0;
 foreach ($all_weeks_grades as $wg) {
     if ($wg && isset($wg['weekly_grade'])) {
         $student_graded++;
-        $gpa_weighted += ($grade_point_map[$wg['weekly_grade']] ?? 0);
     }
 }
-if ($student_graded > 0) {
-    $student_gpa = round($gpa_weighted / $student_graded, 2);
-}
-$grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -313,7 +311,7 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                     <?php endif; ?>
                 </div>
                 <div class="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-full">
-                    <span class="text-xs font-bold text-indigo-700">📅 Week <?= $week_num ?>/12</span>
+                    <span class="text-xs font-bold text-indigo-700">📅 Week <?= $week_num ?>/<?= $total_weeks ?></span>
                     <?php if ($week_num === $auto_week): ?>
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <?php endif; ?>
@@ -412,8 +410,9 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center text-lg shadow-lg shadow-emerald-500/30">✅</div>
                 <div>
                     <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Attendance</p>
-                    <p class="text-xl font-black text-slate-800"><?= $attendance_rate ?>%</p>
-                    <p class="text-sm text-emerald-500 font-bold"><?= $total_present ?>/<?= $total_logs ?> days</p>
+                    <p class="text-xl font-black text-slate-800"><?= $week_attendance_rate ?>%</p>
+                    <p class="text-sm text-emerald-500 font-bold"><?= $week_present ?> of <?= $week_expected ?> day<?= $week_expected !== 1 ? 's' : '' ?></p>
+                    <p class="text-xs text-slate-400 font-medium">Week <?= $week_num ?></p>
                 </div>
             </div>
         </div>
@@ -421,9 +420,9 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-lg shadow-lg shadow-blue-500/30">📊</div>
                 <div>
-                    <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">GPA</p>
-                    <p class="text-xl font-black text-slate-800"><?= $student_gpa > 0 ? number_format($student_gpa, 1) : '—' ?></p>
-                    <p class="text-sm text-blue-500 font-bold"><?= $student_graded ?>/12 graded</p>
+                    <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Weekly Grades</p>
+                    <p class="text-xl font-black text-slate-800"><?= $student_graded ?><span class="text-sm font-bold text-slate-400">/<?= $total_weeks ?></span></p>
+                    <p class="text-sm text-blue-500 font-bold">Reports graded</p>
                 </div>
             </div>
         </div>
@@ -432,7 +431,7 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center text-lg shadow-lg shadow-indigo-500/30">📅</div>
                 <div>
                     <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Current Week</p>
-                    <p class="text-xl font-black text-slate-800"><?= $week_num ?><span class="text-sm font-bold text-slate-400">/12</span></p>
+                    <p class="text-xl font-black text-slate-800"><?= $week_num ?><span class="text-sm font-bold text-slate-400">/<?= $total_weeks ?></span></p>
                     <?php if ($week_date_range): ?>
                     <p class="text-sm text-indigo-500 font-bold"><?= $week_date_range ?></p>
                     <?php endif; ?>
@@ -444,8 +443,8 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center text-lg shadow-lg shadow-amber-500/30">📝</div>
                 <div>
                     <p class="text-sm font-semibold text-slate-400 uppercase tracking-wider">Logs This Week</p>
-                    <p class="text-xl font-black text-slate-800"><?= count($daily_logs) ?></p>
-                    <p class="text-sm <?= count($daily_logs) >= 5 ? 'text-emerald-500' : 'text-amber-500' ?> font-bold"><?= count($daily_logs) >= 5 ? 'Complete' : count($daily_logs) . '/5 minimum' ?></p>
+                    <p class="text-xl font-black text-slate-800"><?= $week_log_days ?></p>
+                    <p class="text-sm text-amber-500 font-bold"><?= $week_log_days ?> day<?= $week_log_days !== 1 ? 's' : '' ?> submitted</p>
                 </div>
             </div>
         </div>
@@ -547,7 +546,7 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
                     <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm">📝</span> Daily Logs – Week <?= $week_num ?>
                     </h2>
-                    <span class="text-xs text-slate-400 font-medium"><?= count($daily_logs) ?> day(s)</span>
+                    <span class="text-xs text-slate-400 font-medium"><?= $week_log_days ?> day(s)</span>
                 </div>
                 <?php if (!empty($daily_logs)): ?>
                 <div class="overflow-x-auto">
@@ -782,7 +781,7 @@ $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
 
     </div>
 
-    <div class="text-center text-xs text-slate-400 py-3 font-medium">Powered by InternReport System</div>
+    <div class="text-center text-xs text-slate-400 py-3 font-medium">Powered by InternReport</div>
 </div>
 
         </main>

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/phone_validation.php';
 
 $user_id  = $_SESSION['user_id'];
 $username = $_SESSION['username'];
@@ -78,6 +79,7 @@ if ($user_r && $user_r->num_rows > 0) {
 
 // ── Handle Profile Update ────────────────────────────────────────
 $profile_msg = '';
+$profile_err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $full_name         = trim($_POST['full_name'] ?? '');
     $student_roll      = trim($_POST['student_roll'] ?? '');
@@ -89,6 +91,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $instructor_email  = trim($_POST['instructor_email'] ?? '');
     $instructor_phone  = trim($_POST['instructor_phone'] ?? '');
     $internship_start  = trim($_POST['internship_start_date'] ?? '');
+
+    $phone_err = phone_validation_error($phone);
+    $instructor_err = phone_validation_error($instructor_phone);
+    if ($phone_err !== null) {
+        $profile_err = $phone_err;
+    } elseif ($instructor_err !== null) {
+        $profile_err = $instructor_err;
+    } else {
+    $phone            = normalize_phone($phone);
+    $instructor_phone = normalize_phone($instructor_phone);
 
     $esc_fn  = $conn->real_escape_string($full_name);
     $esc_sr  = $conn->real_escape_string($student_roll);
@@ -111,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
     $profile = $profile_r ? $profile_r->fetch_assoc() : null;
     $profile_msg = 'saved';
+    }
 }
 
 // ── Handle Password Change ───────────────────────────────────────
@@ -123,8 +136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
     if (empty($current) || empty($new_pw) || empty($confirm)) {
         $pw_err = 'All password fields are required.';
-    } elseif (strlen($new_pw) < 8) {
-        $pw_err = 'New password must be at least 8 characters.';
+    } elseif (strlen($new_pw) < 6) {
+        $pw_err = 'New password must be at least 6 characters.';
     } elseif ($new_pw !== $confirm) {
         $pw_err = 'New passwords do not match.';
     } else {
@@ -306,6 +319,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <?php if ($profile_msg === 'saved'): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
                     <span>✅</span> Profile updated successfully.
+                </div>
+                <?php endif; ?>
+
+                <?php if ($profile_err): ?>
+                <div class="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
+                    <span>❌</span> <?= htmlspecialchars($profile_err) ?>
                 </div>
                 <?php endif; ?>
 
@@ -502,7 +521,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Phone</label>
-                                    <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                             </div>
                             <!-- Hidden fields to preserve internship data on save -->
@@ -587,7 +606,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Phone</label>
-                                    <input type="text" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Internship Start Date</label>
@@ -622,8 +641,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
-                                <input type="password" name="new_password" required minlength="8" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                                <p class="text-sm text-slate-400 mt-0.5">Min 8 characters</p>
+                                <input type="password" name="new_password" required minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <p class="text-sm text-slate-400 mt-0.5">Min 6 characters</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>

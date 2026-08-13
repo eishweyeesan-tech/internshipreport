@@ -17,8 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
         $error = 'All fields are required.';
-    } elseif (strlen($new_password) < 8) {
-        $error = 'New password must be at least 8 characters.';
+    } elseif (strlen($new_password) < 6) {
+        $error = 'New password must be at least 6 characters.';
     } elseif ($new_password !== $confirm_password) {
         $error = 'New passwords do not match.';
     } else {
@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Change Password - Internship Report System</title>
+    <title>Change Password - InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
@@ -112,10 +112,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                     <div class="mb-3">
                         <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
-                        <input type="password" name="new_password" required minlength="8"
+                        <input type="password" name="new_password" required minlength="6"
                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition"
                                placeholder="Enter new password">
-                        <p class="text-sm text-slate-400 mt-1">At least 8 characters.</p>
+                        <p class="text-sm text-slate-400 mt-1">At least 6 characters.</p>
                     </div>
                     <div class="mb-5">
                         <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>

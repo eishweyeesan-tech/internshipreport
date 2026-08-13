@@ -13,17 +13,7 @@ $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
 
 // ── Notification redirect URL helper ────────────────────────────
-function notif_redirect_url($type, $related_week) {
-    switch ($type) {
-        case 'instructor_approved':
-        case 'instructor_rejected':
-        case 'supervisor_approved':
-            if ($related_week) return 'supervisor-dashboard.php?week=' . (int)$related_week;
-            return 'supervisor-dashboard.php';
-        default:
-            return 'supervisor-dashboard.php';
-    }
-}
+require_once __DIR__ . '/../config/notify.php';
 
 // ── Mark notification as read ──────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
@@ -46,6 +36,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
         header('Content-Type: application/json');
         echo json_encode(['unread_count' => 0]);
+        exit;
+    }
+    header('Location: supervisor-companies.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
+    $notif_id = (int) ($_POST['notification_id'] ?? 0);
+    $deleted  = false;
+    if ($notif_id > 0) {
+        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
+        $del->execute([$notif_id, $sup_id]);
+        $deleted = $del->rowCount() > 0;
+    }
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        $count_q->execute([$sup_id]);
+        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
         exit;
     }
     header('Location: supervisor-companies.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
@@ -383,7 +391,7 @@ function build_query_url($overrides = []) {
                             <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null); ?>
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
                                 <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
                                     <?php if ($notif['type'] === 'instructor_approved'): ?>
                                     <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
@@ -426,6 +434,11 @@ function build_query_url($overrides = []) {
                                                     Already read
                                                 </div>
                                                 <?php endif; ?>
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    Delete
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -440,6 +453,9 @@ function build_query_url($overrides = []) {
                                     <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
                             </div>
                         </div>
                     </div>
@@ -571,5 +587,6 @@ function build_query_url($overrides = []) {
         </main>
     </div>
 </div>
+<?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 </html>

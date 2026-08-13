@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
+require_once __DIR__ . '/../config/internship_progress.php';
 
 function getWeekRange(string $internship_start_date, int $week_number): ?array
 {
@@ -47,18 +48,7 @@ $sup_id   = $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
 
 // ── Notification redirect URL helper ────────────────────────────
-function notif_redirect_url($type, $related_week, $announcement_id = null) {
-    if ($announcement_id) return 'announcement-detail.php?id=' . (int)$announcement_id;
-    switch ($type) {
-        case 'instructor_approved':
-        case 'instructor_rejected':
-        case 'supervisor_approved':
-            if ($related_week) return 'supervisor-dashboard.php?week=' . (int)$related_week;
-            return 'supervisor-dashboard.php';
-        default:
-            return 'supervisor-dashboard.php';
-    }
-}
+require_once __DIR__ . '/../config/notify.php';
 
 // ── Notification POST handlers ──────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
@@ -81,6 +71,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
         header('Content-Type: application/json');
         echo json_encode(['unread_count' => 0]);
+        exit;
+    }
+    header('Location: view-student-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
+    $notif_id = (int) ($_POST['notification_id'] ?? 0);
+    $deleted  = false;
+    if ($notif_id > 0) {
+        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
+        $del->execute([$notif_id, $sup_id]);
+        $deleted = $del->rowCount() > 0;
+    }
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        $count_q->execute([$sup_id]);
+        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
         exit;
     }
     header('Location: view-student-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
@@ -370,7 +378,7 @@ if ($student_id <= 0) {
                             <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null); ?>
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
                                 <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="markNotifRead(this)">
                                     <?php if ($notif['type'] === 'instructor_approved'): ?>
                                     <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
@@ -413,6 +421,11 @@ if ($student_id <= 0) {
                                                     Already read
                                                 </div>
                                                 <?php endif; ?>
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    Delete
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -427,6 +440,9 @@ if ($student_id <= 0) {
                                     <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
                             </div>
                         </div>
                     </div>
@@ -633,21 +649,44 @@ if (!empty($weeks)) {
 }
 $recent_logs = $log_r->fetchAll();
 
+// ── Selected-week summary (used only by the weekly sections below) ─
+// Attendance is recorded per day (one daily_log row per date, enforced by
+// the unique index on internship_id + log_date). Missing days simply have
+// no row and are NOT counted as present or absent — matching the rest of
+// the app (attendance_rate = present / logged_days).
+$week_logs_count = count($recent_logs);
+
+$week_att = !empty($weeks[$selected_week])
+    ? internship_attendance($pdo, $student_id, $weeks[$selected_week]['start'], $weeks[$selected_week]['end'])
+    : ['present' => 0, 'absent' => 0, 'expected' => 0, 'rate' => 0];
+$week_present_count = $week_att['present'];
+$week_absent_count  = $week_att['absent'];
+
+// ── Entire-internship summary (statistics cards) ──────────────────
+$total_internship_weeks = count($weeks);
+
+$intern_att    = internship_attendance($pdo, $student_id);
+$intern_logs_q = $pdo->prepare("SELECT log_date, calculated_duration FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$intern_logs_q->execute([$student_id]);
+$intern_total_minutes = 0;
+$intern_log_days      = 0;
+$seen_intern_dates    = [];
+foreach ($intern_logs_q->fetchAll() as $log) {
+    if (!isset($seen_intern_dates[$log['log_date']])) {
+        $seen_intern_dates[$log['log_date']] = true;
+        $intern_log_days++;
+    }
+    $dur_parts = explode(':', (string) ($log['calculated_duration'] ?? ''));
+    if (count($dur_parts) === 2) {
+        $intern_total_minutes += ((int)$dur_parts[0] * 60) + (int)$dur_parts[1];
+    }
+}
+$intern_hours = floor($intern_total_minutes / 60);
+$intern_mins  = $intern_total_minutes % 60;
+
 $ref_r = $pdo->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
 $ref_r->execute([$student_id, $selected_week]);
 $weekly_refs = $ref_r->fetchAll();
-
-$att_r = $pdo->prepare("
-    SELECT
-        SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_count,
-        COUNT(*) AS total_count
-    FROM daily_logs WHERE internship_id = ?
-");
-$att_r->execute([$student_id]);
-$att_data = $att_r->fetch();
-$attendance_rate = $att_data['total_count'] > 0
-    ? round(($att_data['present_count'] / $att_data['total_count']) * 100)
-    : 0;
 
 $eval_r = $pdo->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
 $eval_r->execute([$student_id, $selected_week]);
@@ -657,40 +696,14 @@ $sup_eval_r = $pdo->prepare("SELECT * FROM supervisor_weekly_evaluations WHERE s
 $sup_eval_r->execute([$student_id, $selected_week]);
 $sup_evaluation = $sup_eval_r->fetch();
 
-$logs_count = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ?");
-$logs_count->execute([$student_id]);
-$total_logs_count = (int) $logs_count->fetchColumn();
-
-$hours_r = $pdo->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ?");
-$hours_r->execute([$student_id]);
-$all_durations = $hours_r->fetchAll(PDO::FETCH_COLUMN);
-$total_minutes = 0;
-foreach ($all_durations as $dur) {
-    $parts = explode(':', $dur);
-    if (count($parts) === 2) {
-        $total_minutes += ((int)$parts[0] * 60) + (int)$parts[1];
-    }
-}
-$total_hours = floor($total_minutes / 60);
-$total_mins  = $total_minutes % 60;
-
 $today_obj = new DateTime();
 $today_str = $today_obj->format('Y-m-d');
-$max_week = 12;
 $dynamic_week = 1;
 $not_started = false;
 if ($intern_start) {
-    $start_date = new DateTime($intern_start);
-    $end_date = $intern_end ? new DateTime($intern_end) : null;
-    if ($today_obj < $start_date) {
-        $dynamic_week = 1;
+    $dynamic_week = internship_current_week($intern_start, $intern_end ?: null, $today_obj);
+    if ($today_obj < new DateTime($intern_start)) {
         $not_started = true;
-    } elseif ($end_date && $today_obj > $end_date) {
-        $dynamic_week = $max_week;
-    } else {
-        $days_elapsed = (int) $today_obj->diff($start_date)->days;
-        $dynamic_week = (int) floor($days_elapsed / 7) + 1;
-        $dynamic_week = max(1, min($dynamic_week, $max_week));
     }
 } else {
     $not_started = true;
@@ -956,7 +969,7 @@ if ($intern_start) {
                             <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null); ?>
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
                                 <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="markNotifRead(this)">
                                     <?php if ($notif['type'] === 'instructor_approved'): ?>
                                     <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
@@ -999,6 +1012,11 @@ if ($intern_start) {
                                                     Already read
                                                 </div>
                                                 <?php endif; ?>
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    Delete
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -1013,6 +1031,9 @@ if ($intern_start) {
                                     <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
                             </div>
                         </div>
                     </div>
@@ -1123,32 +1144,25 @@ if ($intern_start) {
                 <!-- Statistics Cards -->
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-300">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-lg shadow-lg shadow-blue-500/30">⏱️</div>
-                        </div>
-                        <p class="text-2xl font-black text-slate-800"><?= $total_hours ?>h <?= $total_mins ?>m</p>
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-lg shadow-lg shadow-blue-500/30 mb-3">⏱️</div>
+                        <p class="text-2xl font-black text-slate-800"><?= $intern_hours ?>h <?= $intern_mins ?>m</p>
                         <p class="text-xs text-slate-400 font-medium mt-1">Total Hours Worked</p>
                     </div>
                     <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-300">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white flex items-center justify-center text-lg shadow-lg shadow-violet-500/30">📋</div>
-                        </div>
-                        <p class="text-2xl font-black text-slate-800"><?= $total_logs_count ?></p>
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white flex items-center justify-center text-lg shadow-lg shadow-violet-500/30 mb-3">📋</div>
+                        <p class="text-2xl font-black text-slate-800"><?= $intern_log_days ?></p>
                         <p class="text-xs text-slate-400 font-medium mt-1">Daily Logs Submitted</p>
                     </div>
                     <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-300">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center text-lg shadow-lg shadow-emerald-500/30">✅</div>
-                        </div>
-                        <p class="text-2xl font-black text-slate-800"><?= $attendance_rate ?>%</p>
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center text-lg shadow-lg shadow-emerald-500/30 mb-3">✅</div>
+                        <p class="text-2xl font-black text-slate-800"><?= $intern_att['rate'] ?>%</p>
                         <p class="text-xs text-slate-400 font-medium mt-1">Attendance Rate</p>
+                        <p class="text-[10px] text-slate-500 font-semibold mt-0.5"><?= $intern_att['present'] ?>/<?= $intern_att['expected'] ?> days</p>
                     </div>
                     <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4 hover:shadow-md transition-shadow duration-300">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-lg shadow-lg shadow-purple-500/30">📆</div>
-                        </div>
-                        <p class="text-2xl font-black text-slate-800"><?= count($weeks) > 0 ? count($weeks) : '—' ?></p>
-                        <p class="text-xs text-slate-400 font-medium mt-1">Total Weeks</p>
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-lg shadow-lg shadow-purple-500/30 mb-3">📆</div>
+                        <p class="text-2xl font-black text-slate-800"><?= $total_internship_weeks > 0 ? $total_internship_weeks : '—' ?></p>
+                        <p class="text-xs text-slate-400 font-medium mt-1">Total Internship Weeks</p>
                     </div>
                 </div>
 
@@ -1175,7 +1189,7 @@ if ($intern_start) {
                             <?php endif; ?>
                         </div>
                         <a href="supervisor-review.php?student_id=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-xs font-bold rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-md shadow-purple-500/20">
-                            👁️ View & Grade
+                            View & Grade
                         </a>
                     </div>
                 </div>
@@ -1192,7 +1206,11 @@ if ($intern_start) {
                                 <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                                     <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm">📝</span> Daily Logs
                                 </h2>
-                                <span class="text-xs text-slate-400 font-medium"><?= count($recent_logs) ?> day(s)</span>
+                                <span class="text-xs text-slate-400 font-medium"><?= $week_logs_count ?> day(s)</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">✓ Present: <?= $week_present_count ?></span>
+                                    <span class="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded">✕ Absent: <?= $week_absent_count ?></span>
+                                </div>
                             </div>
                             <?php if (!empty($recent_logs)): ?>
                             <div class="overflow-x-auto">
@@ -1214,9 +1232,9 @@ if ($intern_start) {
                                             </td>
                                             <td class="px-4 py-3 whitespace-nowrap">
                                                 <?php if (($log['attendance_status'] ?? 'present') === 'present'): ?>
-                                                    <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ Present</span>
+                                                    <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">✓ Present</span>
                                                 <?php else: ?>
-                                                    <span class="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ Absent</span>
+                                                    <span class="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded" <?= !empty($log['reason_for_absence']) ? 'title="' . htmlspecialchars(($log['attendance_status'] === 'leave' ? 'Leave' : 'Absent') . ': ' . $log['reason_for_absence']) . '"' : '' ?>>✕ Absent</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td class="px-4 py-3 text-slate-600 max-w-[180px] truncate" title="<?= htmlspecialchars($log['task_title'] ?? '') ?>"><?= htmlspecialchars($log['task_title'] ?? '—') ?></td>
@@ -1352,7 +1370,7 @@ if ($intern_start) {
                             </div>
                             <div class="p-4 space-y-2">
                                 <a href="supervisor-review.php?student_id=<?= $student_id ?>" class="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-xs font-bold rounded-xl hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-sm">
-                                    👁️ View & Grade Reports
+                                    View & Grade Reports
                                 </a>
                             </div>
                         </div>
@@ -1393,5 +1411,6 @@ if ($intern_start) {
     </div>
 </div>
 
+<?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 </html>

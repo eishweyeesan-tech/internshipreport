@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
+require_once __DIR__ . '/../config/internship_progress.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -12,17 +13,7 @@ if ($_SESSION['role'] !== 'supervisor') {
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
 
-function notif_redirect_url($type, $related_week) {
-    switch ($type) {
-        case 'instructor_approved':
-        case 'instructor_rejected':
-        case 'supervisor_approved':
-            if ($related_week) return 'supervisor-dashboard.php?week=' . (int)$related_week;
-            return 'supervisor-dashboard.php';
-        default:
-            return 'supervisor-dashboard.php';
-    }
-}
+require_once __DIR__ . '/../config/notify.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
     $notif_id = (int)($_POST['notification_id'] ?? 0);
@@ -44,6 +35,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
         header('Content-Type: application/json');
         echo json_encode(['unread_count' => 0]);
+        exit;
+    }
+    header('Location: my-students.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
+    $notif_id = (int) ($_POST['notification_id'] ?? 0);
+    $deleted  = false;
+    if ($notif_id > 0) {
+        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
+        $del->execute([$notif_id, $sup_id]);
+        $deleted = $del->rowCount() > 0;
+    }
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        $count_q->execute([$sup_id]);
+        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
         exit;
     }
     header('Location: my-students.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
@@ -101,9 +110,9 @@ $sql = "
 $params = array_merge([$sup_id], $ay_filter['params']);
 
 if ($search) {
-    $sql .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ? OR u.email LIKE ?)";
+    $sql .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ? OR sp.job_role LIKE ? OR u.email LIKE ?)";
     $like = '%' . $search . '%';
-    array_push($params, $like, $like, $like, $like, $like);
+    array_push($params, $like, $like, $like, $like, $like, $like);
 }
 
 $sql .= " ORDER BY sp.full_name ASC";
@@ -171,35 +180,30 @@ if (!empty($students)) {
 // ── Dynamic week + progress status (consistent with dashboard) ──
 $today_obj = new DateTime();
 $dayOfWeek = (int) $today_obj->format('N');
-$max_week = 12;
 
 $student_dynamic_week = [];
 $student_not_started = [];
+$student_progress = [];
 foreach ($students as $sd) {
     $uid = $sd['uid'];
     $dynamic_week = 1;
     $not_started = false;
 
     if ($sd['internship_start_date']) {
-        $start_date = new DateTime($sd['internship_start_date']);
-        $end_date = $sd['internship_end_date'] ? new DateTime($sd['internship_end_date']) : null;
+        $start_date = $sd['internship_start_date'];
+        $end_date   = $sd['internship_end_date'] ?: null;
+        $dynamic_week = internship_current_week($start_date, $end_date, $today_obj);
 
-        if ($today_obj < $start_date) {
-            $dynamic_week = 1;
+        if ($today_obj < new DateTime($start_date)) {
             $not_started = true;
-        } elseif ($end_date && $today_obj > $end_date) {
-            $dynamic_week = $max_week;
-        } else {
-            $days_elapsed = (int) $today_obj->diff($start_date)->days;
-            $dynamic_week = (int) floor($days_elapsed / 7) + 1;
-            $dynamic_week = max(1, min($dynamic_week, $max_week));
         }
     } else {
         $not_started = true;
     }
 
-    $student_dynamic_week[$uid] = $dynamic_week;
-    $student_not_started[$uid] = $not_started;
+    $student_dynamic_week[$uid]  = $dynamic_week;
+    $student_not_started[$uid]   = $not_started;
+    $student_progress[$uid]      = internship_progress($pdo, $uid, $sd['internship_start_date'], $sd['internship_end_date']);
 }
 
 $progress_status = [];
@@ -523,7 +527,7 @@ function build_query_url($overrides = []) {
                             <div class="max-h-96 overflow-y-auto">
                                 <?php if (!empty($recent_notifications)): ?>
                                 <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null); ?>
+                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
                                 <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
                                     <?php if ($notif['type'] === 'instructor_approved'): ?>
                                     <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
@@ -566,6 +570,11 @@ function build_query_url($overrides = []) {
                                                     Already read
                                                 </div>
                                                 <?php endif; ?>
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                                    Delete
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -580,6 +589,9 @@ function build_query_url($overrides = []) {
                                     <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
                                 </div>
                                 <?php endif; ?>
+                            </div>
+                            <div class="border-t border-slate-100">
+                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
                             </div>
                         </div>
                     </div>
@@ -685,7 +697,6 @@ function build_query_url($overrides = []) {
                             $status = $progress_status[$uid] ?? 'none';
                             $label = status_label($status);
                             $dot = status_dot($status);
-                            $dw = $student_dynamic_week[$uid] ?? 1;
                             $not_started = $student_not_started[$uid] ?? false;
                             $att = $attendance[$uid] ?? null;
                             $att_pct = $att && $att['total_count'] > 0 ? (int) round(($att['present_count'] / $att['total_count']) * 100) : 0;
@@ -721,7 +732,7 @@ function build_query_url($overrides = []) {
                                     </div>
                                     <span class="text-xs font-bold text-slate-600"><?= $att_pct ?>%</span>
                                 </div>
-                                <p class="text-[11px] text-slate-400 mt-1"><?= $not_started ? 'Not started' : 'Week ' . (int)$dw . '/12' ?></p>
+                                <p class="text-[11px] text-slate-400 mt-1"><?= $not_started ? 'Not started' : 'Week ' . (int) ($student_progress[$uid]['completed'] ?? 0) . '/' . (int) ($student_progress[$uid]['total'] ?? 0) ?></p>
                                 <p class="text-[11px] text-slate-400"><?= $s['internship_start_date'] ? (new DateTime($s['internship_start_date']))->format('d M Y') . ' – ' . ($s['internship_end_date'] ? (new DateTime($s['internship_end_date']))->format('d M Y') : '…') : '—' ?></p>
                             </td>
                             <td class="px-5 py-4">
@@ -758,5 +769,6 @@ function build_query_url($overrides = []) {
 
     </div>
 </div>
+<?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 </html>

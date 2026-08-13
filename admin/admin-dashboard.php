@@ -709,7 +709,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-slate-500 mb-1">Default Password *</label>
-                            <input type="text" name="s_password" required value="<?= htmlspecialchars($def_student_pw) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 transition">
+                            <input type="text" name="s_password" required minlength="6" value="<?= htmlspecialchars($def_student_pw) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 transition">
                             <p class="text-sm text-slate-400 mt-0.5">Must change on first login.</p>
                         </div>
                     </div>
@@ -753,7 +753,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                         </div>
                         <div>
                             <label class="block text-sm font-bold text-slate-500 mb-1">Default Password *</label>
-                            <input type="text" name="t_password" required value="<?= htmlspecialchars($def_supervisor_pw) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 transition">
+                            <input type="text" name="t_password" required minlength="6" value="<?= htmlspecialchars($def_supervisor_pw) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 transition">
                             <p class="text-sm text-slate-400 mt-0.5">Must change on first login.</p>
                         </div>
                     </div>

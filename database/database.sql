@@ -281,12 +281,23 @@ CREATE TABLE IF NOT EXISTS notifications (
         'instructor_approved',
         'instructor_rejected',
         'supervisor_approved',
+        'new_report_submitted',
+        'report_needs_review',
+        'student_behind_schedule',
+        'internship_completed',
+        'system_notice',
         'info'
     ) NOT NULL DEFAULT 'info',
     related_week INT DEFAULT NULL,
+    student_id INT DEFAULT NULL,
+    report_id INT DEFAULT NULL,
+    announcement_id INT DEFAULT NULL,
     is_read TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    INDEX idx_notif_user_read (user_id, is_read),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 -- ============================================================
 -- TRIGGERS

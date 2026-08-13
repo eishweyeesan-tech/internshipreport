@@ -27,7 +27,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InternReport – Internship Management System</title>
+    <title>Internship Report Management System | InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -111,92 +111,99 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
             <div class="grid lg:grid-cols-2 gap-16 items-center">
                 <!-- Left Content -->
                 <div class="space-y-8">
-                    <div class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-200 rounded-full">
-                        <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-                        <span class="text-xs font-bold text-indigo-700">Internship Management Platform</span>
-                    </div>
-                    
                     <h1 class="text-5xl lg:text-6xl font-black text-slate-800 leading-tight">
-                        Streamline Your
-                        <span class="gradient-text"> Internship</span>
-                        Experience
+                        Internship Report
+                        <span class="gradient-text">Management System</span>
                     </h1>
-                    
+
+                    <p class="text-xl font-bold text-indigo-600">Manage internship reports, track student progress, and simplify evaluation in one centralized system.</p>
+
                     <p class="text-lg text-slate-600 leading-relaxed max-w-xl">
-                        A comprehensive platform for students, supervisors, and instructors to manage internship reports, track progress, and evaluate performance seamlessly.
+                        A centralized internship report management system for students, supervisors, and company instructors.
                     </p>
 
                     <div class="flex items-center gap-4">
                         <a href="login.php" class="px-8 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-base font-bold rounded-2xl shadow-xl shadow-indigo-500/30 transition-all duration-300 hover:scale-105">
-                            Get Started →
+                            Get Started
                         </a>
                         <a href="#features" class="px-8 py-4 bg-white border-2 border-slate-200 text-slate-700 text-base font-bold rounded-2xl hover:border-indigo-300 hover:text-indigo-600 transition-all duration-300">
                             Learn More
                         </a>
                     </div>
 
-                    <!-- Stats -->
-                    <div class="flex items-center gap-8 pt-4">
-                        <div class="text-center">
-                            <p id="stat-students" class="text-3xl font-black text-slate-800">0</p>
-                            <p class="text-xs text-slate-500 font-medium">Students</p>
+                    <!-- Value Highlights (non-numeric — no test/demo statistics) -->
+                    <div class="flex flex-wrap items-center gap-x-8 gap-y-4 pt-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-base">🔒</div>
+                            <p class="text-sm font-semibold text-slate-600">Secure &amp; Private</p>
                         </div>
-                        <div class="w-px h-12 bg-slate-200"></div>
-                        <div class="text-center">
-                            <p id="stat-supervisors" class="text-3xl font-black text-slate-800">0</p>
-                            <p class="text-xs text-slate-500 font-medium">Supervisors</p>
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 text-base">📈</div>
+                            <p class="text-sm font-semibold text-slate-600">Real-time Progress Tracking</p>
                         </div>
-                        <div class="w-px h-12 bg-slate-200"></div>
-                        <div class="text-center">
-                            <p id="stat-companies" class="text-3xl font-black text-slate-800">0</p>
-                            <p class="text-xs text-slate-500 font-medium">Companies</p>
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 text-base">🔔</div>
+                            <p class="text-sm font-semibold text-slate-600">Automated Alerts</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- Right Content - Illustration -->
+                <!-- Right Content - How InternReport Works -->
                 <div class="relative hidden lg:block">
-                    <div class="relative w-full h-[500px]">
-                        <!-- Main Card -->
-                        <div class="absolute top-10 left-10 w-80 bg-white rounded-3xl shadow-2xl shadow-slate-200/50 p-6 float-animation">
-                            <div class="flex items-center gap-4 mb-4">
-                                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl shadow-lg shadow-indigo-500/30">📊</div>
-                                <div>
-                                    <p class="font-bold text-slate-800">Dashboard</p>
-                                    <p class="text-xs text-slate-400">Real-time analytics</p>
-                                </div>
-                            </div>
-                            <div class="space-y-3">
-                                <div class="h-3 bg-slate-100 rounded-full overflow-hidden">
-                                    <div class="h-full w-4/5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"></div>
-                                </div>
-                                <div class="h-3 bg-slate-100 rounded-full overflow-hidden">
-                                    <div class="h-full w-3/5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full"></div>
-                                </div>
-                                <div class="h-3 bg-slate-100 rounded-full overflow-hidden">
-                                    <div class="h-full w-4/5 bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"></div>
-                                </div>
+                    <div class="bg-white rounded-3xl border border-slate-100 shadow-2xl shadow-slate-200/50 p-8">
+                        <div class="flex items-center gap-3 mb-8">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-lg shadow-lg shadow-indigo-500/30">⚙️</div>
+                            <div>
+                                <p class="font-bold text-slate-800">How InternReport Works</p>
+                                <p class="text-xs text-slate-400">A guided workflow from start to finish</p>
                             </div>
                         </div>
-
-                        <!-- Floating Badge -->
-                        <div class="absolute top-32 right-10 bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-4 float-animation" style="animation-delay: 1s;">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-lg">✅</div>
+                        <div class="space-y-0">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg shrink-0">🎓</div>
                                 <div>
-                                    <p class="font-bold text-slate-800 text-sm">Task Complete</p>
-                                    <p class="text-xs text-slate-400">Daily log submitted</p>
+                                    <p class="text-sm font-bold text-slate-700">Student</p>
+                                    <p class="text-xs text-slate-400">Submits work throughout the internship</p>
                                 </div>
                             </div>
-                        </div>
-
-                        <!-- Floating Grade Card -->
-                        <div class="absolute bottom-20 left-20 bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-4 float-animation" style="animation-delay: 2s;">
-                            <div class="flex items-center gap-3">
-                                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xl font-black">A</div>
+                            <div class="ml-5 h-6 flex items-center text-slate-300 text-sm">↓</div>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg shrink-0">📝</div>
                                 <div>
-                                    <p class="font-bold text-slate-800">Weekly Grade</p>
-                                    <p class="text-xs text-emerald-600 font-medium">Excellent Performance</p>
+                                    <p class="text-sm font-bold text-slate-700">Daily Logs</p>
+                                    <p class="text-xs text-slate-400">Records tasks, hours, and skills learned</p>
+                                </div>
+                            </div>
+                            <div class="ml-5 h-6 flex items-center text-slate-300 text-sm">↓</div>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-lg shrink-0">📊</div>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-700">Weekly Reflection</p>
+                                    <p class="text-xs text-slate-400">Documents learning and achievements</p>
+                                </div>
+                            </div>
+                            <div class="ml-5 h-6 flex items-center text-slate-300 text-sm">↓</div>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-lg shrink-0">👨‍🏫</div>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-700">Instructor Review</p>
+                                    <p class="text-xs text-slate-400">Reviews and approves submissions</p>
+                                </div>
+                            </div>
+                            <div class="ml-5 h-6 flex items-center text-slate-300 text-sm">↓</div>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg shrink-0">🏆</div>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-700">Supervisor Grading</p>
+                                    <p class="text-xs text-slate-400">Assigns weekly grades with feedback</p>
+                                </div>
+                            </div>
+                            <div class="ml-5 h-6 flex items-center text-slate-300 text-sm">↓</div>
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-lg shrink-0 shadow-lg shadow-emerald-500/30">🎉</div>
+                                <div>
+                                    <p class="text-sm font-bold text-slate-700">Internship Complete</p>
+                                    <p class="text-xs text-slate-400">A complete record of the journey</p>
                                 </div>
                             </div>
                         </div>
@@ -241,9 +248,9 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 <!-- Feature 3 -->
                 <div class="group bg-gradient-to-br from-slate-50 to-white border border-slate-200/60 rounded-3xl p-8 card-hover transition-all duration-300 hover:shadow-xl hover:border-emerald-200">
                     <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center text-2xl text-white shadow-lg shadow-emerald-500/30 mb-6 group-hover:scale-110 transition-transform duration-300">👨‍🏫</div>
-                    <h3 class="text-xl font-bold text-slate-800 mb-3">Instructor Evaluation</h3>
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">Digital Instructor Evaluation</h3>
                     <p class="text-sm text-slate-600 leading-relaxed">
-                        Company instructors can evaluate student performance with digital signatures and detailed feedback.
+                        Company instructors evaluate student performance through a secure shared link — no account or login required.
                     </p>
                 </div>
 
@@ -286,7 +293,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 </span>
                 <h2 class="text-4xl font-black text-slate-800 mb-4">Built for All Roles</h2>
                 <p class="text-lg text-slate-600 max-w-2xl mx-auto">
-                    Whether you're a student, supervisor, or administrator – we've got you covered.
+                    Three authenticated roles — Student, Supervisor, and Administrator — plus a company Instructor who reviews through a secure link.
                 </p>
             </div>
 
@@ -349,27 +356,32 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     </div>
                 </div>
 
-                <!-- Instructor Card -->
+                <!-- Instructor Card (external reviewer — no login) -->
                 <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 overflow-hidden card-hover transition-all duration-300">
                     <div class="h-2 bg-gradient-to-r from-amber-500 to-amber-600"></div>
                     <div class="p-8">
                         <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-3xl text-white shadow-lg shadow-amber-500/30 mb-6">👨‍🏫</div>
-                        <h3 class="text-2xl font-bold text-slate-800 mb-3">Instructors</h3>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-1">Instructors</h3>
+                        <p class="text-xs font-bold text-amber-600 uppercase tracking-wider mb-4">Company Reviewers</p>
                         <p class="text-sm text-slate-600 mb-6 leading-relaxed">
-                            Review student reports, provide feedback with digital signatures, and approve or reject submissions.
+                            Review student internship reports through a secure shared link. No account or login is required.
                         </p>
-                        <ul class="space-y-3 mb-8">
+                        <ul class="space-y-3">
                             <li class="flex items-center gap-3 text-sm text-slate-600">
                                 <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">✓</span>
-                                Report review
+                                Review student reports
                             </li>
                             <li class="flex items-center gap-3 text-sm text-slate-600">
                                 <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">✓</span>
-                                Digital signatures
+                                Provide feedback
                             </li>
                             <li class="flex items-center gap-3 text-sm text-slate-600">
                                 <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">✓</span>
-                                Approve / Reject
+                                Evaluate performance
+                            </li>
+                            <li class="flex items-center gap-3 text-sm text-slate-600">
+                                <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs">✓</span>
+                                Approve / Reject submissions
                             </li>
                         </ul>
                     </div>
@@ -404,6 +416,17 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     </div>
                 </div>
             </div>
+
+            <!-- Instructor Access Note -->
+            <div class="mt-12 bg-white rounded-2xl border border-amber-200/60 shadow-sm p-6 flex items-start gap-4 max-w-3xl mx-auto">
+                <div class="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 text-lg shrink-0">🔗</div>
+                <div>
+                    <p class="text-sm font-bold text-slate-800 mb-1">How Company Instructors Access the System</p>
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        Students can share a secure evaluation link with their company instructor. The instructor opens the link directly in a browser to review reports and provide feedback — no account or login required.
+                    </p>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -416,10 +439,10 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                         <span class="text-xs font-bold text-emerald-700">About Us</span>
                     </span>
                     <h2 class="text-4xl font-black text-slate-800 leading-tight">
-                        Simplifying Internship Management
+                        Simplifying Internship Report Management
                     </h2>
                     <p class="text-lg text-slate-600 leading-relaxed">
-                        InternReport was built to digitize and streamline the internship reporting process. Our platform connects students, supervisors, and instructors in one unified system.
+                        InternReport is an Internship Report Management System that brings daily report submission, weekly reports and reflections, student progress tracking, supervisor review and grading, instructor feedback through a secure shared link, notifications, and attendance tracking into one centralized platform.
                     </p>
                     <div class="grid grid-cols-2 gap-6 pt-4">
                         <div class="flex items-center gap-4">
@@ -454,41 +477,25 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 </div>
                 <div class="relative">
                     <div class="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-10 text-white shadow-2xl shadow-indigo-500/30">
-                        <div class="space-y-6">
-                            <div class="flex items-center gap-4">
-                                <div class="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-2xl">📋</div>
-                                <div>
-                                    <p class="text-2xl font-black">InternReport</p>
-                                    <p class="text-indigo-200 text-sm">Management System</p>
-                                </div>
+                        <p class="text-xl font-black mb-2">One Platform, Three Connected Roles</p>
+                        <p class="text-sm text-indigo-200 mb-10">Students submit. Instructors review. Supervisors grade. Everything stays connected.</p>
+                        <div class="text-center">
+                            <div class="inline-block bg-white/10 backdrop-blur-sm rounded-2xl px-10 py-6 mb-4 w-full">
+                                <div class="w-14 h-14 mx-auto rounded-2xl bg-white/20 flex items-center justify-center text-2xl mb-3">🎓</div>
+                                <p class="font-bold text-base">Student</p>
+                                <p class="text-xs text-indigo-200 mt-1">Submits daily logs &amp; reflections</p>
                             </div>
-                            <div class="space-y-4">
-                                <div class="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="text-sm font-medium">Daily Logs</span>
-                                        <span class="text-xs bg-white/20 px-2 py-0.5 rounded">Active</span>
-                                    </div>
-                                    <div class="h-2 bg-white/20 rounded-full overflow-hidden">
-                                        <div class="h-full w-4/5 bg-white rounded-full"></div>
-                                    </div>
+                            <div class="text-indigo-200 text-2xl my-1">↓</div>
+                            <div class="flex items-center justify-center gap-4">
+                                <div class="flex-1 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-6">
+                                    <div class="w-14 h-14 mx-auto rounded-2xl bg-white/20 flex items-center justify-center text-2xl mb-3">👨‍🏫</div>
+                                    <p class="font-bold text-base">Instructor</p>
+                                    <p class="text-xs text-indigo-200 mt-1">Reviews &amp; approves</p>
                                 </div>
-                                <div class="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="text-sm font-medium">Weekly Grades</span>
-                                        <span class="text-xs bg-white/20 px-2 py-0.5 rounded">Active</span>
-                                    </div>
-                                    <div class="h-2 bg-white/20 rounded-full overflow-hidden">
-                                        <div class="h-full w-3/5 bg-white rounded-full"></div>
-                                    </div>
-                                </div>
-                                <div class="bg-white/10 backdrop-blur-sm rounded-xl p-4">
-                                    <div class="flex items-center justify-between mb-2">
-                                        <span class="text-sm font-medium">Evaluations</span>
-                                        <span class="text-xs bg-white/20 px-2 py-0.5 rounded">Active</span>
-                                    </div>
-                                    <div class="h-2 bg-white/20 rounded-full overflow-hidden">
-                                        <div class="h-full w-5/5 bg-white rounded-full"></div>
-                                    </div>
+                                <div class="flex-1 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-6">
+                                    <div class="w-14 h-14 mx-auto rounded-2xl bg-white/20 flex items-center justify-center text-2xl mb-3">🏆</div>
+                                    <p class="font-bold text-base">Supervisor</p>
+                                    <p class="text-xs text-indigo-200 mt-1">Grades &amp; feedback</p>
                                 </div>
                             </div>
                         </div>
@@ -504,7 +511,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
         <div class="relative max-w-4xl mx-auto px-6 text-center">
             <h2 class="text-4xl font-black text-white mb-6">Ready to Get Started?</h2>
             <p class="text-lg text-indigo-100 mb-8 max-w-2xl mx-auto">
-                Join hundreds of students and supervisors already using InternReport to streamline their internship experience.
+                Sign in to submit daily logs, track progress, and manage evaluations throughout your internship.
             </p>
             <a href="login.php" class="inline-flex items-center gap-2 px-8 py-4 bg-white text-indigo-600 text-base font-bold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300">
                 Sign In Now →
@@ -524,7 +531,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                         <span class="text-xl font-extrabold text-white tracking-tight">InternReport</span>
                     </div>
                     <p class="text-sm leading-relaxed">
-                        A comprehensive internship management platform for educational institutions.
+                        A centralized internship report management system for students, supervisors, instructors, and administrators.
                     </p>
                 </div>
                 <div>
@@ -547,7 +554,6 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <h4 class="text-white font-bold mb-4">Contact</h4>
                     <ul class="space-y-2">
                         <li class="text-sm">📧 support@internreport.com</li>
-                        <li class="text-sm">📞 +1 (555) 123-4567</li>
                     </ul>
                 </div>
             </div>
@@ -558,17 +564,6 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
             </div>
         </div>
     </footer>
-
-    <script>
-        fetch('api/homepage_stats.php')
-            .then(function (response) { return response.json(); })
-            .then(function (data) {
-                document.getElementById('stat-students').textContent = data.students;
-                document.getElementById('stat-supervisors').textContent = data.supervisors;
-                document.getElementById('stat-companies').textContent = data.companies;
-            })
-            .catch(function () {});
-    </script>
 
 </body>
 </html>

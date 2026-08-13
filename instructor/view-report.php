@@ -178,13 +178,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
 
         // Notify assigned supervisor
         if (!empty($profile['supervisor_user_id'])) {
-            $sup_notif_stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'info', ?)");
-            $sup_notif_stmt->execute([
-                $profile['supervisor_user_id'],
-                'Student Report Ready for Review',
-                $student_name . ' has had Week ' . $week_number . ' approved by the instructor and is ready for your review.',
-                $week_number
-            ]);
+            require_once __DIR__ . '/../config/notify.php';
+            notify_user_once(
+                $pdo,
+                (int) $profile['supervisor_user_id'],
+                'Report Needs Review',
+                $student_name . "'s Week " . $week_number . ' report was approved by the instructor and now needs your review.',
+                'report_needs_review',
+                $week_number,
+                $student_id
+            );
 
             if (!empty($profile['supervisor_email'])) {
                 require_once __DIR__ . '/../config/mail.php';
@@ -238,7 +241,7 @@ function render_error($title, $msg, $icon) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Intern Report – Week <?= $week_number ?></title>
+    <title>Internship Report – Week <?= $week_number ?> – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -704,7 +707,7 @@ function render_error($title, $msg, $icon) {
 
     </div>
 
-    <div class="text-center text-sm text-slate-300 py-2">Powered by InternReport System</div>
+    <div class="text-center text-sm text-slate-300 py-2">Powered by InternReport</div>
 </div>
 
 <script>
