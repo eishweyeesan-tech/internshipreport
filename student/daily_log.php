@@ -332,7 +332,10 @@ if (!empty($weeks[$selected_week])) {
         .flatpickr-prev-month:hover, .flatpickr-next-month:hover { fill: #e0e7ff !important; stroke: #e0e7ff !important; }
         #logDateWrap { position: relative; }
         #logDateWrap .fp-input { padding-right: 2.5rem; }
-        .glass-sidebar { background: rgba(30, 27, 75, 0.85); backdrop-filter: blur(20px); }
+        .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+        .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+        .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
+        .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
         .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
         .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
@@ -346,34 +349,28 @@ if (!empty($weeks[$selected_week])) {
     <!-- ─── SIDEBAR ─── -->
     <aside class="w-56 glass-sidebar flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
+            <span class="font-black text-white tracking-tight">InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-3">
-            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
+        <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
+            <a href="student-dashboard.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
             </a>
-            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
-            </a>
-            <a href="daily_log.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Daily Log
+            <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> Notifications
             </a>
             <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
-            </a>
-            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
             </a>
             <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253z"/></svg> Instructions
             </a>
             <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
             <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
             </a>
         </div>
     </aside>
@@ -390,7 +387,7 @@ if (!empty($weeks[$selected_week])) {
 
                 <!-- Header -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-                    <h1 class="text-lg font-black text-slate-800 mb-1">📝 Daily Log Sheet</h1>
+                    <h1 class="text-lg font-black text-slate-800 mb-1">Daily Log Sheet</h1>
                     <p class="text-xs text-slate-400 leading-relaxed">
                         Select a <strong class="text-slate-600">Week</strong> first, then pick a valid <strong class="text-slate-600">Date</strong>.
                         Weekends, public holidays, and previously submitted dates are greyed out.
@@ -422,7 +419,7 @@ if (!empty($weeks[$selected_week])) {
                 <?php if ($log_locked): ?>
                 <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-6">
                     <div class="flex items-center gap-3">
-                        <span class="text-2xl">🔒</span>
+                        <svg class="w-6 h-6 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h.01M5 21h14a2 2 0 001.71-3L13.71 4.86a2 2 0 00-3.42 0L3.29 18a2 2 0 001.71 3z"/></svg>
                         <div>
                             <h2 class="text-sm font-black text-amber-800 uppercase tracking-wider">Week <?= $selected_week ?> is Locked</h2>
                             <p class="text-xs text-amber-600 mt-1">You have signed this week's report. Daily logs cannot be edited until the instructor reviews and rejects the report.</p>
@@ -432,7 +429,7 @@ if (!empty($weeks[$selected_week])) {
                 <?php endif; ?>
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 <?= $log_locked ? 'hidden' : '' ?>">
                     <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
-                        <span class="p-1 bg-blue-50 text-blue-600 rounded">📝</span> <?= $editing_log ? 'Edit Log Entry' : 'New Log Entry' ?>
+                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg> <?= $editing_log ? 'Edit Log Entry' : 'New Log Entry' ?>
                     </h2>
 
                     <form method="POST" id="logForm" class="space-y-5" onsubmit="return validateSubmit(event)">
@@ -442,7 +439,7 @@ if (!empty($weeks[$selected_week])) {
 
                         <!-- Week Select -->
                         <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-1">📆 Select Week</label>
+                            <label class="block text-sm font-bold text-slate-500 mb-1">Select Week</label>
                             <select name="selected_week" id="weekSelect" required
                                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition cursor-pointer">
                                 <option value="">— Choose a week —</option>
@@ -457,19 +454,19 @@ if (!empty($weeks[$selected_week])) {
 
                         <!-- Date Picker -->
                         <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-1">📅 Log Date</label>
+                            <label class="block text-sm font-bold text-slate-500 mb-1">Log Date</label>
                             <div id="logDateWrap" class="relative">
                                 <input type="text" name="log_date" id="logDate" required readonly <?= $editing_log ? '' : 'disabled' ?>
                                     value="<?= $editing_log ? htmlspecialchars($editing_log['log_date']) : '' ?>"
                                     placeholder="<?= $editing_log ? '' : 'Select a week first…' ?>"
                                     class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed">
                             </div>
-                            <p id="dateHint" class="text-sm text-slate-400 mt-1"><?= $editing_log ? '✓ Editing existing log' : 'Select a week first to open the calendar.' ?></p>
+                            <p id="dateHint" class="text-sm text-slate-400 mt-1"><?= $editing_log ? 'Editing existing log' : 'Select a week first to open the calendar.' ?></p>
                         </div>
 
                         <!-- Attendance Status -->
                         <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-2">✅ Attendance Status</label>
+                            <label class="block text-sm font-bold text-slate-500 mb-2">Attendance Status</label>
                             <div class="flex items-center gap-4">
                                 <label class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer hover:bg-emerald-100 transition">
                                     <input type="radio" name="attendance_status" value="present" <?= ($editing_log ? $edit_att : 'checked') === 'present' ? 'checked' : '' ?> onchange="toggleAttendance()" class="accent-emerald-600">
@@ -486,45 +483,45 @@ if (!empty($weeks[$selected_week])) {
                         <div id="present-fields" class="space-y-4 <?= ($editing_log && $edit_att === 'absent') ? 'hidden' : '' ?>">
                             <div class="grid grid-cols-3 gap-4">
                                 <div>
-                                    <label class="block text-sm font-bold text-slate-500 mb-1">⏱️ Start Time</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Start Time</label>
                                     <input type="time" name="start_time" id="start_time" value="<?= $editing_log ? htmlspecialchars(substr($editing_log['calculated_duration'], 0, 5)) : '09:00' ?>" onchange="calcHours()"
                                         class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-bold text-slate-500 mb-1">⏱️ End Time</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">End Time</label>
                                     <input type="time" name="end_time" id="end_time" value="17:00" onchange="calcHours()"
                                         class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-bold text-slate-500 mb-1">⏳ Duration</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Duration</label>
                                     <input type="text" id="hours_display" value="<?= $editing_log ? htmlspecialchars($editing_log['calculated_duration']) : '08:00' ?>" readonly
                                         class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-blue-700 font-bold cursor-default">
                                     <input type="hidden" name="hours_worked" id="hours_worked" value="<?= $editing_log ? htmlspecialchars($editing_log['calculated_duration']) : '08:00' ?>">
                                 </div>
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">💡 Intended Task</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Intended Task</label>
                                 <input type="text" name="intended_task" value="<?= htmlspecialchars($editing_log['task_title'] ?? '') ?>" placeholder="e.g. UI Design & API Integration"
                                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">📋 Task Detail</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Task Detail</label>
                                 <textarea name="task_detail" rows="2" placeholder="Describe the planned tasks…"
                                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['task_detail'] ?? '') ?></textarea>
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">✅ Actual Task Performed</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Actual Task Performed</label>
                                 <textarea name="actual_task" rows="2" placeholder="What you actually accomplished…"
                                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['tasks_performed'] ?? '') ?></textarea>
                             </div>
                             <div class="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label class="block text-sm font-bold text-slate-500 mb-1">🛠️ Tools / Tech Used</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Tools / Tech Used</label>
                                     <input type="text" name="tools_used" value="<?= htmlspecialchars($editing_log['tools_used'] ?? '') ?>" placeholder="PHP, TailwindCSS, MySQL…"
                                         class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-emerald-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-bold text-slate-500 mb-1">🧠 Knowledge Gained</label>
+                                    <label class="block text-sm font-bold text-slate-500 mb-1">Knowledge Gained</label>
                                     <input type="text" name="knowledge_gained" value="<?= htmlspecialchars($editing_log['learnt_skills'] ?? '') ?>" placeholder="Database optimization, REST APIs…"
                                         class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                 </div>
@@ -534,7 +531,7 @@ if (!empty($weeks[$selected_week])) {
                         <!-- ABSENT FIELDS -->
                         <div id="absent-fields" class="<?= ($editing_log && $edit_att === 'absent') ? '' : 'hidden' ?> space-y-4">
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">📝 Reason for Absence</label>
+                                <label class="block text-sm font-bold text-slate-500 mb-1">Reason for Absence</label>
                                 <textarea name="reason_for_absence" rows="2" placeholder="State your reason…"
                                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['reason_for_absence'] ?? '') ?></textarea>
                             </div>
@@ -546,7 +543,7 @@ if (!empty($weeks[$selected_week])) {
                             <?php endif; ?>
                             <button type="submit" name="<?= $editing_log ? 'update_log' : 'add_log' ?>"
                                 class="px-5 py-2 <?= $editing_log ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700' ?> text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">
-                                <?= $editing_log ? '✏️ Update Log' : '💾 Save Daily Log' ?>
+                                <?= $editing_log ? 'Update Log' : 'Save Daily Log' ?>
                             </button>
                         </div>
                     </form>
@@ -554,10 +551,12 @@ if (!empty($weeks[$selected_week])) {
 
                 <!-- ═══════════ LOG HISTORY TABLE ═══════════ -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between gap-4">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between gap-4">
                         <div class="flex items-center gap-3">
                             <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm">📋</span> Log History
+                                <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                </span> Log History
                             </h3>
                             <span class="text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full"><?= count($log_by_date) ?> / <?= count($week_dates) ?> day(s)</span>
                         </div>
@@ -567,8 +566,8 @@ if (!empty($weeks[$selected_week])) {
                                 <option value="<?= $wn ?>" <?= $selected_week == $wn ? 'selected' : '' ?>>Week <?= $wn ?></option>
                                 <?php endforeach; ?>
                             </select>
-                            <button onclick="window.print()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-50 border border-slate-100 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition group cursor-pointer">
-                                <span class="group-hover:scale-110 transition-transform">🖨️</span> Print
+                            <button onclick="window.print()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition group cursor-pointer">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg> Print
                             </button>
                         </div>
                     </div>
@@ -608,11 +607,11 @@ if (!empty($weeks[$selected_week])) {
                                                 $is_holiday = ($att === 'leave' || $att === 'absent') && stripos($reason, 'Public Holiday') === 0;
                                                 ?>
                                                 <?php if ($is_holiday): ?>
-                                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60" title="<?= htmlspecialchars($reason) ?>">🇲🇲 Public Holiday</span>
+                                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/60" title="<?= htmlspecialchars($reason) ?>">Public Holiday</span>
                                                 <?php elseif ($att === 'present'): ?>
-                                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/60">✅ Present</span>
+                                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200/60">Present</span>
                                                 <?php else: ?>
-                                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200/60" title="<?= htmlspecialchars($reason) ?>">❌ Absent</span>
+                                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1 rounded-lg border border-red-200/60" title="<?= htmlspecialchars($reason) ?>">Absent</span>
                                                 <?php endif; ?>
                                             </td>
                                             <?php $is_absent = ($log['attendance_status'] ?? 'present') === 'absent' || (($log['attendance_status'] ?? '') === 'leave' && stripos($log['reason_for_absence'] ?? '', 'Public Holiday') === 0); ?>
@@ -624,12 +623,12 @@ if (!empty($weeks[$selected_week])) {
                                             <td class="px-5 py-4 whitespace-nowrap text-right">
                                                 <div class="flex items-center justify-end gap-1.5">
                                                     <?php if ($log_locked): ?>
-                                                        <span class="px-2.5 py-1 text-sm font-bold text-slate-400 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed">🔒 Signed</span>
+                                                        <span class="px-2.5 py-1 text-sm font-bold text-slate-400 bg-slate-100 border border-slate-200 rounded-lg cursor-not-allowed">Signed</span>
                                                     <?php else: ?>
-                                                        <a href="?edit=<?= $log['id'] ?>&week=<?= $selected_week ?>" class="px-2.5 py-1 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition">✏️ Edit</a>
+                                                        <a href="?edit=<?= $log['id'] ?>&week=<?= $selected_week ?>" class="px-2.5 py-1 text-sm font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition">Edit</a>
                                                         <form method="POST" class="inline" onsubmit="return confirm('Delete this log entry for <?= htmlspecialchars($log['log_date']) ?>? This cannot be undone.')">
                                                             <input type="hidden" name="log_id" value="<?= $log['id'] ?>">
-                                                            <button type="submit" name="delete_log" class="px-2.5 py-1 text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition cursor-pointer">🗑️ Delete</button>
+                                                            <button type="submit" name="delete_log" class="px-2.5 py-1 text-sm font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition cursor-pointer">Delete</button>
                                                         </form>
                                                     <?php endif; ?>
                                                 </div>
@@ -642,7 +641,7 @@ if (!empty($weeks[$selected_week])) {
                                                 <div class="text-label text-slate-400 font-semibold"><?= $day_name ?></div>
                                             </td>
                                             <td class="px-5 py-4" colspan="6">
-                                                <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/60">📝 No log yet — click Save Daily Log above</span>
+                                                <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200/60">No log yet — click Save Daily Log above</span>
                                             </td>
                                             <td class="px-5 py-4 whitespace-nowrap text-right">
                                                 <span class="text-label font-bold text-slate-300">—</span>
@@ -659,7 +658,7 @@ if (!empty($weeks[$selected_week])) {
                 <!-- Week Reference Table -->
                 <?php if (!empty($weeks)): ?>
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
                         <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Week Reference (<?= count($weeks) ?> weeks)</h3>
                     </div>
                     <div class="overflow-x-auto">
@@ -765,13 +764,13 @@ if (!empty($weeks[$selected_week])) {
                 if (leaveRadio) { leaveRadio.checked = true; toggleAttendance(); }
                 var reasonField = document.querySelector('textarea[name="reason_for_absence"]');
                 if (reasonField) { reasonField.value = 'Public Holiday - ' + holidayNames[dateStr]; }
-                dateHint.textContent = '⚠️ ' + day + ', ' +
+                dateHint.textContent = day + ', ' +
                     d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) +
                     ' — Public Holiday (' + holidayNames[dateStr] + '). Marked as Leave.';
                 dateHint.className = 'text-sm text-amber-600 font-semibold mt-1';
                 return;
             }
-            dateHint.textContent = '✓ ' + day + ', ' +
+            dateHint.textContent = day + ', ' +
                 d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) +
                 ' — ready to submit.';
             dateHint.className = 'text-sm text-emerald-600 font-semibold mt-1';

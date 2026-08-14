@@ -216,48 +216,42 @@ $back_url = 'student-dashboard.php';
     .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
-    .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
-    .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
-    .glass-sidebar { background: rgba(15,23,42,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.08); }
-    .glass-header { background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.4); }
-    .glass-card { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); box-shadow: 0 8px 32px rgba(0,0,0,0.06); }
-    @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-    .animated-bg { background: linear-gradient(-45deg, #e0e7ff, #ede9fe, #fce7f3, #dbeafe, #d1fae5); background-size: 400% 400%; animation: gradientShift 20s ease infinite; }
-    @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } .glass, .glass-card, .glass-strong, .glass-header, .glass-sidebar { background: white !important; backdrop-filter: none !important; border-color: #e2e8f0 !important; box-shadow: none !important; } }
+    .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+    .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+    .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
+    .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } }
     </style>
 </head>
-<body class="animated-bg font-sans antialiased">
+<body class="bg-slate-100 font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
     <aside class="w-56 glass-sidebar flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
+            <span class="font-black text-white tracking-tight">InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-3">
+        <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
             </a>
-            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
+            <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> Notifications
             </a>
             <a href="log-history.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="history">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
-            </a>
-            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
             </a>
             <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253z"/></svg> Instructions
             </a>
             <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
             <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
             </a>
         </div>
     </aside>
@@ -272,7 +266,7 @@ $back_url = 'student-dashboard.php';
         <main class="flex-1 overflow-y-auto p-6">
 
             <!-- ════ PAGE HEADER ════ -->
-            <div class="glass-card rounded-2xl p-5 mb-6 no-print">
+            <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6 no-print">
                 <div class="flex items-start justify-between flex-wrap gap-4">
                     <div class="flex items-center gap-4">
                         <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold shrink-0">
@@ -324,8 +318,8 @@ $back_url = 'student-dashboard.php';
                     <!-- View Mode Toggle -->
                     <div class="flex items-center gap-2">
                         <span class="text-label font-bold text-slate-400 uppercase tracking-wider">View:</span>
-                        <a href="?mode=weekly<?= $filter_week ? "&week={$filter_week}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">📅 Weekly</a>
-                        <a href="?mode=monthly<?= $filter_month ? "&month={$filter_month}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">📆 Monthly</a>
+                        <a href="?mode=weekly<?= $filter_week ? "&week={$filter_week}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Weekly</a>
+                        <a href="?mode=monthly<?= $filter_month ? "&month={$filter_month}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Monthly</a>
                     </div>
 
                     <!-- Week/Month Filter -->
@@ -353,7 +347,8 @@ $back_url = 'student-dashboard.php';
 
                     <!-- Print -->
                     <button onclick="window.print()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-sm cursor-pointer">
-                        🖨️ Print
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg>
+                        Print
                     </button>
                 </div>
             </div>
@@ -387,7 +382,7 @@ $back_url = 'student-dashboard.php';
                         <!-- Week Header -->
                         <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
                             <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 text-white flex items-center justify-center text-sm font-bold shadow-lg shadow-indigo-500/20">
+                                <div class="w-10 h-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center text-sm font-bold">
                                     W<?= $wn ?>
                                 </div>
                                 <div>
@@ -398,9 +393,9 @@ $back_url = 'student-dashboard.php';
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $week_present ?> Present</span>
-                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $week_absent ?> Absent</span>
-                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">⏱️ <?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
+                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded"><?= $week_present ?> Present</span>
+                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded"><?= $week_absent ?> Absent</span>
+                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"><?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
                                 <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
                                     <?php
                                     $gmap = [
@@ -421,20 +416,21 @@ $back_url = 'student-dashboard.php';
                             <?php if (!empty($week_logs)): ?>
                             <div>
                                 <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-label">📋</span> Daily Logs
+                                    <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    </span> Daily Logs
                                 </h3>
                                 <div class="overflow-x-auto">
                                     <table class="w-full text-xs">
                                         <thead>
                                             <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-label">
-                                                <th class="px-3 py-2 text-left">Date</th>
-                                                <th class="px-3 py-2 text-left">Status</th>
-                                                <th class="px-3 py-2 text-left">Intended Task</th>
-                                                <th class="px-3 py-2 text-left">Task Detail</th>
-                                                <th class="px-3 py-2 text-left">Actual Task</th>
-                                                <th class="px-3 py-2 text-left">Tools</th>
-                                                <th class="px-3 py-2 text-left">Knowledge</th>
-                                                <th class="px-3 py-2 text-left">Duration</th>
+                                                <th class="px-3 py-2 text-left">ရက်စွဲ / နေ့</th>
+                                                <th class="px-3 py-2 text-left">တက်ရောက်မှုအခြေအနေ</th>
+                                                <th class="px-3 py-2 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
+                                                <th class="px-3 py-2 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
+                                                <th class="px-3 py-2 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                                                <th class="px-3 py-2 text-left">လေ့လာသိရှိသော အသိပညာ</th>
+                                                <th class="px-3 py-2 text-left">ကြာချိန်</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-slate-100">
@@ -445,17 +441,16 @@ $back_url = 'student-dashboard.php';
                                                 </td>
                                                 <td class="px-3 py-2 whitespace-nowrap">
                                                     <?php if ($wl['attendance_status'] === 'present'): ?>
-                                                        <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
+                                                        <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Present</span>
                                                     <?php else: ?>
-                                                        <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
+                                                        <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Absent</span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <?php $is_absent = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
-                                                <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($wl['task_title'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($wl['task_detail'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($wl['task_detail'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($wl['tasks_performed'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 text-slate-600"><?= $is_absent ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent ? '' : htmlspecialchars($wl['learnt_skills'] ?? '') ?>"><?= $is_absent ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
+                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
+                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
+                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
                                                 <td class="px-3 py-2 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
                                             </tr>
                                             <?php endforeach; ?>
@@ -473,7 +468,9 @@ $back_url = 'student-dashboard.php';
                             <?php if ($week_ref): ?>
                             <div class="border-t border-slate-100 pt-4">
                                 <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center text-label">📊</span> Weekly Reflection
+                                    <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                    </span> Weekly Reflection
                                 </h3>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div class="bg-slate-50 rounded-xl p-3">
@@ -496,7 +493,9 @@ $back_url = 'student-dashboard.php';
                             <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
                             <div class="border-t border-slate-100 pt-4">
                                 <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                    <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center text-label">⭐</span> Instructor Evaluation
+                                    <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                                    </span> Instructor Evaluation
                                 </h3>
                                 <div class="bg-slate-50 rounded-xl p-3 flex items-start gap-4">
                                     <div class="flex-1">
@@ -526,10 +525,12 @@ $back_url = 'student-dashboard.php';
                     <?php endforeach; ?>
                 <?php else: ?>
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
-                        <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">📭</div>
+                        <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">
+                            <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                        </div>
                         <p class="text-sm text-slate-500 font-medium">No weekly data recorded yet.</p>
                         <p class="text-xs text-slate-400 mt-1">Start submitting daily logs to see your history here.</p>
-                        <a href="student-dashboard.php" class="inline-block mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition">📝 Go to Dashboard</a>
+                        <a href="student-dashboard.php" class="inline-block mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition">Go to Dashboard</a>
                     </div>
                 <?php endif; ?>
 
@@ -568,7 +569,7 @@ $back_url = 'student-dashboard.php';
                         <!-- Month Header -->
                         <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
                             <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-sm font-bold shadow-lg shadow-purple-500/20">
+                                <div class="w-10 h-10 rounded-xl bg-purple-500 text-white flex items-center justify-center text-sm font-bold">
                                     <?= date('M', strtotime($mk . '-01')) ?>
                                 </div>
                                 <div>
@@ -577,11 +578,11 @@ $back_url = 'student-dashboard.php';
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ <?= $month_present ?> Present</span>
-                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded">❌ <?= $month_absent ?> Absent</span>
-                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">⏱️ <?= floor($month_minutes / 60) ?>h <?= str_pad($month_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
-                                <span class="text-label font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">📊 <?= $month_refs ?> Reflections</span>
-                                <span class="text-label font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">⭐ <?= $month_evals ?> Evaluated</span>
+                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded"><?= $month_present ?> Present</span>
+                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded"><?= $month_absent ?> Absent</span>
+                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"><?= floor($month_minutes / 60) ?>h <?= str_pad($month_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
+                                <span class="text-label font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded"><?= $month_refs ?> Reflections</span>
+                                <span class="text-label font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded"><?= $month_evals ?> Evaluated</span>
                             </div>
                         </div>
 
@@ -608,37 +609,38 @@ $back_url = 'student-dashboard.php';
                                             if ($wl['attendance_status'] === 'present') $wk_p++; else $wk_a++;
                                         }
                                         ?>
-                                        <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ <?= $wk_p ?></span>
-                                        <span class="text-caption font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ <?= $wk_a ?></span>
+                                        <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded"><?= $wk_p ?></span>
+                                        <span class="text-caption font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded"><?= $wk_a ?></span>
                                         <?php if ($week_ref_m): ?>
-                                            <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">📊 ✓</span>
+                                            <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Ref</span>
                                         <?php endif; ?>
                                         <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
                                             <?php
                                             $ev_status = $week_eval_m['report_status'];
                                             $ev_cls = $ev_status === 'approved_by_instructor' || $ev_status === 'approved_by_supervisor' ? 'text-emerald-600 bg-emerald-50' : ($ev_status === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50');
                                             ?>
-                                            <span class="text-caption font-bold <?= $ev_cls ?> px-1.5 py-0.5 rounded">⭐ <?= $ev_status === 'rejected' ? 'Rejected' : 'Evaluated' ?></span>
+                                            <span class="text-caption font-bold <?= $ev_cls ?> px-1.5 py-0.5 rounded"><?= $ev_status === 'rejected' ? 'Rejected' : 'Evaluated' ?></span>
                                         <?php endif; ?>
                                     </div>
                                 </div>
                                 <?php if (!empty($week_logs_m)): ?>
                                 <div>
                                     <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 px-4 pt-3">
-                                        <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-label">📋</span> Daily Logs
+                                        <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                        </span> Daily Logs
                                     </h3>
                                     <div class="overflow-x-auto">
                                         <table class="w-full text-xs">
                                             <thead>
                                                 <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-label">
-                                                    <th class="px-3 py-2 text-left">Date</th>
-                                                    <th class="px-3 py-2 text-left">Status</th>
-                                                    <th class="px-3 py-2 text-left">Intended Task</th>
-                                                    <th class="px-3 py-2 text-left">Task Detail</th>
-                                                    <th class="px-3 py-2 text-left">Actual Task</th>
-                                                    <th class="px-3 py-2 text-left">Tools</th>
-                                                    <th class="px-3 py-2 text-left">Knowledge</th>
-                                                    <th class="px-3 py-2 text-left">Duration</th>
+                                                    <th class="px-3 py-2 text-left">ရက်စွဲ / နေ့</th>
+                                                    <th class="px-3 py-2 text-left">တက်ရောက်မှုအခြေအနေ</th>
+                                                    <th class="px-3 py-2 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
+                                                    <th class="px-3 py-2 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
+                                                    <th class="px-3 py-2 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                                                    <th class="px-3 py-2 text-left">လေ့လာသိရှိသော အသိပညာ</th>
+                                                    <th class="px-3 py-2 text-left">ကြာချိန်</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-slate-100">
@@ -649,17 +651,16 @@ $back_url = 'student-dashboard.php';
                                                     </td>
                                                     <td class="px-3 py-2 whitespace-nowrap">
                                                         <?php if ($wl['attendance_status'] === 'present'): ?>
-                                                            <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✅ Present</span>
+                                                            <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Present</span>
                                                         <?php else: ?>
-                                                            <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">❌ Absent</span>
+                                                            <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Absent</span>
                                                         <?php endif; ?>
                                                     </td>
                                                     <?php $is_absent_m = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
-                                                    <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['task_title'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['task_detail'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_detail'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 text-slate-600 max-w-[160px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['tasks_performed'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 text-slate-600"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 text-slate-600 max-w-[140px] truncate" title="<?= $is_absent_m ? '' : htmlspecialchars($wl['learnt_skills'] ?? '') ?>"><?= $is_absent_m ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
+                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
                                                     <td class="px-3 py-2 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
                                                 </tr>
                                                 <?php endforeach; ?>
@@ -677,7 +678,9 @@ $back_url = 'student-dashboard.php';
                                 <?php if ($week_ref_m): ?>
                                 <div class="border-t border-slate-100 pt-4 px-4 pb-3">
                                     <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                        <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center text-label">📊</span> Weekly Reflection
+                                        <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                        </span> Weekly Reflection
                                     </h3>
                                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                         <div class="bg-slate-50 rounded-xl p-3">
@@ -700,7 +703,9 @@ $back_url = 'student-dashboard.php';
                                 <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
                                 <div class="border-t border-slate-100 pt-4 px-4 pb-3">
                                     <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                        <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center text-label">⭐</span> Instructor Evaluation
+                                        <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                                        </span> Instructor Evaluation
                                     </h3>
                                     <div class="bg-slate-50 rounded-xl p-3 flex items-start gap-4">
                                         <div class="flex-1">
@@ -738,10 +743,12 @@ $back_url = 'student-dashboard.php';
                     <?php endforeach; ?>
                 <?php else: ?>
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center">
-                        <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">📭</div>
+                        <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">
+                            <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
+                        </div>
                         <p class="text-sm text-slate-500 font-medium">No monthly data recorded yet.</p>
                         <p class="text-xs text-slate-400 mt-1">Start submitting daily logs to see your history here.</p>
-                        <a href="student-dashboard.php" class="inline-block mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition">📝 Go to Dashboard</a>
+                        <a href="student-dashboard.php" class="inline-block mt-4 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition">Go to Dashboard</a>
                     </div>
                 <?php endif; ?>
             <?php endif; ?>

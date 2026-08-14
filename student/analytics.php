@@ -337,77 +337,46 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
     <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Dancing+Script:wght@400;700&family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
-        @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        .animated-bg { background: linear-gradient(-45deg, #e0e7ff, #ede9fe, #fce7f3, #dbeafe, #d1fae5); background-size: 400% 400%; animation: gradientShift 20s ease infinite; }
         .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
         .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
         @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } }
 
-    .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
-    .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
-    .glass-sidebar { background: rgba(15,23,42,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.08); }
-    .glass-header { background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.4); }
-    .glass-card { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); box-shadow: 0 8px 32px rgba(0,0,0,0.06); }
-    .glass-card:hover { background: rgba(255,255,255,0.68); box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
-    .glass-modal { background: rgba(255,255,255,0.85); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.6); }
-
-    .glow-indigo { box-shadow: 0 4px 20px rgba(99,102,241,0.25); }
-    .glow-emerald { box-shadow: 0 4px 20px rgba(16,185,129,0.25); }
-    .glow-purple { box-shadow: 0 4px 20px rgba(168,85,247,0.25); }
-
-    @keyframes gradientShift {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    .animated-bg {
-        background: linear-gradient(-45deg, #e0e7ff, #ede9fe, #fce7f3, #dbeafe, #d1fae5);
-        background-size: 400% 400%;
-        animation: gradientShift 20s ease infinite;
-    }
-
-    @media print {
-        aside, header, .no-print { display: none !important; }
-        .flex.h-screen { height: auto !important; overflow: visible !important; }
-        main { overflow: visible !important; }
-        body { background: white !important; }
-        .glass, .glass-card, .glass-strong, .glass-header, .glass-sidebar, .glass-modal { background: white !important; backdrop-filter: none !important; border-color: #e2e8f0 !important; box-shadow: none !important; }
-    }
+    .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+    .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+    .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
+    .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
     </style>
 </head>
-<body class="animated-bg font-sans antialiased">
+<body class="bg-slate-100 font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
     <aside class="w-56 glass-sidebar flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">📋 InternReport</span>
+            <span class="font-black text-white tracking-tight">InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-3">
-            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="dashboard" onclick="showDashboard()">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
+        <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
+            <a href="student-dashboard.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="dashboard" onclick="showDashboard()">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
             </a>
-            <a href="analytics.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="analytics">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
+            <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> Notifications
             </a>
             <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
-            </a>
-            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
             </a>
             <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" onclick="showInstructions(); return false;">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253z"/></svg> Instructions
             </a>
             <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
             <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
             </a>
         </div>
     </aside>
@@ -428,25 +397,26 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                     <p class="text-xs text-slate-400 font-medium">Track your internship performance and progress</p>
                 </div>
                 <button onclick="window.print()" class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-sm cursor-pointer">
-                    🖨️ Print Report
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg>
+                    Print Report
                 </button>
             </div>
 
             <!-- Analytics Summary Cards -->
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 text-white shadow-lg shadow-blue-500/20">
+                <div class="bg-blue-500 rounded-2xl p-4 text-white">
                     <p class="text-label font-bold uppercase tracking-wider opacity-80">Total Hours</p>
                     <p class="text-3xl font-black mt-1"><?= $total_hours ?><span class="text-lg">h <?= str_pad($total_mins, 2, '0', STR_PAD_LEFT) ?>m</span></p>
                 </div>
-                <div class="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl p-4 text-white shadow-lg shadow-indigo-500/20">
+                <div class="bg-indigo-500 rounded-2xl p-4 text-white">
                     <p class="text-label font-bold uppercase tracking-wider opacity-80">Logs Submitted</p>
                     <p class="text-3xl font-black mt-1"><?= $total_logs_count ?></p>
                 </div>
-                <div class="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-2xl p-4 text-white shadow-lg shadow-emerald-500/20">
+                <div class="bg-emerald-500 rounded-2xl p-4 text-white">
                     <p class="text-label font-bold uppercase tracking-wider opacity-80">Attendance</p>
                     <p class="text-3xl font-black mt-1"><?= $attendance_rate ?><span class="text-lg">%</span></p>
                 </div>
-                <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-4 text-white shadow-lg shadow-purple-500/20">
+                <div class="bg-purple-500 rounded-2xl p-4 text-white">
                     <p class="text-label font-bold uppercase tracking-wider opacity-80">Reflections</p>
                     <p class="text-3xl font-black mt-1"><?= $total_reflections_count ?></p>
                 </div>
@@ -458,7 +428,7 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                     <div>
                         <div class="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
                             <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                                <span class="p-1 bg-blue-50 text-blue-600 rounded">📊</span> Weekly Hours Log
+                                <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Weekly Hours Log
                             </h3>
                             <div class="relative">
                                 <button id="weekFilterBtn" class="bg-white border border-gray-200 text-gray-700 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-gray-50 flex items-center space-x-2 shadow-sm relative transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500/30">
@@ -500,7 +470,7 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                     <div>
                         <div class="flex justify-between items-center border-b border-gray-100 pb-3 mb-4">
                             <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                                <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🎯</span> Attendance Breakdown
+                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> Attendance Breakdown
                             </h3>
                         </div>
                     </div>
@@ -522,9 +492,11 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
 
             <!-- Week-by-Week Progress Table -->
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-                <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
                     <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                        <span class="w-8 h-8 rounded-lg bg-purple-50 text-purple-500 flex items-center justify-center text-sm">📆</span> Week-by-Week Progress
+                        <span class="w-8 h-8 rounded-lg bg-purple-50 text-purple-500 flex items-center justify-center">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        </span> Week-by-Week Progress
                     </h3>
                 </div>
                 <div class="overflow-x-auto">
@@ -582,18 +554,18 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                                     </td>
                                     <td class="px-5 py-3 text-center">
                                         <?php if ($has_reflection): ?>
-                                        <span class="inline-flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✅ Submitted</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Submitted</span>
                                         <?php else: ?>
                                         <span class="inline-flex items-center gap-1 text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="px-5 py-3 text-center">
                                         <?php if ($eval_status === 'approved_by_instructor' || $eval_status === 'approved_by_supervisor'): ?>
-                                        <span class="inline-flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">✅ Approved</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-200">Approved</span>
                                         <?php elseif ($eval_status === 'rejected'): ?>
-                                        <span class="inline-flex items-center gap-1 text-label font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">❌ Rejected</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-red-600 bg-red-50 px-2 py-1 rounded-full border border-red-200">Rejected</span>
                                         <?php elseif ($eval_status === 'pending'): ?>
-                                        <span class="inline-flex items-center gap-1 text-label font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">⏳ Pending</span>
+                                        <span class="inline-flex items-center gap-1 text-label font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full border border-amber-200">Pending</span>
                                         <?php else: ?>
                                         <span class="text-label font-bold text-slate-400">—</span>
                                         <?php endif; ?>
@@ -611,7 +583,7 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                 <!-- Recent Activity -->
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 h-auto max-h-[450px] overflow-y-auto flex flex-col">
                     <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2 sticky top-0 bg-white z-20 pb-2">
-                        <span class="p-1 bg-blue-50 text-blue-600 rounded">🕐</span> Recent Activity
+                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Recent Activity
                     </h3>
                     <?php if (!empty($recent_activities)): ?>
                     <div class="relative">
@@ -638,7 +610,7 @@ if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent
                 <!-- Evaluation History -->
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 h-auto max-h-[450px] overflow-y-auto flex flex-col">
                     <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2 sticky top-0 bg-white z-20 pb-2">
-                        <span class="p-1 bg-amber-50 text-amber-600 rounded">📝</span> Evaluation History
+                        <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Evaluation History
                     </h3>
                     <?php if (!empty($recent_evaluations)): ?>
                     <div class="relative">

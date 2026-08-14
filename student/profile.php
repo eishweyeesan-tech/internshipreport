@@ -224,14 +224,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
-    .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
-    .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
-    .glass-sidebar { background: rgba(15,23,42,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.08); }
-    .glass-header { background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.4); }
-    .glass-card { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); box-shadow: 0 8px 32px rgba(0,0,0,0.06); }
-    @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-    .animated-bg { background: linear-gradient(-45deg, #e0e7ff, #ede9fe, #fce7f3, #dbeafe, #d1fae5); background-size: 400% 400%; animation: gradientShift 20s ease infinite; }
-    @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } .glass, .glass-card, .glass-strong, .glass-header, .glass-sidebar { background: white !important; backdrop-filter: none !important; border-color: #e2e8f0 !important; box-shadow: none !important; } }
+    .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+    .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+    .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
+    .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } }
     </style>
     <script>
     tailwind.config = {
@@ -263,45 +260,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
         } else {
             edit.classList.add('hidden');
             view.classList.remove('hidden');
-            btn.textContent = '✏️ Edit';
+            btn.textContent = 'Edit';
             btn.classList.remove('bg-slate-200', 'hover:bg-slate-300', 'text-slate-700');
             btn.classList.add('bg-slate-800', 'hover:bg-slate-900');
         }
     }
     </script>
 </head>
-<body class="animated-bg font-sans antialiased">
+<body class="bg-slate-100 font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
     <aside class="w-56 glass-sidebar flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
+            <span class="font-black text-white tracking-tight">InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-3">
+        <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
             </a>
-            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
+            <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> Notifications
             </a>
             <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
-            </a>
-            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
             </a>
             <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253z"/></svg> Instructions
             </a>
             <a href="profile.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
             <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
             </a>
         </div>
     </aside>
@@ -318,25 +312,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
 
                 <?php if ($profile_msg === 'saved'): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <span>✅</span> Profile updated successfully.
+                    Profile updated successfully.
                 </div>
                 <?php endif; ?>
 
                 <?php if ($profile_err): ?>
                 <div class="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <span>❌</span> <?= htmlspecialchars($profile_err) ?>
+                    <?= htmlspecialchars($profile_err) ?>
                 </div>
                 <?php endif; ?>
 
                 <?php if ($pw_msg): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <span>✅</span> <?= htmlspecialchars($pw_msg) ?>
+                    <?= htmlspecialchars($pw_msg) ?>
                 </div>
                 <?php endif; ?>
 
                 <?php if ($pw_err): ?>
                 <div class="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <span>❌</span> <?= htmlspecialchars($pw_err) ?>
+                    <?= htmlspecialchars($pw_err) ?>
                 </div>
                 <?php endif; ?>
 
@@ -368,13 +362,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
 
                 <?php if ($avatar_msg): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <span>✅</span> <?= htmlspecialchars($avatar_msg) ?>
+                    <?= htmlspecialchars($avatar_msg) ?>
                 </div>
                 <?php endif; ?>
 
                 <?php if ($portfolio_msg): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <span>✅</span> <?= htmlspecialchars($portfolio_msg) ?>
+                    <?= htmlspecialchars($portfolio_msg) ?>
                 </div>
                 <?php endif; ?>
 
@@ -382,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-violet-50 text-violet-600 rounded">📷</span> Profile Picture
+                            <svg class="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/></svg> Profile Picture
                         </h3>
                     </div>
                     <form method="POST" enctype="multipart/form-data" class="p-5">
@@ -402,7 +396,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             </div>
                         </div>
                         <div class="flex justify-end pt-3">
-                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">📷 Upload Picture</button>
+                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Upload Picture</button>
                         </div>
                     </form>
                 </div>
@@ -411,7 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-cyan-50 text-cyan-600 rounded">🔗</span> Developer Portfolio Links
+                            <svg class="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg> Developer Portfolio Links
                         </h3>
                     </div>
                     <form method="POST" class="p-5 space-y-4">
@@ -431,7 +425,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             </div>
                         </div>
                         <div class="flex justify-end pt-1">
-                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">💾 Save Links</button>
+                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Links</button>
                         </div>
                     </form>
                 </div>
@@ -440,7 +434,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🛡️</span> Security & Last Login
+                            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> Security & Last Login
                         </h3>
                     </div>
                     <div class="p-5">
@@ -471,9 +465,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <div id="card-personal" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-blue-50 text-blue-600 rounded">👤</span> Personal Information
+                            <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> Personal Information
                         </h3>
-                        <button type="button" onclick="toggleEdit('personal')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg transition cursor-pointer">✏️ Edit</button>
+                        <button type="button" onclick="toggleEdit('personal')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg transition cursor-pointer">Edit</button>
                     </div>
 
                     <!-- View Mode -->
@@ -532,7 +526,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             <input type="hidden" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>">
                             <input type="hidden" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>">
                             <div class="flex justify-end pt-2">
-                                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">💾 Save Changes</button>
+                                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Changes</button>
                             </div>
                         </div>
                     </form>
@@ -542,9 +536,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <div id="card-internship" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🏢</span> Internship Details
+                            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg> Internship Details
                         </h3>
-                        <button type="button" onclick="toggleEdit('internship')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg transition cursor-pointer">✏️ Edit</button>
+                        <button type="button" onclick="toggleEdit('internship')" class="edit-toggle px-3 py-1 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded-lg transition cursor-pointer">Edit</button>
                     </div>
 
                     <!-- View Mode -->
@@ -619,7 +613,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             <input type="hidden" name="major" value="<?= htmlspecialchars($profile['major']) ?>">
                             <input type="hidden" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>">
                             <div class="flex justify-end pt-2">
-                                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">💾 Save Changes</button>
+                                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Changes</button>
                             </div>
                         </div>
                     </form>
@@ -629,7 +623,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-amber-50 text-amber-600 rounded">🔑</span> Change Password
+                            <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Change Password
                         </h3>
                     </div>
                     <form method="POST" class="p-5 space-y-4">
@@ -650,7 +644,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             </div>
                         </div>
                         <div class="flex justify-end">
-                            <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">🔒 Update Password</button>
+                            <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Update Password</button>
                         </div>
                     </form>
                 </div>

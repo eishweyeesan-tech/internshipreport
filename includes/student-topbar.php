@@ -67,7 +67,7 @@ if (!function_exists('student_notif_url')) {
     }
 }
 ?>
-<header class="h-14 glass-header flex items-center justify-between px-6 shrink-0 relative z-50">
+<header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50">
     <div class="flex items-center gap-3">
         <span class="text-lg font-semibold text-slate-600"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></span>
         <?php if (!empty($student_academic_year)): ?>
@@ -168,14 +168,14 @@ if (!function_exists('student_notif_url')) {
             </button>
             <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-52 bg-white border border-slate-200 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.15)] z-[1050] py-1 overflow-hidden">
                 <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
-                    <span>👤</span> My Profile
+                    <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> My Profile
                 </a>
                 <a href="student-dashboard.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition">
-                    <span>📊</span> Dashboard
+                    <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
                 </a>
                 <div class="my-1 border-t border-slate-100"></div>
                 <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-red-500 hover:bg-red-50 transition">
-                    <span>🚪</span> Logout
+                    <svg class="w-4 h-4 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
                 </a>
             </div>
         </div>

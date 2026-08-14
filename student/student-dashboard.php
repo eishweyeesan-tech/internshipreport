@@ -338,25 +338,13 @@ if (!empty($weeks[$selected_week])) {
     $week_date_range = $week_start_obj->format('d M Y') . ' to ' . $week_end_obj->format('d M Y');
 }
 
-// Filter logs by selected week + optional date range
-$filter_start = trim($_GET['filter_start'] ?? '');
-$filter_end   = trim($_GET['filter_end'] ?? '');
-
+// Fetch logs for the selected week
 if (!empty($weeks)) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
     $esc_ws = $conn->real_escape_string($ws);
     $esc_we = $conn->real_escape_string($we);
-    $log_sql  = "SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_ws}' AND '{$esc_we}'";
-    if ($filter_start) {
-        $esc_fs = $conn->real_escape_string($filter_start);
-        $log_sql  .= " AND log_date >= '{$esc_fs}'";
-    }
-    if ($filter_end) {
-        $esc_fe = $conn->real_escape_string($filter_end);
-        $log_sql  .= " AND log_date <= '{$esc_fe}'";
-    }
-    $log_sql .= " ORDER BY log_date DESC";
+    $log_sql = "SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_ws}' AND '{$esc_we}' ORDER BY log_date DESC";
     $logs_r = $conn->query($log_sql);
 } else {
     $logs_r = $conn->query("SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} ORDER BY log_date DESC");
@@ -742,8 +730,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
         if (!input || !input.value) return;
         navigator.clipboard.writeText(input.value).then(function () {
             var btn = document.getElementById('copy_btn');
-            btn.textContent = '✓ Copied!';
-            setTimeout(function () { btn.textContent = '📋 Copy Link'; }, 2000);
+            btn.textContent = 'Copied!';
+            setTimeout(function () { btn.textContent = 'Copy Link'; }, 2000);
         });
     }
 
@@ -1084,36 +1072,13 @@ if ($magic_link_unlocked && empty($magic_link)) {
     .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
     .student-sig-preview { font-family: 'Great Vibes', cursive; font-size: 22px; color: #1e293b; min-height: 36px; line-height: 1.4; }
 
-    /* ── Glassmorphism Utilities ── */
-    .glass { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); }
-    .glass-strong { background: rgba(255,255,255,0.72); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); }
-    .glass-input { background: rgba(255,255,255,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.5); }
-    .glass-input:focus { background: rgba(255,255,255,0.85); border-color: rgba(139,92,246,0.5); box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
-    .glass-sidebar { background: rgba(15,23,42,0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-right: 1px solid rgba(255,255,255,0.08); }
-    .glass-header { background: rgba(255,255,255,0.6); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.4); }
-    .glass-card { background: rgba(255,255,255,0.55); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.45); box-shadow: 0 8px 32px rgba(0,0,0,0.06); }
-    .glass-card:hover { background: rgba(255,255,255,0.68); box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
-    .glass-modal { background: rgba(255,255,255,0.85); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.6); }
-    .glass-badge { background: rgba(255,255,255,0.25); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.3); }
+    /* ── Sidebar Utilities ── */
+    .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+    .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+    .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
+    .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
 
-    .glow-indigo { box-shadow: 0 4px 20px rgba(99,102,241,0.25); }
     .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .glow-emerald { box-shadow: 0 4px 20px rgba(16,185,129,0.25); }
-    .glow-purple { box-shadow: 0 4px 20px rgba(168,85,247,0.25); }
-    .glow-blue { box-shadow: 0 4px 20px rgba(59,130,246,0.25); }
-    .glow-amber { box-shadow: 0 4px 20px rgba(245,158,11,0.25); }
-    .glow-red { box-shadow: 0 4px 20px rgba(239,68,68,0.25); }
-
-    @keyframes gradientShift {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    .animated-bg {
-        background: linear-gradient(-45deg, #e0e7ff, #ede9fe, #fce7f3, #dbeafe, #d1fae5);
-        background-size: 400% 400%;
-        animation: gradientShift 20s ease infinite;
-    }
 
     @media print {
         aside, header, .no-print { display: none !important; }
@@ -1121,42 +1086,44 @@ if ($magic_link_unlocked && empty($magic_link)) {
         main { overflow: visible !important; }
         #section-main { display: block !important; }
         body { background: white !important; }
-        .glass, .glass-card, .glass-strong, .glass-header, .glass-sidebar, .glass-modal { background: white !important; backdrop-filter: none !important; border-color: #e2e8f0 !important; box-shadow: none !important; }
     }
     </style>
 </head>
-<body class="animated-bg font-sans antialiased">
+<body class="bg-slate-100 font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
     <aside class="w-56 glass-sidebar flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">📋 InternReport</span>
+            <span class="font-black text-white tracking-tight">InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-3">
+        <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="#" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="dashboard" onclick="showDashboard()">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V5zM14 5a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V5zM4 15a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 15a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4z"/></svg>
+                Dashboard
             </a>
-            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="analytics">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
+            <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                Notifications
             </a>
             <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
-            </a>
-            <a href="public-holiday.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h10"/></svg>
+                Log History
             </a>
             <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" onclick="showInstructions(); return false;">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                Instructions
             </a>
             <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
-            <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+            <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 transition-colors duration-200">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                Logout
             </a>
         </div>
     </aside>
@@ -1171,10 +1138,10 @@ if ($magic_link_unlocked && empty($magic_link)) {
         <main class="flex-1 overflow-y-auto p-6">
 
             <!-- ════ STUDENT INFO BAR ════ -->
-            <div class="glass-card rounded-2xl p-5 mb-6">
+            <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6">
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <!-- Supervisor Card -->
-                    <div class="flex items-center gap-3 bg-white/40 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/40">
+                    <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
                         <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm font-bold shrink-0">
                             <?= strtoupper(substr($supervisor_name, 0, 1)) ?>
                         </div>
@@ -1184,7 +1151,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         </div>
                     </div>
                     <!-- Instructor Card -->
-                    <div class="flex items-center gap-3 bg-white/40 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/40">
+                    <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
                         <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold shrink-0">
                             <?= strtoupper(substr($instructor_name, 0, 1)) ?>
                         </div>
@@ -1195,8 +1162,10 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     </div>
                     <!-- Internship Period Card -->
                     <?php if ($intern_start && $intern_end): ?>
-                    <div class="flex items-center gap-3 bg-violet-50/50 backdrop-blur-sm rounded-xl px-4 py-3 border border-violet-200/50">
-                        <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm shrink-0">📅</div>
+                    <div class="flex items-center gap-3 bg-violet-50 rounded-xl px-4 py-3 border border-violet-200">
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        </div>
                         <div class="min-w-0">
                             <p class="text-label font-bold text-indigo-400 uppercase tracking-wider">Internship Period</p>
                             <p class="font-bold text-indigo-700"><?= (new DateTime($intern_start))->format('d M Y') ?> – <?= (new DateTime($intern_end))->format('d M Y') ?></p>
@@ -1207,15 +1176,20 @@ if ($magic_link_unlocked && empty($magic_link)) {
             </div>
 
             <!-- ════ WORKFLOW STATUS CHAIN (Current Week) ════ -->
-            <div class="glass-card rounded-2xl p-5 mb-6">
+            <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6">
                 <h3 class="text-caption font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                    <span class="p-1 bg-indigo-50 text-indigo-600 rounded">🔗</span> Week <?= $selected_week ?> Workflow Status
+                    <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                    Week <?= $selected_week ?> Workflow Status
                 </h3>
                 <div class="flex items-center justify-between gap-1">
                     <!-- Step 1: Daily Logs -->
                     <div class="flex flex-col items-center flex-1 min-w-0">
-                        <div class="w-10 h-10 rounded-full <?= $wf_step1_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-white/40 text-slate-400 border-2 border-dashed border-slate-300/60' ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
-                            <?= $wf_step1_done ? '✅' : '📝' ?>
+                        <div class="w-10 h-10 rounded-full <?= $wf_step1_done ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-50 text-slate-400 border-2 border-dashed border-slate-300/60' ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
+                            <?php if ($wf_step1_done): ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <?php else: ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z"/></svg>
+                            <?php endif; ?>
                         </div>
                         <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Daily Logs</p>
                         <p class="text-caption text-slate-400 text-center"><?= $weekly_log_count ?></p>
@@ -1223,8 +1197,12 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     <div class="flex-1 h-0.5 <?= $wf_step2_done ? 'bg-emerald-400' : 'bg-slate-200/60 border-dashed border-slate-300/60' ?> rounded-full mx-1 mt-[-22px]"></div>
                     <!-- Step 2: Reflection -->
                     <div class="flex flex-col items-center flex-1 min-w-0">
-                        <div class="w-10 h-10 rounded-full <?= $wf_step2_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-white/40 text-slate-400 border-2 border-dashed border-slate-300/60' ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
-                            <?= $wf_step2_done ? '✅' : '📊' ?>
+                        <div class="w-10 h-10 rounded-full <?= $wf_step2_done ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-50 text-slate-400 border-2 border-dashed border-slate-300/60' ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
+                            <?php if ($wf_step2_done): ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <?php else: ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20V10m5 10V4m5 16v-6"/></svg>
+                            <?php endif; ?>
                         </div>
                         <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Reflection</p>
                         <p class="text-caption text-slate-400 text-center"><?= $wf_step2_done ? 'Done' : 'Pending' ?></p>
@@ -1232,8 +1210,12 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     <div class="flex-1 h-0.5 <?= $wf_step3_done ? 'bg-emerald-400' : 'bg-slate-200/60 border-dashed border-slate-300/60' ?> rounded-full mx-1 mt-[-22px]"></div>
                     <!-- Step 3: Sign & Submit -->
                     <div class="flex flex-col items-center flex-1 min-w-0">
-                        <div class="w-10 h-10 rounded-full <?= $wf_step3_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : ($wf_has_link ? 'bg-amber-400 text-white shadow-lg glow-amber' : 'bg-white/40 text-slate-400 border-2 border-dashed border-slate-300/60') ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
-                            <?= $wf_step3_done ? '✅' : '✍️' ?>
+                        <div class="w-10 h-10 rounded-full <?= $wf_step3_done ? 'bg-emerald-500 text-white shadow-sm' : ($wf_has_link ? 'bg-amber-400 text-white shadow-sm' : 'bg-slate-50 text-slate-400 border-2 border-dashed border-slate-300/60') ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
+                            <?php if ($wf_step3_done): ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <?php else: ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                            <?php endif; ?>
                         </div>
                         <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Sign & Submit</p>
                         <p class="text-caption text-slate-400 text-center"><?= $wf_step3_done ? 'Done' : ($wf_has_link ? 'Link sent' : 'Pending') ?></p>
@@ -1241,8 +1223,14 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     <div class="flex-1 h-0.5 <?= $wf_step4_status === 'approved' ? 'bg-emerald-400' : ($wf_step4_status === 'rejected' ? 'bg-red-400' : 'bg-slate-200/60 border-dashed border-slate-300/60') ?> rounded-full mx-1 mt-[-22px]"></div>
                     <!-- Step 4: Instructor Review -->
                     <div class="flex flex-col items-center flex-1 min-w-0">
-                        <div class="w-10 h-10 rounded-full <?= $wf_step4_status === 'approved' ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : ($wf_step4_status === 'rejected' ? 'bg-red-500 text-white shadow-lg glow-red' : 'bg-white/40 text-slate-400 border-2 border-dashed border-slate-300/60') ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
-                            <?= $wf_step4_status === 'approved' ? '✅' : ($wf_step4_status === 'rejected' ? '❌' : '👨‍🏫') ?>
+                        <div class="w-10 h-10 rounded-full <?= $wf_step4_status === 'approved' ? 'bg-emerald-500 text-white shadow-sm' : ($wf_step4_status === 'rejected' ? 'bg-red-500 text-white shadow-sm' : 'bg-slate-50 text-slate-400 border-2 border-dashed border-slate-300/60') ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
+                            <?php if ($wf_step4_status === 'approved'): ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <?php elseif ($wf_step4_status === 'rejected'): ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                            <?php else: ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                            <?php endif; ?>
                         </div>
                         <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Instructor</p>
                         <p class="text-caption text-slate-400 text-center"><?= $wf_step4_status === 'approved' ? 'Approved' : ($wf_step4_status === 'rejected' ? 'Rejected' : 'Pending') ?></p>
@@ -1250,8 +1238,12 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     <div class="flex-1 h-0.5 <?= $wf_step5_done ? 'bg-emerald-400' : 'bg-slate-200/60 border-dashed border-slate-300/60' ?> rounded-full mx-1 mt-[-22px]"></div>
                     <!-- Step 5: Supervisor Grade -->
                     <div class="flex flex-col items-center flex-1 min-w-0">
-                        <div class="w-10 h-10 rounded-full <?= $wf_step5_done ? 'bg-emerald-500 text-white shadow-lg glow-emerald' : 'bg-white/40 text-slate-400 border-2 border-dashed border-slate-300/60' ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
-                            <?= $wf_step5_done ? '✅' : '👩‍🏫' ?>
+                        <div class="w-10 h-10 rounded-full <?= $wf_step5_done ? 'bg-emerald-500 text-white shadow-sm' : 'bg-slate-50 text-slate-400 border-2 border-dashed border-slate-300/60' ?> flex items-center justify-center text-sm font-bold transition-all duration-300">
+                            <?php if ($wf_step5_done): ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                            <?php else: ?>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                            <?php endif; ?>
                         </div>
                         <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Supervisor</p>
                         <p class="text-caption text-slate-400 text-center"><?= $wf_step5_done ? 'Graded' : 'Pending' ?></p>
@@ -1263,10 +1255,12 @@ if ($magic_link_unlocked && empty($magic_link)) {
             <div class="w-full grid grid-cols-1 md:grid-cols-12 gap-6 mb-6">
                 <!-- Total Hours -->
                 <div class="md:col-span-3 h-full">
-                    <div class="glass-card rounded-2xl p-6 h-full transition-all duration-300">
+                    <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 h-full transition-all duration-300">
                         <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-blue-50/80 text-blue-500 flex items-center justify-center text-lg">⏱️</div>
-                            <span class="text-label font-bold text-emerald-600 bg-emerald-50/60 px-2 py-0.5 rounded-full border border-emerald-200/50">Logged</span>
+                            <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                            <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Logged</span>
                         </div>
                         <p class="text-2xl font-black text-slate-800"><?= $total_hours ?>h <?= $total_mins ?>m</p>
                         <p class="text-caption text-slate-400 font-medium mt-1">Total Hours Worked</p>
@@ -1274,10 +1268,12 @@ if ($magic_link_unlocked && empty($magic_link)) {
                 </div>
                 <!-- Daily Logs -->
                 <div class="md:col-span-3 h-full">
-                    <div class="glass-card rounded-2xl p-6 h-full transition-all duration-300">
+                    <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 h-full transition-all duration-300">
                         <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-violet-50/80 text-violet-500 flex items-center justify-center text-lg">📋</div>
-                            <span class="text-label font-bold text-blue-600 bg-blue-50/60 px-2 py-0.5 rounded-full border border-blue-200/50">Entries</span>
+                            <div class="w-10 h-10 rounded-xl bg-violet-50 text-violet-500 flex items-center justify-center">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z"/></svg>
+                            </div>
+                            <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">Entries</span>
                         </div>
                         <p class="text-2xl font-black text-slate-800"><?= $total_logs_count ?></p>
                         <p class="text-caption text-slate-400 font-medium mt-1">Daily Logs Submitted</p>
@@ -1285,21 +1281,25 @@ if ($magic_link_unlocked && empty($magic_link)) {
                 </div>
                 <!-- Attendance Rate -->
                 <div class="md:col-span-3 h-full">
-                    <div class="glass-card rounded-2xl p-6 h-full transition-all duration-300">
+                    <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 h-full transition-all duration-300">
                         <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-emerald-50/80 text-emerald-500 flex items-center justify-center text-lg">✅</div>
-                            <span class="text-label font-bold <?= $attendance_rate >= 80 ? 'text-emerald-600 bg-emerald-50/60 border border-emerald-200/50' : 'text-amber-600 bg-amber-50/60 border border-amber-200/50' ?> px-2 py-0.5 rounded-full"><?= $attendance_rate >= 80 ? 'Good' : 'Watch' ?></span>
+                            <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                            <span class="text-label font-bold <?= $attendance_rate >= 80 ? 'text-emerald-600 bg-emerald-50 border border-emerald-200' : 'text-amber-600 bg-amber-50 border border-amber-200' ?> px-2 py-0.5 rounded-full"><?= $attendance_rate >= 80 ? 'Good' : 'Watch' ?></span>
                         </div>
                         <p class="text-2xl font-black text-slate-800"><?= $attendance_rate ?>%</p>
-                        <p class="text-caption text-slate-400 font-medium mt-1">Attendance Rate</p>
+                        <p class="text-caption text-slate-400 font-medium mt-1">Overall Attendance</p>
                     </div>
                 </div>
                 <!-- Weeks Completed -->
                 <div class="md:col-span-3 h-full">
-                    <div class="glass-card rounded-2xl p-6 h-full transition-all duration-300">
+                    <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 h-full transition-all duration-300">
                         <div class="flex items-center justify-between mb-3">
-                            <div class="w-10 h-10 rounded-xl bg-purple-50/80 text-purple-500 flex items-center justify-center text-lg">📆</div>
-                            <span class="text-label font-bold text-purple-600 bg-purple-50/60 px-2 py-0.5 rounded-full border border-purple-200/50">Weeks</span>
+                            <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-500 flex items-center justify-center">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            </div>
+                            <span class="text-label font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">Weeks</span>
                         </div>
                         <p class="text-2xl font-black text-slate-800"><?= $weeks_completed ?><span class="text-base font-bold text-slate-400">/<?= $total_weeks ?></span></p>
                         <p class="text-caption text-slate-400 font-medium mt-1">Weeks Completed</p>
@@ -1308,10 +1308,11 @@ if ($magic_link_unlocked && empty($magic_link)) {
             </div>
 
             <!-- ════ PROGRESS OVERVIEW ════ -->
-            <div class="glass-card rounded-2xl p-5 mb-6">
+            <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                        <span class="p-1 bg-indigo-50 text-indigo-600 rounded">📈</span> Internship Progress
+                        <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                        Internship Progress
                     </h3>
                     <?php if ($intern_start && $intern_end):
                         $start_dt = new DateTime($intern_start);
@@ -1324,8 +1325,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     <span class="font-bold text-indigo-600"><?= $progress_pct ?>% Elapsed</span>
                     <?php endif; ?>
                 </div>
-                <div class="w-full bg-white/40 rounded-full h-3 mb-4">
-                    <div class="bg-gradient-to-r from-violet-500 to-purple-500 rounded-full h-3 transition-all duration-700 ease-out shadow-sm" style="width: <?= $total_weeks > 0 ? min(round(($weeks_completed / $total_weeks) * 100), 100) : 0 ?>%"></div>
+                <div class="w-full bg-slate-100 rounded-full h-3 mb-4">
+                    <div class="bg-indigo-500 rounded-full h-3 transition-all duration-700 ease-out shadow-sm" style="width: <?= $total_weeks > 0 ? min(round(($weeks_completed / $total_weeks) * 100), 100) : 0 ?>%"></div>
                 </div>
                 <div class="flex items-center justify-between text-caption">
                     <div class="flex items-center gap-4">
@@ -1344,9 +1345,11 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
             <?php if ($is_rejected): ?>
             <!-- ════ REJECTION ALERT BANNER ════ -->
-            <div class="bg-red-50/60 backdrop-blur-sm border border-red-200/60 rounded-2xl p-5 mb-6">
+            <div class="bg-red-50 border border-red-200 rounded-2xl p-5 mb-6">
                 <div class="flex items-start gap-3">
-                    <div class="w-10 h-10 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-lg shrink-0 mt-0.5">❌</div>
+                    <div class="w-10 h-10 rounded-full bg-red-100 text-red-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </div>
                     <div class="flex-1">
                         <h3 class="text-sm font-bold text-red-700 mb-1">Your report for Week <?= $selected_week ?> was rejected by the Instructor</h3>
                         <?php if ($rejection_reason): ?>
@@ -1363,9 +1366,11 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
             <?php if ($is_warned): ?>
             <!-- ════ SUPERVISOR WARNING BANNER ════ -->
-            <div class="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl p-5 mb-6 shadow-sm">
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6">
                 <div class="flex items-start gap-3">
-                    <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-lg shrink-0 mt-0.5">⚠️</div>
+                    <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    </div>
                     <div class="flex-1">
                         <h3 class="font-bold text-amber-700 mb-1">Supervisor Warning</h3>
                         <p class="text-amber-600 leading-relaxed">You are behind schedule for this week. Please submit your daily logs immediately.</p>
@@ -1390,7 +1395,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <div class="flex items-center gap-3">
                             <div class="relative" id="week-dropdown">
                                 <button onclick="toggleWeekDropdown()" class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer whitespace-nowrap">
-                                    📆 Week <?= $selected_week ?>
+                                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                    Week <?= $selected_week ?>
                                     <span class="text-slate-400 text-label">▾</span>
                                 </button>
                                 <div id="week-menu" class="absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden overflow-hidden">
@@ -1409,25 +1415,13 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             <a href="student-dashboard.php?week=<?= $selected_week ?>" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg transition cursor-pointer">✕ Clear</a>
                         </div>
 
-                        <!-- Center: Date Range Filter -->
-                        <form method="GET" class="flex items-center gap-2">
-                            <input type="hidden" name="week" value="<?= $selected_week ?>">
-                            <label class="text-label font-bold text-slate-400 uppercase tracking-wider">From</label>
-                            <input type="date" name="filter_start" value="<?= htmlspecialchars($filter_start) ?>" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700 focus:outline-none focus:border-blue-500 transition">
-                            <label class="text-label font-bold text-slate-400 uppercase tracking-wider">To</label>
-                            <input type="date" name="filter_end" value="<?= htmlspecialchars($filter_end) ?>" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700 focus:outline-none focus:border-blue-500 transition">
-                            <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition cursor-pointer">🔍 Filter</button>
-                            <?php if ($filter_start || $filter_end): ?>
-                            <a href="student-dashboard.php?week=<?= $selected_week ?>" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg transition cursor-pointer">✕</a>
-                            <?php endif; ?>
-                        </form>
-
                         <!-- Right: Attendance Counters with Tooltips -->
                         <div class="flex items-center gap-3">
                             <!-- Present Tooltip -->
                             <div class="relative group">
                                 <div class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg cursor-pointer hover:bg-emerald-100 transition">
-                                    <span class="text-caption font-bold text-emerald-600">✅ Present</span>
+                                    <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                    <span class="text-caption font-bold text-emerald-600">Present</span>
                                     <span class="text-sm font-black text-emerald-700"><?= $present_count ?> Days</span>
                                 </div>
                                 <div class="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden group-hover:block">
@@ -1450,7 +1444,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             <!-- Absent Tooltip -->
                             <div class="relative group">
                                 <div class="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:bg-red-100 transition">
-                                    <span class="text-caption font-bold text-red-600">❌ Absent</span>
+                                    <svg class="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    <span class="text-caption font-bold text-red-600">Absent</span>
                                     <span class="text-sm font-black text-red-700"><?= $absent_count ?> Days</span>
                                 </div>
                                 <div class="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden group-hover:block">
@@ -1483,13 +1478,14 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= $student_signed ? 'hidden' : '' ?>">
                             <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center justify-between gap-2">
                                 <span class="flex items-center gap-2">
-                                    <span class="p-1 bg-blue-50 text-blue-600 rounded">📝</span> <?= $editing_log ? 'Edit Daily Log' : 'Daily Log Sheet' ?>
+                                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z"/></svg>
+                                    <?= $editing_log ? 'Edit Daily Log' : 'Daily Log Sheet' ?>
                                 </span>
                                 <?php if ($editing_log): ?>
-                                <a href="student-dashboard.php?week=<?= $selected_week ?>" class="text-label font-bold text-red-500 bg-red-50 border border-red-100 px-2.5 py-1 rounded-full hover:bg-red-100 transition">✕ Cancel Edit</a>
+                                <a href="student-dashboard.php?week=<?= $selected_week ?>" class="text-label font-bold text-red-500 bg-red-50 border border-red-100 px-2.5 py-1 rounded-full hover:bg-red-100 transition">Cancel Edit</a>
                                 <?php elseif ($week_date_range): ?>
                                 <span class="flex items-center gap-1.5 text-label font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
-                                    📅 <?= $week_date_range ?>
+                                    <?= $week_date_range ?>
                                 </span>
                                 <?php endif; ?>
                             </h2>
@@ -1500,7 +1496,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 <input type="hidden" name="selected_week" value="<?= (int) $selected_week ?>">
                                 <!-- Date (always visible) -->
                                 <div>
-                                    <label class="block text-caption font-bold text-slate-500 mb-1">📅 Date / Day</label>
+                                    <label class="block text-caption font-bold text-slate-500 mb-1">Date / Day</label>
                                     <input type="date" name="log_date" id="log_date" required
                                         value="<?= htmlspecialchars($editing_log['log_date'] ?? '') ?>"
                                         min="<?= htmlspecialchars($intern_start ?? '') ?>"
@@ -1514,14 +1510,14 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                     <p id="selected-day" class="text-label text-slate-500 mt-1">Choose a date from the calendar.</p>
                                     <div id="week-badge" class="hidden mt-1.5">
                                         <span class="inline-flex items-center gap-1 text-label font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
-                                            📆 Week <span id="week-badge-num">—</span>
+                                            Week <span id="week-badge-num">—</span>
                                         </span>
                                     </div>
                                 </div>
 
                                 <!-- Attendance Status -->
                                 <div>
-                                    <label class="block text-caption font-bold text-slate-500 mb-2">✅ Attendance Status <span class="text-slate-300 font-normal">/ တက်ရောက်မှုအခြေအနေ</span></label>
+                                    <label class="block text-caption font-bold text-slate-500 mb-2">Attendance Status <span class="text-slate-300 font-normal">/ တက်ရောက်မှုအခြေအနေ</span></label>
                                     <div class="flex items-center gap-4">
                                         <?php $edit_att = $editing_log['attendance_status'] ?? 'present'; ?>
                                         <label class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg cursor-pointer hover:bg-emerald-100 transition">
@@ -1539,38 +1535,38 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 <div id="present-fields" class="<?= $edit_att === 'absent' ? 'hidden' : '' ?>">
                                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <div>
-                                            <label class="block text-caption font-bold text-slate-500 mb-1">⏱️ Start Time</label>
+                                            <label class="block text-caption font-bold text-slate-500 mb-1">Start Time</label>
                                             <input type="time" name="start_time" id="start_time" value="<?= htmlspecialchars($editing_log && $editing_log['calculated_duration'] ? substr($editing_log['calculated_duration'], 0, 5) : '09:00') ?>" onchange="calcHours()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                         </div>
                                         <div>
-                                            <label class="block text-caption font-bold text-slate-500 mb-1">⏱️ End Time</label>
+                                            <label class="block text-caption font-bold text-slate-500 mb-1">End Time</label>
                                             <input type="time" name="end_time" id="end_time" value="17:00" onchange="calcHours()" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                         </div>
                                         <div>
-                                            <label class="block text-caption font-bold text-slate-500 mb-1">⏳ Duration</label>
+                                            <label class="block text-caption font-bold text-slate-500 mb-1">Duration</label>
                                             <input type="text" id="hours_display" value="<?= htmlspecialchars($editing_log['calculated_duration'] ?? '08:00') ?>" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 font-mono text-blue-700 font-bold focus:outline-none cursor-default">
                                             <input type="hidden" name="hours_worked" id="hours_worked" value="<?= htmlspecialchars($editing_log['calculated_duration'] ?? '08:00') ?>">
                                         </div>
                                     </div>
                                     <div>
-                                        <label class="block text-caption font-bold text-slate-500 mb-1">💡 Intended Task <span class="text-slate-300 font-normal">/ ဆောင်ရွက်မည့်လုပ်ငန်း</span></label>
+                                        <label class="block text-caption font-bold text-slate-500 mb-1">Intended Task <span class="text-slate-300 font-normal">/ ဆောင်ရွက်မည့်လုပ်ငန်း</span></label>
                                         <input type="text" name="intended_task" value="<?= htmlspecialchars($editing_log['task_title'] ?? '') ?>" placeholder="e.g. UI Design & API Integration" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                     <div>
-                                        <label class="block text-caption font-bold text-slate-500 mb-1">📋 Task Detail <span class="text-slate-300 font-normal">/ ဆောင်ရွက်မည့် လုပ်ငန်းစဉ်များ</span></label>
+                                        <label class="block text-caption font-bold text-slate-500 mb-1">Task Detail <span class="text-slate-300 font-normal">/ ဆောင်ရွက်မည့် လုပ်ငန်းစဉ်များ</span></label>
                                         <textarea name="task_detail" rows="3" placeholder="Describe the planned tasks in detail…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['task_detail'] ?? '') ?></textarea>
                                     </div>
                                     <div>
-                                        <label class="block text-caption font-bold text-slate-500 mb-1">✅ Actual Task Performed <span class="text-slate-300 font-normal">/ အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</span></label>
+                                        <label class="block text-caption font-bold text-slate-500 mb-1">Actual Task Performed <span class="text-slate-300 font-normal">/ အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</span></label>
                                         <textarea name="actual_task" rows="3" placeholder="What you actually accomplished today…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['tasks_performed'] ?? '') ?></textarea>
                                     </div>
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label class="block text-caption font-bold text-slate-500 mb-1">🛠️ Tools / Tech Used <span class="text-slate-300 font-normal">/ အသုံးပြုသောပစ္စည်းများ</span></label>
+                                            <label class="block text-caption font-bold text-slate-500 mb-1">Tools / Tech Used <span class="text-slate-300 font-normal">/ အသုံးပြုသောပစ္စည်းများ</span></label>
                                             <input type="text" name="tools_used" value="<?= htmlspecialchars($editing_log['tools_used'] ?? '') ?>" placeholder="PHP, TailwindCSS, MySQL…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-emerald-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                         </div>
                                         <div>
-                                            <label class="block text-caption font-bold text-slate-500 mb-1">🧠 Knowledge Gained <span class="text-slate-300 font-normal">/ လေ့လာသိရှိသော အသိပညာ</span></label>
+                                            <label class="block text-caption font-bold text-slate-500 mb-1">Knowledge Gained <span class="text-slate-300 font-normal">/ လေ့လာသိရှိသော အသိပညာ</span></label>
                                             <input type="text" name="knowledge_gained" value="<?= htmlspecialchars($editing_log['learnt_skills'] ?? '') ?>" placeholder="Database optimization, REST APIs…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                         </div>
                                     </div>
@@ -1579,13 +1575,13 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 <!-- ══════ ABSENT FIELDS ══════ -->
                                 <div id="absent-fields" class="<?= $edit_att === 'absent' ? '' : 'hidden' ?>">
                                     <div>
-                                        <label class="block text-caption font-bold text-slate-500 mb-1">📝 Reason for Absence <span class="text-slate-300 font-normal">/ ခွင့်ယူရသည့်အကြောင်းအရင်း</span></label>
+                                        <label class="block text-caption font-bold text-slate-500 mb-1">Reason for Absence <span class="text-slate-300 font-normal">/ ခွင့်ယူရသည့်အကြောင်းအရင်း</span></label>
                                         <textarea name="reason_for_absence" rows="2" placeholder="Please state your reason for absence…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['reason_for_absence'] ?? '') ?></textarea>
                                     </div>
                                 </div>
 
                                 <div class="flex justify-end">
-                                    <button type="submit" name="<?= $editing_log ? 'update_log' : 'add_log' ?>" class="px-5 py-2 <?= $editing_log ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700' ?> text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"> <?= $editing_log ? '✏️ Update Log' : '💾 Save Daily Log' ?></button>
+                                    <button type="submit" name="<?= $editing_log ? 'update_log' : 'add_log' ?>" class="px-5 py-2 <?= $editing_log ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700' ?> text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer"><?= $editing_log ? 'Update Log' : 'Save Daily Log' ?></button>
                                 </div>
                             </form>
                         </div>
@@ -1596,35 +1592,36 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <!-- Weekly Reflection Form -->
                         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= $student_signed ? 'hidden' : (!$reflection_unlocked ? 'hidden' : '') ?>">
                             <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
-                                <span class="p-1 bg-emerald-50 text-emerald-600 rounded">📊</span> Weekly Reflection
+                                <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6m6 6V9m-6 10a9 9 0 118-5.3M5 21h14"/></svg>
+                                Weekly Reflection
                                 <?php if (!$reflection_unlocked): ?>
-                                <span class="ml-auto flex items-center gap-1 text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">🔒 Locked (<?= $weekly_log_count ?>/<?= $total_weekdays ?>)</span>
+                                <span class="ml-auto flex items-center gap-1 text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">Locked (<?= $weekly_log_count ?>/<?= $total_weekdays ?>)</span>
                                 <?php else: ?>
-                                <span class="ml-auto flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ Unlocked (<?= $weekly_log_count ?>/<?= $total_weekdays ?>)</span>
+                                <span class="ml-auto flex items-center gap-1 text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Unlocked (<?= $weekly_log_count ?>/<?= $total_weekdays ?>)</span>
                                 <?php endif; ?>
                             </h2>
                             <?php if (!$reflection_unlocked): ?>
-                            <p class="text-slate-400 text-center py-6">📋 Please complete all <strong><?= $total_weekdays ?> daily logs</strong> for <strong>Week <?= $selected_week ?></strong> to unlock this form. You currently have <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong>.</p>
+                            <p class="text-slate-400 text-center py-6">Please complete all <strong><?= $total_weekdays ?> daily logs</strong> for <strong>Week <?= $selected_week ?></strong> to unlock this form. You currently have <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong>.</p>
                             <?php endif; ?>
                             <form method="POST" class="space-y-4 <?= !$reflection_unlocked ? 'hidden' : '' ?>">
                                 <div>
-                                    <label class="block text-caption font-bold text-slate-500 mb-1">📆 Week Number</label>
+                                    <label class="block text-caption font-bold text-slate-500 mb-1">Week Number</label>
                                     <input type="number" name="week_number" value="<?= $selected_week ?>" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-indigo-600 focus:outline-none cursor-default">
                                 </div>
                                 <div>
-                                    <label class="block text-caption font-bold text-slate-500 mb-1">❓ What was done? <span class="text-slate-300 font-normal">/ ဘာလုပ်သလဲ</span></label>
+                                    <label class="block text-caption font-bold text-slate-500 mb-1">What was done? <span class="text-slate-300 font-normal">/ ဘာလုပ်သလဲ</span></label>
                                     <textarea name="what_done" rows="3" required placeholder="What did you accomplish this week?" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"></textarea>
                                 </div>
                                 <div>
-                                    <label class="block text-caption font-bold text-slate-500 mb-1">⚙️ How was it done? <span class="text-slate-300 font-normal">/ ဘယ်လိုလုပ်ပါသလဲ</span></label>
+                                    <label class="block text-caption font-bold text-slate-500 mb-1">How was it done? <span class="text-slate-300 font-normal">/ ဘယ်လိုလုပ်ပါသလဲ</span></label>
                                     <textarea name="how_done" rows="3" required placeholder="Describe the methods, tools, and approach you used." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"></textarea>
                                 </div>
                                 <div>
-                                    <label class="block text-caption font-bold text-slate-500 mb-1">🎯 Why was it done? <span class="text-slate-300 font-normal">/ ဘာကြောင့်လုပ်ပါသလဲ</span></label>
+                                    <label class="block text-caption font-bold text-slate-500 mb-1">Why was it done? <span class="text-slate-300 font-normal">/ ဘာကြောင့်လုပ်ပါသလဲ</span></label>
                                     <textarea name="why_done" rows="3" required placeholder="Explain the purpose, goals, and expected outcomes." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"></textarea>
                                 </div>
                                 <div class="flex justify-end">
-                                    <button type="submit" name="add_reflection" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">💾 Save Reflection</button>
+                                    <button type="submit" name="add_reflection" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Reflection</button>
                                 </div>
                             </form>
                         </div>
@@ -1635,18 +1632,19 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <!-- Student Signature Section -->
                         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= !$reflection_submitted ? 'opacity-50 pointer-events-none select-none' : '' ?>">
                             <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
-                                <span class="p-1 bg-indigo-50 text-indigo-600 rounded">✍️</span> Student Signature
+                                <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                Student Signature
                                 <?php if (!$reflection_submitted): ?>
-                                <span class="ml-auto text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">🔒 Locked</span>
+                                <span class="ml-auto text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">Locked</span>
                                 <?php elseif ($student_signed): ?>
-                                <span class="ml-auto text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">✅ Signed</span>
+                                <span class="ml-auto text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Signed</span>
                                 <?php else: ?>
-                                <span class="ml-auto text-label font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">⏳ Awaiting Signature</span>
+                                <span class="ml-auto text-label font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded">Awaiting Signature</span>
                                 <?php endif; ?>
                             </h2>
 
                             <?php if (!$reflection_submitted): ?>
-                            <p class="text-slate-400 text-center py-6">✍️ Please submit your weekly reflection first to unlock the signature form.</p>
+                            <p class="text-slate-400 text-center py-6">Please submit your weekly reflection first to unlock the signature form.</p>
 
                             <?php elseif ($student_signed): ?>
                             <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
@@ -1664,11 +1662,11 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 <div class="flex gap-2">
                                     <button type="button" onclick="switchLeftSigType('typed')" id="left-btn-typed"
                                         class="flex-1 px-2 py-1.5 text-label font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600">
-                                        ✏️ Type Name
+                                        Type Name
                                     </button>
                                     <button type="button" onclick="switchLeftSigType('uploaded')" id="left-btn-uploaded"
                                         class="flex-1 px-2 py-1.5 text-label font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50">
-                                        📷 Upload Image
+                                        Upload Image
                                     </button>
                                 </div>
 
@@ -1698,7 +1696,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 </div>
 
                                 <div class="flex justify-end">
-                                    <button type="submit" name="save_student_signature" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm transition cursor-pointer">💾 Save Signature</button>
+                                    <button type="submit" name="save_student_signature" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm transition cursor-pointer">Save Signature</button>
                                 </div>
                             </form>
                             <?php endif; ?>
@@ -1711,27 +1709,28 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                         <!-- ── LEFT: Weekly Summary ── -->
                         <div class="md:col-span-6">
-                            <div class="bg-gradient-to-br from-slate-50 to-indigo-50 rounded-2xl border border-slate-200 shadow-sm p-6 h-full flex flex-col justify-between">
+                            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 h-full flex flex-col justify-between">
                                 <div>
                                     <h3 class="text-caption font-black text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                        <span class="p-1 bg-indigo-50 text-indigo-600 rounded">📋</span> Weekly Summary — Week <?= $selected_week ?>
+                                        <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                                        Weekly Summary — Week <?= $selected_week ?>
                                     </h3>
                                     <div class="grid grid-cols-2 gap-3">
-                                        <div class="flex items-center justify-between bg-white/60 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/40">
+                                        <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
                                             <span class="text-caption text-slate-500 font-medium">Daily Logs</span>
                                             <span class="text-caption font-bold text-slate-700"><?= $weekly_log_count ?> days</span>
                                         </div>
-                                        <div class="flex items-center justify-between bg-white/60 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/40">
+                                        <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
                                             <span class="text-caption text-slate-500 font-medium">Reflection</span>
-                                            <span class="text-caption font-bold <?= $reflection_submitted ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $reflection_submitted ? '✅ Submitted' : '— Pending' ?></span>
+                                            <span class="text-caption font-bold <?= $reflection_submitted ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $reflection_submitted ? 'Submitted' : 'Pending' ?></span>
                                         </div>
-                                        <div class="flex items-center justify-between bg-white/60 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/40">
+                                        <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
                                             <span class="text-caption text-slate-500 font-medium">Signature</span>
-                                            <span class="text-caption font-bold <?= $student_signed ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $student_signed ? '✅ Signed' : '— Pending' ?></span>
+                                            <span class="text-caption font-bold <?= $student_signed ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $student_signed ? 'Signed' : 'Pending' ?></span>
                                         </div>
-                                        <div class="flex items-center justify-between bg-white/60 backdrop-blur-sm rounded-xl px-4 py-3 border border-white/40">
+                                        <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
                                             <span class="text-caption text-slate-500 font-medium">Magic Link</span>
-                                            <span class="text-caption font-bold <?= $magic_link_unlocked ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $magic_link_unlocked ? '✅ Ready' : '🔒 Locked' ?></span>
+                                            <span class="text-caption font-bold <?= $magic_link_unlocked ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $magic_link_unlocked ? 'Ready' : 'Locked' ?></span>
                                         </div>
                                     </div>
                                 </div>
@@ -1746,8 +1745,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                         <span class="text-label font-bold text-slate-500 uppercase tracking-wider">Progress</span>
                                         <span class="text-label font-bold text-indigo-600"><?= $week_progress ?>%</span>
                                     </div>
-                                    <div class="w-full bg-white/60 rounded-full h-2">
-                                        <div class="bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full h-2 transition-all duration-500 shadow-sm" style="width: <?= $week_progress ?>%"></div>
+                                    <div class="w-full bg-slate-100 rounded-full h-2">
+                                        <div class="bg-indigo-600 rounded-full h-2 transition-all duration-500" style="width: <?= $week_progress ?>%"></div>
                                     </div>
                                 </div>
                             </div>
@@ -1757,9 +1756,10 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <div class="md:col-span-6">
                             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 h-full flex flex-col">
                                 <h3 class="text-caption font-black text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                    <span class="p-1 bg-purple-50 text-purple-600 rounded">🔗</span> Magic Link
+                                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                                    Magic Link
                                     <?php if (!$magic_link_unlocked): ?>
-                                    <span class="ml-auto text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">🔒 Locked</span>
+                                    <span class="ml-auto text-label font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">Locked</span>
                                     <?php endif; ?>
                                 </h3>
 
@@ -1767,8 +1767,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                                     <?php if ($is_rejected): ?>
                                     <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
-                                        <p class="text-label font-bold text-red-600 flex items-center gap-1.5">
-                                            <span>🔄</span> Report was rejected. Update your logs and reflection, then regenerate a fresh link.
+                                        <p class="text-label font-bold text-red-600">
+                                            Report was rejected. Update your logs and reflection, then regenerate a fresh link.
                                         </p>
                                     </div>
                                     <?php endif; ?>
@@ -1785,12 +1785,12 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                 <label class="block text-label font-bold text-slate-400 mb-1 uppercase tracking-wider">Your Magic Link</label>
                                                 <input type="text" id="magic_link_input" value="<?= htmlspecialchars($magic_link) ?>" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-caption font-mono text-slate-600 focus:outline-none">
                                             </div>
-                                            <button id="copy_btn" onclick="copyLink()" class="w-full px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-sm transition cursor-pointer">📋 Copy Link</button>
+                                            <button id="copy_btn" onclick="copyLink()" class="w-full px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-sm transition cursor-pointer">Copy Link</button>
                                             <p class="text-label text-slate-400 text-center mt-2">Link expires in 7 days.</p>
                                             <?php else: ?>
                                             <form method="POST">
                                                 <p class="text-caption text-slate-500 mb-3">Click below to generate the link.</p>
-                                                <button type="submit" name="generate_magic_link" class="w-full px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-sm transition cursor-pointer">🔗 Generate & Send Link</button>
+                                                <button type="submit" name="generate_magic_link" class="w-full px-3 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-sm transition cursor-pointer">Generate & Send Link</button>
                                             </form>
                                             <p class="text-label text-slate-400 text-center mt-2">No active link yet.</p>
                                             <?php endif; ?>
@@ -1798,8 +1798,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                                         <!-- Right: How to Share -->
                                         <div class="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col justify-center">
-                                            <h4 class="text-caption font-bold text-slate-600 mb-2.5 flex items-center gap-1.5">
-                                                <span>💡</span> How to share
+                                            <h4 class="text-caption font-bold text-slate-600 mb-2.5">
+                                                How to share
                                             </h4>
                                             <ul class="text-label text-slate-400 space-y-2">
                                                 <li class="flex items-start gap-2">
@@ -1827,13 +1827,13 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 <div class="flex-1 flex flex-col justify-center">
                                     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
                                         <div class="flex items-start gap-2">
-                                            <span class="text-amber-500 text-sm mt-0.5">⚠️</span>
+                                            <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                                             <div>
                                                 <p class="text-caption font-bold text-amber-700 mb-1">Requirements not met for Week <?= $selected_week ?></p>
                                                 <ul class="text-label text-amber-600 space-y-0.5">
-                                                    <li><?= ($total_weekdays > 0 && $weekly_log_count >= $total_weekdays) ? '✅' : '❌' ?> Daily Logs: <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong> days</li>
-                                                    <li><?= $reflection_submitted ? '✅' : '❌' ?> Weekly Reflection: <strong><?= $reflection_submitted ? 'Submitted' : 'Not yet' ?></strong></li>
-                                                    <li><?= $student_signed ? '✅' : '❌' ?> Student Signature: <strong><?= $student_signed ? 'Signed' : 'Not yet' ?></strong></li>
+                                                    <li>Daily Logs: <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong> days</li>
+                                                    <li>Weekly Reflection: <strong><?= $reflection_submitted ? 'Submitted' : 'Not yet' ?></strong></li>
+                                                    <li>Student Signature: <strong><?= $student_signed ? 'Signed' : 'Not yet' ?></strong></li>
                                                 </ul>
                                             </div>
                                         </div>
@@ -1842,7 +1842,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                         <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3">
                                             <input type="text" readonly value="················" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-caption font-mono text-slate-300 focus:outline-none">
                                         </div>
-                                        <button class="w-full px-3 py-2.5 bg-purple-400 text-white font-bold rounded-xl shadow-sm cursor-not-allowed">🔗 Generate Magic Link</button>
+                                        <button class="w-full px-3 py-2.5 bg-purple-400 text-white font-bold rounded-xl shadow-sm cursor-not-allowed">Generate Magic Link</button>
                                     </div>
                                 </div>
                                 <?php endif; ?>
@@ -1868,7 +1868,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     <p class="text-caption font-mono font-bold text-indigo-500 uppercase tracking-wider mb-1"><?= htmlspecialchars($student_roll) ?></p>
                     <?php endif; ?>
                     <p class="text-xs text-slate-400 capitalize mb-5"><?= htmlspecialchars($role) ?></p>
-                    <a href="profile.php" class="inline-block px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm transition">👤 View Full Profile</a>
+                    <a href="profile.php" class="inline-block px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm transition">View Full Profile</a>
                 </div>
             </section>
 
@@ -1882,28 +1882,35 @@ if ($magic_link_unlocked && empty($magic_link)) {
     <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-10">
         <div class="flex items-center justify-between mb-5">
             <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                <span class="p-1 bg-indigo-50 text-indigo-600 rounded">📄</span> Export Report
+                <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Export Report
             </h3>
             <button onclick="document.getElementById('export-modal').classList.add('hidden')" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition cursor-pointer">✕</button>
         </div>
         <p class="text-slate-500 mb-4">Choose an export option for your internship report data.</p>
         <div class="space-y-3">
             <button onclick="exportAsHTML()" class="w-full flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-200 transition group cursor-pointer">
-                <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">📋</span>
+                <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </span>
                 <div class="text-left">
                     <p class="font-bold text-slate-700 group-hover:text-indigo-700">Export as HTML Report</p>
                     <p class="text-label text-slate-400">Printable report with all logs and reflections</p>
                 </div>
             </button>
             <button onclick="exportAsCSV()" class="w-full flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-emerald-50 hover:border-emerald-200 transition group cursor-pointer">
-                <span class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">📊</span>
+                <span class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                </span>
                 <div class="text-left">
                     <p class="font-bold text-slate-700 group-hover:text-emerald-700">Export as CSV</p>
                     <p class="text-label text-slate-400">Spreadsheet-compatible daily logs data</p>
                 </div>
             </button>
             <button onclick="window.print()" class="w-full flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-amber-50 hover:border-amber-200 transition group cursor-pointer">
-                <span class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">🖨️</span>
+                <span class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg>
+                </span>
                 <div class="text-left">
                     <p class="font-bold text-slate-700 group-hover:text-amber-700">Print Dashboard</p>
                     <p class="text-label text-slate-400">Print the current dashboard view</p>

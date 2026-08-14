@@ -85,16 +85,14 @@ $holiday_json = json_encode($db_holidays);
     }
     </script>
     <style>
-        /* Glass sidebar & header */
+        /* Sidebar */
         .glass-sidebar {
-            background: linear-gradient(180deg, rgba(30,27,75,0.95) 0%, rgba(55,48,107,0.95) 100%);
-            backdrop-filter: blur(12px);
+            background: #0f172a;
+            border-right: 1px solid rgba(255,255,255,0.08);
         }
-        .glass-header {
-            background: rgba(255,255,255,0.85);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(226,232,240,0.5);
-        }
+        .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+        .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
+        .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
         .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
         .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
         .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
@@ -120,38 +118,35 @@ $holiday_json = json_encode($db_holidays);
         .today-ring { animation: softPulse 2s ease-in-out infinite; }
     </style>
 </head>
-<body class="bg-gradient-to-br from-slate-50 via-indigo-50/30 to-rose-50/20 min-h-screen font-sans antialiased">
+<body class="bg-slate-100 min-h-screen font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
     <aside class="w-56 glass-sidebar flex flex-col shrink-0">
         <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="text-sm font-black text-white tracking-tight">📋 InternReport</span>
+            <span class="font-black text-white tracking-tight">InternReport</span>
         </div>
-        <nav class="flex-1 py-4 space-y-1 px-3">
-            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📝</span> Dashboard
+        <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
+            <a href="student-dashboard.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
             </a>
-            <a href="analytics.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Analytics
+            <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> Notifications
             </a>
             <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📜</span> Log History
-            </a>
-            <a href="public-holiday.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📅</span> Intern Period Calendar
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
             </a>
             <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">📋</span> Instructions
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253z"/></svg> Instructions
             </a>
             <a href="profile.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">👤</span> Profile
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> Profile
             </a>
         </nav>
         <div class="p-3 border-t border-white/10">
             <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
-                <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
             </a>
         </div>
     </aside>
@@ -170,7 +165,7 @@ $holiday_json = json_encode($db_holidays);
                 <!-- Page Header -->
                 <div class="mb-6">
                     <h1 class="text-lg font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                        <span class="p-1.5 bg-rose-50 text-rose-600 rounded-lg text-sm">📅</span> Intern Period Calendar
+                        <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> Intern Period Calendar
                     </h1>
                     <p class="text-xs text-slate-400 mt-1">View public holidays during your internship period</p>
                 </div>
@@ -237,7 +232,7 @@ $holiday_json = json_encode($db_holidays);
 <div class="mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
     <div class="px-5 py-3 border-b border-slate-100">
         <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <span class="p-1 bg-indigo-50 text-indigo-600 rounded">🎨</span> Holiday Color Legend
+            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg> Holiday Color Legend
         </h2>
     </div>
     <div id="color-legend" class="px-5 py-3 flex flex-wrap gap-2">
@@ -249,11 +244,11 @@ $holiday_json = json_encode($db_holidays);
                 <div class="mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
                         <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2 shrink-0">
-                            <span class="p-1 bg-rose-50 text-rose-600 rounded">🇲🇲</span> Upcoming Holidays
+                            <svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg> Upcoming Holidays
                         </h2>
                         <div class="flex items-center gap-2">
                             <div class="relative">
-                                <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-label">🔍</span>
+                                <svg class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                                 <input type="text" id="holiday-search" placeholder="Search holidays..." oninput="renderUpcoming()" class="w-44 bg-slate-50 border border-slate-200 rounded-lg pl-7 pr-2 py-1.5 text-caption text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-indigo-400 focus:bg-white transition">
                             </div>
                             <span class="text-label text-slate-400 font-semibold shrink-0" id="holiday-count"></span>
@@ -266,7 +261,7 @@ $holiday_json = json_encode($db_holidays);
 
                 <!-- Info Note -->
                 <div class="mt-6 bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                    <h3 class="text-xs font-bold text-slate-700 mb-2">ℹ️ Notes</h3>
+                    <h3 class="text-xs font-bold text-slate-700 mb-2">Notes</h3>
                     <ul class="text-caption text-slate-500 space-y-1">
                         <li>• These are public holidays set by the administrator during your internship period.</li>
                         <li>• Holiday dates will be automatically marked as <strong>"Leave"</strong> in your daily logs.</li>
