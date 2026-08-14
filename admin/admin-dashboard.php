@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 
 if ($_SESSION['role'] !== 'admin') {
@@ -8,19 +8,27 @@ if ($_SESSION['role'] !== 'admin') {
 }
 
 $admin_name = $_SESSION['username'];
-$admin_id   = $_SESSION['user_id'];
+$admin_id   = (int) $_SESSION['user_id'];
+$db         = $mysqli ?? $conn;
 $msg = '';
 $err = '';
 
 // Default password values should be available before request handlers run.
 $def_student_pw = 'password123';
 $def_supervisor_pw = 'password123';
-$sys_settings = $pdo->query("SELECT setting_key, setting_value FROM system_settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+$sys_settings = [];
+$res_st = $db->query("SELECT setting_key, setting_value FROM system_settings");
+if ($res_st) {
+    while ($row = $res_st->fetch_assoc()) {
+        $sys_settings[$row['setting_key']] = $row['setting_value'];
+    }
+}
 $def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
 $def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
 
 // ── Academic Years (for dynamic dropdowns) ──────────────────────
-$all_academic_years = $pdo->query("SELECT id, year_label, status, is_current FROM academic_years ORDER BY start_date DESC")->fetchAll();
+$res_ay = $db->query("SELECT id, year_label, status, is_current FROM academic_years ORDER BY start_date DESC");
+$all_academic_years = $res_ay ? $res_ay->fetch_all(MYSQLI_ASSOC) : [];
 $ay_label_to_id = [];
 foreach ($all_academic_years as $ay) {
     $ay_label_to_id[$ay['year_label']] = (int) $ay['id'];
@@ -53,35 +61,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     } elseif ($s_academic && !preg_match('/^\d{4}-\d{4}$/', $s_academic)) {
         $err = 'Academic year must be in range format (e.g. 2024-2025).';
     } else {
-        $check = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-        $check->execute([$s_email]);
-        if ($check->fetch()) {
+        $check = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $check->bind_param("s", $s_email);
+        $check->execute();
+        $res = $check->get_result();
+        if ($res && $res->fetch_row()) {
             $err = 'A user with this email already exists.';
         } else {
             // Resolve academic_year_id from the string label
             $s_academic_id = ($s_academic && isset($ay_label_to_id[$s_academic])) ? $ay_label_to_id[$s_academic] : null;
 
             // Composite check: same roll number + same academic year = duplicate
-            $check_dup = $pdo->prepare("SELECT id FROM users WHERE username = ? AND (academic_year_id = ? OR (academic_year_id IS NULL AND academic_year = ?))");
-            $check_dup->execute([$s_roll, $s_academic_id, $s_academic ?: null]);
-            if ($check_dup->fetch()) {
+            $check_dup = $db->prepare("SELECT id FROM users WHERE username = ? AND (academic_year_id = ? OR (academic_year_id IS NULL AND academic_year = ?))");
+            $check_dup->bind_param("sis", $s_roll, $s_academic_id, $s_academic);
+            $check_dup->execute();
+            $res = $check_dup->get_result();
+            if ($res && $res->fetch_row()) {
                 $err = 'A student with roll number "' . htmlspecialchars($s_roll) . '" already exists in ' . htmlspecialchars($s_academic ?: 'this year') . '.';
             } else {
-            // Look up company name from selected company_id
-            $company_name = '';
-            if ($s_company_id > 0) {
-                $cn = $pdo->prepare("SELECT company_name FROM companies WHERE id = ?");
-                $cn->execute([$s_company_id]);
-                $company_name = $cn->fetchColumn() ?: '';
-            }
+                // Look up company name from selected company_id
+                $company_name = '';
+                if ($s_company_id > 0) {
+                    $cn = $db->prepare("SELECT company_name FROM companies WHERE id = ?");
+                    $cn->bind_param("i", $s_company_id);
+                    $cn->execute();
+                    $res_c = $cn->get_result();
+                    $row_c = $res_c ? $res_c->fetch_row() : null;
+                    $company_name = $row_c[0] ?? '';
+                }
 
-            $hash = password_hash($s_password, PASSWORD_DEFAULT);
-            $pdo->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?, ?)")
-                ->execute([$s_roll, $s_email, $hash, $s_academic ?: null, $s_academic_id]);
-            $uid = $pdo->lastInsertId();
-            $pdo->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-                ->execute([$uid, $s_name, $s_roll, $s_major, $s_company_id ?: null, $company_name, $s_supervisor_id ?: null, $s_instructor, $s_start ?: null, $s_end ?: null]);
-            $msg = "Student \"{$s_name}\" created. Email: {$s_email}, Password: {$s_password}";
+                $hash = password_hash($s_password, PASSWORD_DEFAULT);
+                $ins_u = $db->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?, ?)");
+                $ins_u->bind_param("ssssi", $s_roll, $s_email, $hash, $s_academic, $s_academic_id);
+                $ins_u->execute();
+                $uid = (int) $db->insert_id;
+
+                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins_sp->bind_param("isssisisss", $uid, $s_name, $s_roll, $s_major, $s_company_id, $company_name, $s_supervisor_id, $s_instructor, $s_start, $s_end);
+                $ins_sp->execute();
+
+                $msg = "Student \"{$s_name}\" created. Email: {$s_email}, Password: {$s_password}";
             }
         }
     }
@@ -104,9 +123,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
     } elseif ($t_academic && !preg_match('/^\d{4}-\d{4}$/', $t_academic)) {
         $err = 'Academic year must be in range format (e.g. 2024-2025).';
     } else {
-        $check = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-        $check->execute([$t_email]);
-        if ($check->fetch()) {
+        $check = $db->prepare("SELECT id FROM users WHERE email = ?");
+        $check->bind_param("s", $t_email);
+        $check->execute();
+        $res = $check->get_result();
+        if ($res && $res->fetch_row()) {
             $err = 'A user with this email already exists.';
         } else {
             // Resolve academic_year_id from the string label
@@ -114,8 +135,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
 
             $hash = password_hash($t_password, PASSWORD_DEFAULT);
             $uname = 'sup_' . strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $t_name));
-            $pdo->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'supervisor', 1, ?, ?)")
-                ->execute([$uname, $t_email, $hash, $t_academic ?: null, $t_academic_id]);
+            $ins_sup = $db->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'supervisor', 1, ?, ?)");
+            $ins_sup->bind_param("ssssi", $uname, $t_email, $hash, $t_academic, $t_academic_id);
+            $ins_sup->execute();
             $msg = "Supervisor \"{$t_name}\" created. Email: {$t_email}, Password: {$t_password}";
         }
     }
@@ -125,7 +147,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_user'])) {
     $did = (int) ($_POST['delete_uid'] ?? 0);
     if ($did > 0 && $did !== $admin_id) {
-        $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$did]);
+        $del = $db->prepare("DELETE FROM users WHERE id = ?");
+        $del->bind_param("i", $did);
+        $del->execute();
         $msg = 'User deleted.';
     }
 }
@@ -135,18 +159,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password'])) {
     $rid = (int) ($_POST['reset_uid'] ?? 0);
     if ($rid > 0 && $rid !== $admin_id) {
         // Determine which default password to use based on the user's role
-        $r_role = $pdo->prepare("SELECT role FROM users WHERE id = ?");
-        $r_role->execute([$rid]);
-        $r_role = $r_role->fetchColumn();
+        $r_role_q = $db->prepare("SELECT role FROM users WHERE id = ?");
+        $r_role_q->bind_param("i", $rid);
+        $r_role_q->execute();
+        $res = $r_role_q->get_result();
+        $row = $res ? $res->fetch_row() : null;
+        $r_role = $row[0] ?? '';
         $default_pw = ($r_role === 'supervisor') ? $def_supervisor_pw : $def_student_pw;
 
         $hash = password_hash($default_pw, PASSWORD_DEFAULT);
-        $pdo->prepare("UPDATE users SET password = ?, is_first_login = 1 WHERE id = ? AND role IN ('student','supervisor')")
-            ->execute([$hash, $rid]);
+        $up = $db->prepare("UPDATE users SET password = ?, is_first_login = 1 WHERE id = ? AND role IN ('student','supervisor')");
+        $up->bind_param("si", $hash, $rid);
+        $up->execute();
 
-        $rname = $pdo->prepare("SELECT username FROM users WHERE id = ?");
-        $rname->execute([$rid]);
-        $rname = $rname->fetchColumn() ?: 'User';
+        $rname_q = $db->prepare("SELECT username FROM users WHERE id = ?");
+        $rname_q->bind_param("i", $rid);
+        $rname_q->execute();
+        $res = $rname_q->get_result();
+        $row = $res ? $res->fetch_row() : null;
+        $rname = $row[0] ?? 'User';
 
         $msg = "Password reset for \"{$rname}\". Default password: {$default_pw}";
     }
@@ -163,15 +194,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_batch'])) {
         $batch_year_id = $ay_label_to_id[$batch_year] ?? null;
 
         if ($batch_year_id) {
-            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year_id = ? AND role = 'student'");
-            $cnt->execute([$batch_year_id]);
-            $count = (int) $cnt->fetchColumn();
-            $pdo->prepare("UPDATE users SET status = 'Archived' WHERE academic_year_id = ? AND role = 'student'")->execute([$batch_year_id]);
+            $cnt = $db->prepare("SELECT COUNT(*) FROM users WHERE academic_year_id = ? AND role = 'student'");
+            $cnt->bind_param("i", $batch_year_id);
+            $cnt->execute();
+            $res = $cnt->get_result();
+            $row = $res ? $res->fetch_row() : null;
+            $count = (int) ($row[0] ?? 0);
+
+            $up = $db->prepare("UPDATE users SET status = 'Archived' WHERE academic_year_id = ? AND role = 'student'");
+            $up->bind_param("i", $batch_year_id);
+            $up->execute();
         } else {
-            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student'");
-            $cnt->execute([$batch_year]);
-            $count = (int) $cnt->fetchColumn();
-            $pdo->prepare("UPDATE users SET status = 'Archived' WHERE academic_year = ? AND role = 'student'")->execute([$batch_year]);
+            $cnt = $db->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student'");
+            $cnt->bind_param("s", $batch_year);
+            $cnt->execute();
+            $res = $cnt->get_result();
+            $row = $res ? $res->fetch_row() : null;
+            $count = (int) ($row[0] ?? 0);
+
+            $up = $db->prepare("UPDATE users SET status = 'Archived' WHERE academic_year = ? AND role = 'student'");
+            $up->bind_param("s", $batch_year);
+            $up->execute();
         }
         $msg = "Archived {$count} student(s) from batch {$batch_year}.";
     }
@@ -188,17 +231,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_batch'])) {
         $restore_year_id = $ay_label_to_id[$restore_year] ?? null;
 
         if ($restore_year_id) {
-            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year_id = ? AND role = 'student' AND status = 'Archived'");
-            $cnt->execute([$restore_year_id]);
-            $count = (int) $cnt->fetchColumn();
-            $pdo->prepare("UPDATE users SET status = 'Active' WHERE academic_year_id = ? AND role = 'student' AND status = 'Archived'")->execute([$restore_year_id]);
-            // Restore the academic year status to UPCOMING if it was ARCHIVED
-            $pdo->prepare("UPDATE academic_years SET status = 'UPCOMING', is_current = 0 WHERE id = ? AND status = 'ARCHIVED'")->execute([$restore_year_id]);
+            $cnt = $db->prepare("SELECT COUNT(*) FROM users WHERE academic_year_id = ? AND role = 'student' AND status = 'Archived'");
+            $cnt->bind_param("i", $restore_year_id);
+            $cnt->execute();
+            $res = $cnt->get_result();
+            $row = $res ? $res->fetch_row() : null;
+            $count = (int) ($row[0] ?? 0);
+
+            $up1 = $db->prepare("UPDATE users SET status = 'Active' WHERE academic_year_id = ? AND role = 'student' AND status = 'Archived'");
+            $up1->bind_param("i", $restore_year_id);
+            $up1->execute();
+
+            $up2 = $db->prepare("UPDATE academic_years SET status = 'UPCOMING', is_current = 0 WHERE id = ? AND status = 'ARCHIVED'");
+            $up2->bind_param("i", $restore_year_id);
+            $up2->execute();
         } else {
-            $cnt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student' AND status = 'Archived'");
-            $cnt->execute([$restore_year]);
-            $count = (int) $cnt->fetchColumn();
-            $pdo->prepare("UPDATE users SET status = 'Active' WHERE academic_year = ? AND role = 'student' AND status = 'Archived'")->execute([$restore_year]);
+            $cnt = $db->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student' AND status = 'Archived'");
+            $cnt->bind_param("s", $restore_year);
+            $cnt->execute();
+            $res = $cnt->get_result();
+            $row = $res ? $res->fetch_row() : null;
+            $count = (int) ($row[0] ?? 0);
+
+            $up = $db->prepare("UPDATE users SET status = 'Active' WHERE academic_year = ? AND role = 'student' AND status = 'Archived'");
+            $up->bind_param("s", $restore_year);
+            $up->execute();
         }
         $msg = "Restored {$count} student(s) from batch {$restore_year}. They can now log in again.";
     }
@@ -212,14 +269,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_holiday'])) {
     if (empty($h_date)) {
         $err = 'Holiday date is required.';
     } else {
-        $dup = $pdo->prepare("SELECT id FROM holidays WHERE holiday_date = ?");
-        $dup->execute([$h_date]);
-        if ($dup->fetch()) {
+        $dup = $db->prepare("SELECT id FROM holidays WHERE holiday_date = ?");
+        $dup->bind_param("s", $h_date);
+        $dup->execute();
+        $res = $dup->get_result();
+        if ($res && $res->fetch_row()) {
             $err = 'A holiday already exists for this date.';
         } else {
             $displayName = $h_name_mm ?: $h_date;
-            $pdo->prepare("INSERT INTO holidays (holiday_date, holiday_name, holiday_name_mm, note) VALUES (?, ?, ?, ?)")
-                ->execute([$h_date, $displayName, $h_name_mm ?: null, $h_note ?: null]);
+            $ins = $db->prepare("INSERT INTO holidays (holiday_date, holiday_name, holiday_name_mm, note) VALUES (?, ?, ?, ?)");
+            $ins->bind_param("ssss", $h_date, $displayName, $h_name_mm, $h_note);
+            $ins->execute();
             $msg = "Holiday \"{$displayName}\" added for {$h_date}.";
         }
     }
@@ -229,7 +289,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_holiday'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_holiday'])) {
     $hid = (int) ($_POST['holiday_id'] ?? 0);
     if ($hid > 0) {
-        $pdo->prepare("DELETE FROM holidays WHERE id = ?")->execute([$hid]);
+        $del = $db->prepare("DELETE FROM holidays WHERE id = ?");
+        $del->bind_param("i", $hid);
+        $del->execute();
         $msg = 'Holiday deleted.';
     }
 }
@@ -238,13 +300,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_holiday'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
     $notif_id = (int)($_POST['notification_id'] ?? 0);
     if ($notif_id > 0) {
-        $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")->execute([$notif_id, $admin_id]);
+        $up = $db->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?");
+        $up->bind_param("ii", $notif_id, $admin_id);
+        $up->execute();
     }
     header('Location: admin-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
     exit;
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notifications_read'])) {
-    $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0")->execute([$admin_id]);
+    $up = $db->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0");
+    $up->bind_param("i", $admin_id);
+    $up->execute();
     header('Location: admin-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
     exit;
 }
@@ -258,42 +324,61 @@ $ay_id = (int) ($_SESSION['selected_academic_year_id'] ?? 0);
 
 // 1. Active students for the current academic year
 if ($ay_id > 0) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ? AND status = 'Active'");
-    $stmt->execute([$ay_id]);
-    $student_count = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ? AND status = 'Active'");
+    $stmt->bind_param("i", $ay_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $student_count = (int) ($row[0] ?? 0);
 } else {
-    $student_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'Active'")->fetchColumn();
+    $res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'Active'");
+    $row = $res ? $res->fetch_row() : null;
+    $student_count = (int) ($row[0] ?? 0);
 }
 
 // 2. Active supervisors for the current academic year
 if ($ay_id > 0) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ? AND status = 'Active'");
-    $stmt->execute([$ay_id]);
-    $supervisor_count = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ? AND status = 'Active'");
+    $stmt->bind_param("i", $ay_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $supervisor_count = (int) ($row[0] ?? 0);
 } else {
-    $supervisor_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor'")->fetchColumn();
+    $res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor'");
+    $row = $res ? $res->fetch_row() : null;
+    $supervisor_count = (int) ($row[0] ?? 0);
 }
 
 // 3. Registered partner companies (global – no year filter)
-$company_count = (int) $pdo->query("SELECT COUNT(*) FROM companies")->fetchColumn();
+$res = $db->query("SELECT COUNT(*) FROM companies");
+$row = $res ? $res->fetch_row() : null;
+$company_count = (int) ($row[0] ?? 0);
 
 // 4. Pending user approvals / password reset requests
 if ($ay_id > 0) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin' AND academic_year_id = ?");
-    $stmt->execute([$ay_id]);
-    $pending_count = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin' AND academic_year_id = ?");
+    $stmt->bind_param("i", $ay_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $pending_count = (int) ($row[0] ?? 0);
 } else {
-    $pending_count = (int) $pdo->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'")->fetchColumn();
+    $res = $db->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'");
+    $row = $res ? $res->fetch_row() : null;
+    $pending_count = (int) ($row[0] ?? 0);
 }
 
 // Companies list
-$companies = $pdo->query("SELECT * FROM companies ORDER BY company_name ASC")->fetchAll();
+$res_c = $db->query("SELECT * FROM companies ORDER BY company_name ASC");
+$companies = $res_c ? $res_c->fetch_all(MYSQLI_ASSOC) : [];
 
 // Supervisors list
-$supervisors = $pdo->query("SELECT id, username, email FROM users WHERE role = 'supervisor' ORDER BY username")->fetchAll();
+$res_sup = $db->query("SELECT id, username, email FROM users WHERE role = 'supervisor' ORDER BY username");
+$supervisors = $res_sup ? $res_sup->fetch_all(MYSQLI_ASSOC) : [];
 
 // Students list
-$students = $pdo->query("
+$res_stu = $db->query("
     SELECT u.id AS uid, u.username, u.email, u.is_first_login, u.academic_year, u.status, u.created_at,
            sp.full_name, sp.student_roll, sp.major, sp.company_name,
            sp.instructor_name, sp.supervisor_id
@@ -301,7 +386,8 @@ $students = $pdo->query("
     LEFT JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student'
     ORDER BY sp.full_name ASC, u.username ASC
-")->fetchAll();
+");
+$students = $res_stu ? $res_stu->fetch_all(MYSQLI_ASSOC) : [];
 
 // All users (with optional role filter)
 $filter_role = $_GET['role'] ?? '';
@@ -311,38 +397,49 @@ $all_users_sql = "
     FROM users u
     LEFT JOIN student_profiles sp ON sp.user_id = u.id
 ";
-$params = [];
 if (in_array($filter_role, ['admin', 'supervisor', 'student'])) {
     $all_users_sql .= " WHERE u.role = ?";
-    $params[] = $filter_role;
+    $all_users_sql .= " ORDER BY FIELD(u.role, 'admin', 'supervisor', 'student'), u.created_at DESC";
+    $all_users_stmt = $db->prepare($all_users_sql);
+    $all_users_stmt->bind_param("s", $filter_role);
+    $all_users_stmt->execute();
+    $res = $all_users_stmt->get_result();
+    $all_users = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+} else {
+    $all_users_sql .= " ORDER BY FIELD(u.role, 'admin', 'supervisor', 'student'), u.created_at DESC";
+    $res = $db->query($all_users_sql);
+    $all_users = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 }
-$all_users_sql .= " ORDER BY FIELD(u.role, 'admin', 'supervisor', 'student'), u.created_at DESC";
-$all_users_stmt = $pdo->prepare($all_users_sql);
-$all_users_stmt->execute($params);
-$all_users = $all_users_stmt->fetchAll();
 
 // Holidays
-$holidays = $pdo->query("SELECT * FROM holidays ORDER BY holiday_date ASC")->fetchAll();
+$res_h = $db->query("SELECT * FROM holidays ORDER BY holiday_date ASC");
+$holidays = $res_h ? $res_h->fetch_all(MYSQLI_ASSOC) : [];
 
 // Notifications
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$admin_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $admin_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$admin_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $admin_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Recent activity feed for the overview panel
 $recent_activity_items = [];
 
-$recent_student_activity = $pdo->query(
+$res = $db->query(
     "SELECT 'student' AS type, 'New student added' AS title, COALESCE(sp.full_name, u.username) AS detail, u.created_at
      FROM users u
      LEFT JOIN student_profiles sp ON sp.user_id = u.id
      WHERE u.role = 'student'
      ORDER BY u.created_at DESC LIMIT 5"
-)->fetchAll();
+);
+$recent_student_activity = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 foreach ($recent_student_activity as $item) {
     $recent_activity_items[] = [
         'type' => 'student',
@@ -352,12 +449,13 @@ foreach ($recent_student_activity as $item) {
     ];
 }
 
-$recent_supervisor_activity = $pdo->query(
+$res = $db->query(
     "SELECT 'supervisor' AS type, 'New supervisor added' AS title, u.username AS detail, u.created_at
      FROM users u
      WHERE u.role = 'supervisor'
      ORDER BY u.created_at DESC LIMIT 5"
-)->fetchAll();
+);
+$recent_supervisor_activity = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 foreach ($recent_supervisor_activity as $item) {
     $recent_activity_items[] = [
         'type' => 'supervisor',
@@ -367,11 +465,12 @@ foreach ($recent_supervisor_activity as $item) {
     ];
 }
 
-$recent_company_activity = $pdo->query(
+$res = $db->query(
     "SELECT 'company' AS type, 'New company added' AS title, company_name AS detail, created_at
      FROM companies
      ORDER BY created_at DESC LIMIT 5"
-)->fetchAll();
+);
+$recent_company_activity = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 foreach ($recent_company_activity as $item) {
     $recent_activity_items[] = [
         'type' => 'company',
@@ -381,11 +480,12 @@ foreach ($recent_company_activity as $item) {
     ];
 }
 
-$recent_holiday_activity = $pdo->query(
+$res = $db->query(
     "SELECT 'holiday' AS type, 'Holiday added' AS title, holiday_name AS detail, created_at
      FROM holidays
      ORDER BY created_at DESC LIMIT 5"
-)->fetchAll();
+);
+$recent_holiday_activity = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 foreach ($recent_holiday_activity as $item) {
     $recent_activity_items[] = [
         'type' => 'holiday',
@@ -395,12 +495,21 @@ foreach ($recent_holiday_activity as $item) {
     ];
 }
 
-$recent_announcement_activity = $pdo->query(
+$res = $db->query(
     "SELECT 'announcement' AS type, 'Announcement published' AS title, title AS detail, created_at
      FROM announcements
      WHERE is_active = 1
      ORDER BY created_at DESC LIMIT 5"
-)->fetchAll();
+);
+$recent_announcement_activity = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+foreach ($recent_announcement_activity as $item) {
+    $recent_activity_items[] = [
+        'type' => 'announcement',
+        'title' => 'Announcement published',
+        'detail' => $item['detail'] ?? 'Announcement published',
+        'created_at' => $item['created_at'],
+    ];
+}
 foreach ($recent_announcement_activity as $item) {
     $recent_activity_items[] = [
         'type' => 'announcement',
@@ -883,14 +992,15 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
 
             <!-- Archived Students Summary -->
             <?php
-            $archived = $pdo->query("
+            $res_arch = $db->query("
                 SELECT COALESCE(ay.year_label, u.academic_year, 'Unknown') AS year_label, COUNT(*) AS cnt
                 FROM users u
                 LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
                 WHERE u.role = 'student' AND u.status = 'Archived'
                 GROUP BY year_label
                 ORDER BY year_label DESC
-            ")->fetchAll();
+            ");
+            $archived = $res_arch ? $res_arch->fetch_all(MYSQLI_ASSOC) : [];
             ?>
             <?php if (!empty($archived)): ?>
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -974,7 +1084,13 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             <!-- ════ TAB: STUDENT HISTORY ════ -->
             <?php
             $hist_year = $_GET['academic_year'] ?? '';
-            $hist_years = $pdo->query("SELECT year_label FROM academic_years ORDER BY start_date DESC")->fetchAll(PDO::FETCH_COLUMN);
+            $res_hy = $db->query("SELECT year_label FROM academic_years ORDER BY start_date DESC");
+            $hist_years = [];
+            if ($res_hy) {
+                while ($row = $res_hy->fetch_row()) {
+                    $hist_years[] = $row[0];
+                }
+            }
 
             $hist_sql = "
                 SELECT u.id AS uid, u.username, u.email, u.academic_year, u.status, u.created_at,
@@ -986,22 +1102,29 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
                 WHERE u.role = 'student'
             ";
-            $hist_params = [];
             if ($hist_year && preg_match('/^\d{4}-\d{4}$/', $hist_year)) {
                 $hist_sql .= " AND u.academic_year = ?";
-                $hist_params[] = $hist_year;
+                $hist_sql .= " ORDER BY sp.full_name ASC, u.username ASC";
+                $hist_stmt = $db->prepare($hist_sql);
+                $hist_stmt->bind_param("s", $hist_year);
+                $hist_stmt->execute();
+                $res = $hist_stmt->get_result();
+                $hist_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+            } else {
+                $hist_sql .= " ORDER BY sp.full_name ASC, u.username ASC";
+                $res = $db->query($hist_sql);
+                $hist_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
             }
-            $hist_sql .= " ORDER BY sp.full_name ASC, u.username ASC";
-            $hist_stmt = $pdo->prepare($hist_sql);
-            $hist_stmt->execute($hist_params);
-            $hist_students = $hist_stmt->fetchAll();
 
             // Fetch latest grade for each student
             $hist_grades = [];
             foreach ($hist_students as $hs) {
-                $gq = $pdo->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
-                $gq->execute([$hs['uid']]);
-                $hist_grades[$hs['uid']] = $gq->fetchColumn() ?: null;
+                $gq = $db->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
+                $gq->bind_param("i", $hs['uid']);
+                $gq->execute();
+                $res = $gq->get_result();
+                $row = $res ? $res->fetch_row() : null;
+                $hist_grades[$hs['uid']] = $row[0] ?? null;
             }
             ?>
 

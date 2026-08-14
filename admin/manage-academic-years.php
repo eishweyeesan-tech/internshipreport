@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../auth.php';
 
@@ -9,24 +9,32 @@ if (($_SESSION['role'] ?? '') !== 'admin') {
 }
 
 $admin_name = $_SESSION['username'] ?? 'Admin';
-$admin_id   = $_SESSION['user_id'] ?? 0;
+$admin_id   = (int) ($_SESSION['user_id'] ?? 0);
+$db         = $mysqli ?? $conn;
 
 // Notifications
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$admin_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$admin_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $admin_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
+
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $admin_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Fetch all academic years with student counts
-$years = $pdo->query("
+$res = $db->query("
     SELECT ay.*,
            (SELECT COUNT(*) FROM users u WHERE u.academic_year_id = ay.id AND u.role = 'student') AS student_count,
            (SELECT COUNT(*) FROM users u WHERE u.academic_year_id = ay.id AND u.role = 'supervisor') AS supervisor_count
     FROM academic_years ay
     ORDER BY ay.start_date DESC
-")->fetchAll();
+");
+$years = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 $current_active = null;
 foreach ($years as $y) {
@@ -38,25 +46,39 @@ $selected_year_history = [];
 if (!empty($selected_year['id'])) {
     $selected_year_id = (int) $selected_year['id'];
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ?");
-    $stmt->execute([$selected_year_id]);
-    $selected_year_history['students'] = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ?");
+    $stmt->bind_param("i", $selected_year_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $selected_year_history['students'] = (int) ($row[0] ?? 0);
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ?");
-    $stmt->execute([$selected_year_id]);
-    $selected_year_history['supervisors'] = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ?");
+    $stmt->bind_param("i", $selected_year_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $selected_year_history['supervisors'] = (int) ($row[0] ?? 0);
 
-    $stmt = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''");
-    $stmt->execute([$selected_year_id]);
-    $selected_year_history['companies'] = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''");
+    $stmt->bind_param("i", $selected_year_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $selected_year_history['companies'] = (int) ($row[0] ?? 0);
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM daily_logs dl JOIN student_profiles sp ON sp.id = dl.internship_id JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ?");
-    $stmt->execute([$selected_year_id]);
-    $selected_year_history['logs'] = (int) $stmt->fetchColumn();
+    $stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs dl JOIN student_profiles sp ON sp.id = dl.internship_id JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ?");
+    $stmt->bind_param("i", $selected_year_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $selected_year_history['logs'] = (int) ($row[0] ?? 0);
 
-    $stmt = $pdo->prepare("SELECT u.id, u.username, sp.full_name, sp.student_roll, sp.company_name FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.academic_year_id = ? ORDER BY sp.full_name ASC LIMIT 8");
-    $stmt->execute([$selected_year_id]);
-    $selected_year_history['students_list'] = $stmt->fetchAll();
+    $stmt = $db->prepare("SELECT u.id, u.username, sp.full_name, sp.student_roll, sp.company_name FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.academic_year_id = ? ORDER BY sp.full_name ASC LIMIT 8");
+    $stmt->bind_param("i", $selected_year_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $selected_year_history['students_list'] = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 }
 ?>
 <!DOCTYPE html>

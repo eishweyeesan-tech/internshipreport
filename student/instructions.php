@@ -1,6 +1,8 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $user_id  = $_SESSION['user_id'];
 $username = $_SESSION['username'];
@@ -12,17 +14,20 @@ if ($role !== 'student') {
 }
 
 $internship_id = $user_id;
-$esc_uid = $conn->real_escape_string($user_id);
-$esc_iid = $conn->real_escape_string($internship_id);
 
-$profile_r = $conn->query("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date,
+$db = $mysqli ?? $conn;
+
+$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date,
     sp.company_name, sp.job_role, sp.supervisor_id, sp.instructor_name,
     u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
-    WHERE sp.user_id = {$esc_uid}");
-$profile_row = $profile_r ? $profile_r->fetch_assoc() : null;
-$student_name = $profile_row['full_name'] ?? $username;
+    WHERE sp.user_id = ?");
+$profile_stmt->bind_param("i", $user_id);
+$profile_stmt->execute();
+$res = $profile_stmt->get_result();
+$profile_row = $res ? $res->fetch_assoc() : null;
+$student_name = (($profile_row['full_name'] ?? '') ?: $username);
 $profile_pic  = $profile_row['profile_pic'] ?? null;
 $intern_start = $profile_row['internship_start_date'] ?? null;
 $intern_end   = $profile_row['internship_end_date'] ?? null;
@@ -42,11 +47,13 @@ if ($intern_start) {
 $progress_weeks_completed = 0;
 $progress_total_weeks = count($weeks);
 if (!empty($weeks)) {
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
-        $esc_wk_s = $conn->real_escape_string($wr['start']);
-        $esc_wk_e = $conn->real_escape_string($wr['end']);
-        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
-        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+        $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
+        $wc_stmt->execute();
+        $res = $wc_stmt->get_result();
+        $wc_row = $res ? $res->fetch_row() : null;
+        if ((int) ($wc_row[0] ?? 0) > 0) {
             $progress_weeks_completed++;
         }
     }
@@ -75,6 +82,7 @@ if (!empty($weeks)) {
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
+        html { scrollbar-gutter: stable; overflow-y: scroll; }
         body { font-family: 'Inter', sans-serif; }
         .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
         .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
@@ -91,9 +99,9 @@ if (!empty($weeks)) {
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 glass-sidebar flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">InternReport</span>
+    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
+        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+            <span class="font-black text-white tracking-tight text-lg">InternReport</span>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
@@ -103,7 +111,7 @@ if (!empty($weeks)) {
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> Notifications
             </a>
             <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 01-2 2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
             </a>
             <a href="instructions.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="instructions">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253z"/></svg> Instructions
@@ -126,13 +134,13 @@ if (!empty($weeks)) {
         <?php $pageTitle = 'သင်ကြားရေး'; $show_back_link = true; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6 no-print">
-            <div class="max-w-4xl mx-auto">
+        <main class="flex-1 overflow-y-auto p-6 md:p-8 no-print">
+            <div class="max-w-7xl mx-auto w-full">
 
                 <!-- Header -->
-                <div class="mb-8">
-                    <h1 class="text-2xl font-black text-slate-800 mb-1">သင်ကြားရေး</h1>
-                    <p class="text-sm text-slate-500">သင့်internship report ကို တိကျစွာပြီးမြောက်အောင် အောက်ပါ လမ်းညွှန်ချက်များကို လိုက်နာပါ။</p>
+                <div class="mb-6">
+                    <h1 class="text-xl font-bold text-slate-800 mb-1">သင်ကြားရေး</h1>
+                    <p class="text-xs text-gray-400">သင့်internship report ကို တိကျစွာပြီးမြောက်အောင် အောက်ပါ လမ်းညွှန်ချက်များကို လိုက်နာပါ။</p>
                 </div>
 
                 <!-- Instructions Cards -->
@@ -203,14 +211,13 @@ if (!empty($weeks)) {
                         </div>
                     </div>
 
-                    <!-- 5. Analytics -->
+                    <!-- 5. Report Export -->
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition">
                         <div class="flex items-start gap-4">
                             <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-lg font-black shrink-0">5</div>
                             <div>
-                                <h3 class="text-sm font-bold text-slate-800 mb-1">Analytics နှင့် Report များ</h3>
+                                <h3 class="text-sm font-bold text-slate-800 mb-1">Report အစီရင်ခံစာများ</h3>
                                 <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                    <li>• <strong>Analytics</strong> tab တွင် သင့်အပတ်စဉ် နာရီများ၊ တက်ရောက်မှုနှင့် စွမ်းဆောင်ရည်ကို ကြည့်ပါ။</li>
                                     <li>• Dashboard မှ သင့် report ကို <strong>HTML</strong> သို့မဟုတ် <strong>CSV</strong> အဖြစ် export လုပ်ပါ။</li>
                                     <li>• သင့်report၏ hard copy အတွက် Print option ကို အသုံးပြုပါ။</li>
                                     <li>• Sidebar progress bar မှ သင့်internship တိုးတက်မှုကို ခြေရာခံပါ။</li>

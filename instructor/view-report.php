@@ -1,9 +1,10 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $logged_in_instructor = isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'instructor';
+$db = $mysqli ?? $conn;
 
 // ── Token Validation ─────────────────────────────────────────────
 $token = trim($_GET['token'] ?? '');
@@ -14,9 +15,11 @@ if (!$token || !preg_match('/^[a-f0-9]{32,64}$/i', $token)) {
 }
 
 // Temporarily disabled expiry check for testing: removed "AND (expires_at IS NULL OR expires_at > NOW())"
-$stmt = $pdo->prepare("SELECT internship_id AS student_id, week_number, expires_at FROM magic_links WHERE token = ? LIMIT 1");
-$stmt->execute([$token]);
-$link = $stmt->fetch();
+$stmt = $db->prepare("SELECT internship_id AS student_id, week_number, expires_at FROM magic_links WHERE token = ? LIMIT 1");
+$stmt->bind_param("s", $token);
+$stmt->execute();
+$res = $stmt->get_result();
+$link = $res ? $res->fetch_assoc() : null;
 
 if (!$link) {
     http_response_code(404);
@@ -27,11 +30,13 @@ $student_id  = (int) $link['student_id'];
 $week_number = (int) $link['week_number'];
 
 // ── Fetch Student Profile ────────────────────────────────────────
-$profile_stmt = $pdo->prepare("SELECT sp.*, u.username, u.email, sup.id AS supervisor_user_id, sup.username AS supervisor_name, sup.email AS supervisor_email FROM student_profiles sp JOIN users u ON u.id = sp.user_id LEFT JOIN users sup ON sup.id = sp.supervisor_id WHERE sp.user_id = ?");
-$profile_stmt->execute([$student_id]);
-$profile = $profile_stmt->fetch();
+$profile_stmt = $db->prepare("SELECT sp.*, u.username, u.email, sup.id AS supervisor_user_id, sup.username AS supervisor_name, sup.email AS supervisor_email FROM student_profiles sp JOIN users u ON u.id = sp.user_id LEFT JOIN users sup ON sup.id = sp.supervisor_id WHERE sp.user_id = ?");
+$profile_stmt->bind_param("i", $student_id);
+$profile_stmt->execute();
+$res = $profile_stmt->get_result();
+$profile = $res ? $res->fetch_assoc() : [];
 
-$student_name = $profile['full_name'] ?: ($profile['username'] ?? 'Student');
+$student_name = ($profile['full_name'] ?? '') ?: ($profile['username'] ?? 'Student');
 $student_roll = $profile['student_roll'] ?? '';
 $company_name = $profile['company_name'] ?? '';
 $intern_start = $profile['internship_start_date'] ?? null;
@@ -40,10 +45,6 @@ $intern_start = $profile['internship_start_date'] ?? null;
 $week_start = '';
 $week_end   = '';
 if ($intern_start) {
-    // Match the student dashboard's week ranges exactly. Week 1 runs from
-    // the internship start date through the following Saturday; later weeks
-    // run Sunday through Saturday. This prevents logs from another week from
-    // appearing in the instructor's weekly report.
     $start = new DateTime($intern_start);
     $day_of_week = (int) $start->format('N'); // Monday = 1, Saturday = 6
     $days_to_saturday = $day_of_week === 6 ? 0 : (6 - $day_of_week + 7) % 7;
@@ -61,9 +62,12 @@ if ($intern_start) {
         $week_end = (clone $week_start_date)->modify('+6 days')->format('Y-m-d');
     }
 } else {
-    $first_log = $pdo->prepare("SELECT MIN(log_date) FROM daily_logs WHERE internship_id = ?");
-    $first_log->execute([$student_id]);
-    $first_date_str = $first_log->fetchColumn();
+    $first_log = $db->prepare("SELECT MIN(log_date) FROM daily_logs WHERE internship_id = ?");
+    $first_log->bind_param("i", $student_id);
+    $first_log->execute();
+    $res = $first_log->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $first_date_str = $row[0] ?? null;
     if ($first_date_str) {
         $base = new DateTime($first_date_str);
         $base->modify('+' . (($week_number - 1) * 7) . ' days');
@@ -73,19 +77,25 @@ if ($intern_start) {
 }
 
 // ── Fetch Daily Logs for This Week ───────────────────────────────
-$daily_stmt = $pdo->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date ASC");
-$daily_stmt->execute([$student_id, $week_start, $week_end]);
-$daily_logs = $daily_stmt->fetchAll();
+$daily_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date ASC");
+$daily_stmt->bind_param("iss", $student_id, $week_start, $week_end);
+$daily_stmt->execute();
+$res = $daily_stmt->get_result();
+$daily_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Fetch Weekly Reflection ──────────────────────────────────────
-$ref_stmt = $pdo->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-$ref_stmt->execute([$student_id, $week_number]);
-$reflection = $ref_stmt->fetch();
+$ref_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
+$ref_stmt->bind_param("ii", $student_id, $week_number);
+$ref_stmt->execute();
+$res = $ref_stmt->get_result();
+$reflection = $res ? $res->fetch_assoc() : null;
 
 // ── Fetch Existing Evaluation ────────────────────────────────────
-$eval_stmt = $pdo->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$eval_stmt->execute([$student_id, $week_number]);
-$evaluation = $eval_stmt->fetch();
+$eval_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+$eval_stmt->bind_param("ii", $student_id, $week_number);
+$eval_stmt->execute();
+$res = $eval_stmt->get_result();
+$evaluation = $res ? $res->fetch_assoc() : null;
 
 // ── Handle Rejection ─────────────────────────────────────────────
 $eval_msg = '';
@@ -95,27 +105,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_report'])) {
     if (empty($reject_reason)) {
         $eval_msg = 'reject_empty';
     } else {
-        $rej = $pdo->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, instructor_comments, report_status)
+        $rej = $db->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, instructor_comments, report_status)
             VALUES (?, ?, 'needs_improvement', '', ?, 'rejected')
             ON DUPLICATE KEY UPDATE
             instructor_comments = VALUES(instructor_comments),
             report_status = 'rejected',
             signature_type = NULL, signature_value = NULL,
             evaluated_at = NOW()");
-        $rej->execute([$student_id, $week_number, $reject_reason]);
+        $rej->bind_param("iis", $student_id, $week_number, $reject_reason);
+        $rej->execute();
 
         // Insert notification for the student
-        $instructor_label = $profile['instructor_name'] ?: 'Your instructor';
-        $notif_stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_rejected', ?)");
-        $notif_stmt->execute([
-            $student_id,
-            'Report Rejected by Instructor',
-            $instructor_label . ' has rejected your Week ' . $week_number . ' report. Reason: ' . $reject_reason,
-            $week_number
-        ]);
+        $instructor_label = ($profile['instructor_name'] ?? '') ?: 'Your instructor';
+        $notif_stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_rejected', ?)");
+        $notif_title = 'Report Rejected by Instructor';
+        $notif_msg = $instructor_label . ' has rejected your Week ' . $week_number . ' report. Reason: ' . $reject_reason;
+        $notif_stmt->bind_param("issi", $student_id, $notif_title, $notif_msg, $week_number);
+        $notif_stmt->execute();
 
-        $eval_stmt->execute([$student_id, $week_number]);
-        $evaluation = $eval_stmt->fetch();
+        $eval_stmt->bind_param("ii", $student_id, $week_number);
+        $eval_stmt->execute();
+        $res = $eval_stmt->get_result();
+        $evaluation = $res ? $res->fetch_assoc() : null;
         $eval_msg = 'rejected';
     }
 }
@@ -159,29 +170,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     if (!empty($missing_fields)) {
         $eval_msg = 'error_missing:' . implode(', ', $missing_fields);
     } else {
-        $upsert = $pdo->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, signature_type, signature_value, report_status)
+        $upsert = $db->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, signature_type, signature_value, report_status)
             VALUES (?, ?, ?, ?, ?, ?, 'approved_by_instructor')
             ON DUPLICATE KEY UPDATE
             grade = VALUES(grade), comment = VALUES(comment),
             signature_type = VALUES(signature_type), signature_value = VALUES(signature_value),
             report_status = 'approved_by_instructor', evaluated_at = NOW()");
-        $upsert->execute([$student_id, $week_number, $grade, $comment, $signature_type, $sig_val]);
+        $upsert->bind_param("iissss", $student_id, $week_number, $grade, $comment, $signature_type, $sig_val);
+        $upsert->execute();
 
         // Insert notification for the student
-        $instructor_label = $profile['instructor_name'] ?: 'Your instructor';
-        $notif_stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_approved', ?)");
-        $notif_stmt->execute([
-            $student_id,
-            'Report Approved by Instructor',
-            $instructor_label . ' has signed and approved your Week ' . $week_number . ' report with grade "' . ucfirst(str_replace('_', ' ', $grade)) . '".',
-            $week_number
-        ]);
+        $instructor_label = ($profile['instructor_name'] ?? '') ?: 'Your instructor';
+        $notif_stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_approved', ?)");
+        $notif_title = 'Report Approved by Instructor';
+        $notif_msg = $instructor_label . ' has signed and approved your Week ' . $week_number . ' report with grade "' . ucfirst(str_replace('_', ' ', $grade)) . '".';
+        $notif_stmt->bind_param("issi", $student_id, $notif_title, $notif_msg, $week_number);
+        $notif_stmt->execute();
 
         // Notify assigned supervisor
         if (!empty($profile['supervisor_user_id'])) {
             require_once __DIR__ . '/../config/notify.php';
             notify_user_once(
-                $pdo,
+                $db,
                 (int) $profile['supervisor_user_id'],
                 'Report Needs Review',
                 $student_name . "'s Week " . $week_number . ' report was approved by the instructor and now needs your review.',
@@ -193,7 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
             if (!empty($profile['supervisor_email'])) {
                 require_once __DIR__ . '/../config/mail.php';
                 $subject = 'Student Report Approved by Instructor';
-                $htmlBody = '<p>Dear ' . htmlspecialchars($profile['supervisor_name'] ?: 'Supervisor') . ',</p>' .
+                $htmlBody = '<p>Dear ' . htmlspecialchars(($profile['supervisor_name'] ?? '') ?: 'Supervisor') . ',</p>' .
                     '<p>The report for <strong>' . htmlspecialchars($student_name) . '</strong> (Week ' . $week_number . ') has been approved by the instructor and is now ready for your review.</p>' .
                     '<p>Please log in to your supervisor dashboard to provide the final review.</p>' .
                     '<p>Thank you.</p>';
@@ -201,8 +211,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
             }
         }
 
-        $eval_stmt->execute([$student_id, $week_number]);
-        $evaluation = $eval_stmt->fetch();
+        $eval_stmt->bind_param("ii", $student_id, $week_number);
+        $eval_stmt->execute();
+        $res = $eval_stmt->get_result();
+        $evaluation = $res ? $res->fetch_assoc() : null;
         $eval_msg = 'saved';
     }
 }

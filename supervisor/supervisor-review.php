@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
@@ -11,9 +11,10 @@ if ($_SESSION['role'] !== 'supervisor') {
     exit;
 }
 
-$sup_id = $_SESSION['user_id'];
+$sup_id = (int) $_SESSION['user_id'];
 $student_id = (int) ($_GET['student_id'] ?? 0);
 $week_num = (int) ($_GET['week'] ?? 0);
+$db = $mysqli ?? $conn;
 
 if ($student_id <= 0) {
     header('Location: supervisor-dashboard.php');
@@ -21,7 +22,7 @@ if ($student_id <= 0) {
 }
 
 // ── Verify this student belongs to this supervisor ─────────────────
-$stu = $pdo->prepare("
+$stu = $db->prepare("
     SELECT u.id, u.username, u.email, u.academic_year, u.created_at,
            sp.full_name, sp.student_roll, sp.major, sp.company_name,
            sp.job_role, sp.phone, sp.instructor_name, sp.instructor_email,
@@ -30,8 +31,10 @@ $stu = $pdo->prepare("
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.id = ? AND u.role = 'student' AND sp.supervisor_id = ?
 ");
-$stu->execute([$student_id, $sup_id]);
-$student = $stu->fetch();
+$stu->bind_param("ii", $student_id, $sup_id);
+$stu->execute();
+$res = $stu->get_result();
+$student = $res ? $res->fetch_assoc() : null;
 
 if (!$student) {
     header('Location: supervisor-dashboard.php');
@@ -41,10 +44,14 @@ if (!$student) {
 $student_name = $student['full_name'] ?: $student['username'];
 
 // ── Active Year Badge Data ─────────────────────────────────────────
-$ay_filter = get_ay_filter($pdo, 'u');
-$total_assigned_q = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
-$total_assigned_q->execute(array_merge([$sup_id], $ay_filter['params']));
-$total_assigned = (int) $total_assigned_q->fetchColumn();
+$ay_filter = get_ay_filter($db, 'u');
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
+$p_types = "i" . str_repeat("i", count($ay_filter['params']));
+$total_assigned_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$total_assigned_q->execute();
+$res = $total_assigned_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_assigned = (int) ($row[0] ?? 0);
 $selected_year_label = $_SESSION['selected_academic_year_label'] ?? '';
 
 // ── Determine Week Ranges from internship start date ───────────────
@@ -61,9 +68,16 @@ if ($student['internship_start_date']) {
     }
 } else {
     // Fallback: build from log dates
-    $all_dates = $pdo->prepare("SELECT DISTINCT log_date FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
-    $all_dates->execute([$student_id]);
-    $log_dates = $all_dates->fetchAll(PDO::FETCH_COLUMN);
+    $all_dates = $db->prepare("SELECT DISTINCT log_date FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+    $all_dates->bind_param("i", $student_id);
+    $all_dates->execute();
+    $res = $all_dates->get_result();
+    $log_dates = [];
+    if ($res) {
+        while ($row = $res->fetch_row()) {
+            $log_dates[] = $row[0];
+        }
+    }
     if (!empty($log_dates)) {
         $first = new DateTime($log_dates[0]);
         $last  = new DateTime(end($log_dates));
@@ -117,33 +131,50 @@ if ($week_start) {
 }
 
 // ── Lifetime Attendance ────────────────────────────────────────────
-$present_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
-$present_q->execute([$student_id]);
-$total_present = (int) $present_q->fetchColumn();
+$present_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
+$present_q->bind_param("i", $student_id);
+$present_q->execute();
+$res = $present_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_present = (int) ($row[0] ?? 0);
 
-$absent_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
-$absent_q->execute([$student_id]);
-$total_absent = (int) $absent_q->fetchColumn();
+$absent_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
+$absent_q->bind_param("i", $student_id);
+$absent_q->execute();
+$res = $absent_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_absent = (int) ($row[0] ?? 0);
 
 $total_logs = $total_present + $total_absent;
 
 // ── Attendance Details for Tooltips ────────────────────────────────
-$pd_stmt = $pdo->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
-$pd_stmt->execute([$student_id]);
-$present_dates = $pd_stmt->fetchAll(PDO::FETCH_COLUMN);
+$pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
+$pd_stmt->bind_param("i", $student_id);
+$pd_stmt->execute();
+$res = $pd_stmt->get_result();
+$present_dates = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $present_dates[] = $row[0];
+    }
+}
 
-$ad_stmt = $pdo->prepare("SELECT log_date, reason_for_absence FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
-$ad_stmt->execute([$student_id]);
-$absent_logs = $ad_stmt->fetchAll();
+$ad_stmt = $db->prepare("SELECT log_date, reason_for_absence FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
+$ad_stmt->bind_param("i", $student_id);
+$ad_stmt->execute();
+$res = $ad_stmt->get_result();
+$absent_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ══════════════════════════════════════════════════════════════════════
 // WEEKLY GRADING HISTORY (used for current-week grade prefill + GPA card)
 // ══════════════════════════════════════════════════════════════════════
 $all_weeks_grades = [];
+$gq = $db->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
 for ($i = 1; $i <= $total_weeks; $i++) {
-    $gq = $pdo->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
-    $gq->execute([$student_id, $i]);
-    $all_weeks_grades[$i] = $gq->fetch();
+    $gq->bind_param("ii", $student_id, $i);
+    $gq->execute();
+    $res = $gq->get_result();
+    $all_weeks_grades[$i] = $res ? $res->fetch_assoc() : null;
 }
 
 // ── Fetch Data for Active Week ─────────────────────────────────────
@@ -153,23 +184,29 @@ $instructor_eval = null;
 $supervisor_eval = $all_weeks_grades[$week_num] ?? null;
 
 if ($week_start && $week_end) {
-    $dl = $pdo->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date ASC");
-    $dl->execute([$student_id, $week_start, $week_end]);
-    $daily_logs = $dl->fetchAll();
+    $dl = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date ASC");
+    $dl->bind_param("iss", $student_id, $week_start, $week_end);
+    $dl->execute();
+    $res = $dl->get_result();
+    $daily_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-    $rf = $pdo->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-    $rf->execute([$student_id, $week_num]);
-    $reflection = $rf->fetch();
+    $rf = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
+    $rf->bind_param("ii", $student_id, $week_num);
+    $rf->execute();
+    $res = $rf->get_result();
+    $reflection = $res ? $res->fetch_assoc() : null;
 
-    $ie = $pdo->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-    $ie->execute([$student_id, $week_num]);
-    $instructor_eval = $ie->fetch();
+    $ie = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+    $ie->bind_param("ii", $student_id, $week_num);
+    $ie->execute();
+    $res = $ie->get_result();
+    $instructor_eval = $res ? $res->fetch_assoc() : null;
 }
 
 // ── Week Attendance & Logs (summary cards) ─────────────────────────
 // Shared with view-student-dashboard.php via config/internship_progress.php
 $week_att = ($week_start && $week_end)
-    ? internship_attendance($pdo, $student_id, $week_start, $week_end)
+    ? internship_attendance($db, $student_id, $week_start, $week_end)
     : ['present' => 0, 'absent' => 0, 'expected' => 0, 'rate' => 0];
 $week_present         = $week_att['present'];
 $week_expected        = $week_att['expected'];
@@ -186,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_sup_eval'])) {
     if (!in_array($grade, $allowed, true)) {
         $msg = 'invalid_grade';
     } else {
-        $upsert = $pdo->prepare("
+        $upsert = $db->prepare("
             INSERT INTO supervisor_weekly_evaluations (student_id, week_number, supervisor_id, weekly_grade, supervisor_comments)
             VALUES (?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
@@ -194,19 +231,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_sup_eval'])) {
             supervisor_comments = VALUES(supervisor_comments),
             evaluated_at = NOW()
         ");
-        $upsert->execute([$student_id, $week_num, $sup_id, $grade, $comments]);
+        $upsert->bind_param("iiiss", $student_id, $week_num, $sup_id, $grade, $comments);
+        $upsert->execute();
 
         // Update the main report status to approved_by_supervisor
-        $update_status = $pdo->prepare("
+        $update_status = $db->prepare("
             UPDATE report_evaluations SET report_status = 'approved_by_supervisor'
             WHERE student_id = ? AND week_number = ?
         ");
-        $update_status->execute([$student_id, $week_num]);
+        $update_status->bind_param("ii", $student_id, $week_num);
+        $update_status->execute();
 
         // Re-fetch current week evaluation
-        $gq = $pdo->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
-        $gq->execute([$student_id, $week_num]);
-        $supervisor_eval = $gq->fetch();
+        $gq = $db->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
+        $gq->bind_param("ii", $student_id, $week_num);
+        $gq->execute();
+        $res = $gq->get_result();
+        $supervisor_eval = $res ? $res->fetch_assoc() : null;
         
         // Update history cache
         $all_weeks_grades[$week_num] = $supervisor_eval;

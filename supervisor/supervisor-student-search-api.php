@@ -28,18 +28,20 @@ if (($_SESSION['role'] ?? '') !== 'supervisor') {
     exit;
 }
 
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 
 $sup_id = (int) $_SESSION['user_id'];
 $q      = trim((string) ($_GET['q'] ?? ''));
+$db     = $mysqli ?? $conn;
 
 if ($q === '') {
     echo json_encode(['results' => [], 'has_more' => false, 'total' => 0]);
     exit;
 }
 
-$limit    = 5;
-$like     = '%' . $q . '%';
+$limit       = 5;
+$fetch_limit = $limit + 1;
+$like        = '%' . $q . '%';
 
 $sql = "
     SELECT u.id AS uid, u.username, u.email,
@@ -58,12 +60,14 @@ $sql = "
           OR u.email LIKE ?
       )
     ORDER BY sp.full_name ASC
-    LIMIT " . ($limit + 1) . "
+    LIMIT ?
 ";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute([$sup_id, $like, $like, $like, $like, $like, $like]);
-$rows = $stmt->fetchAll();
+$stmt = $db->prepare($sql);
+$stmt->bind_param("issssssi", $sup_id, $like, $like, $like, $like, $like, $like, $fetch_limit);
+$stmt->execute();
+$res = $stmt->get_result();
+$rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 $has_more = count($rows) > $limit;
 $rows     = array_slice($rows, 0, $limit);

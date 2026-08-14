@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/notify.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
@@ -14,18 +14,24 @@ if ($_SESSION['role'] !== 'supervisor') {
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
+$db       = $mysqli ?? $conn;
 
 // ── Centralized Notification Action Handler ────────────────────
-handle_notification_ajax_actions($pdo, $sup_id);
+handle_notification_ajax_actions($db, $sup_id);
 
 // ── Fetch unread count (bell badge) ────────────────────────────
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$sup_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $sup_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$sup_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $sup_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Type filter (supervisor-scoped) ────────────────────────────
 $type_labels = [
@@ -45,15 +51,20 @@ $per_page = 15;
 $offset   = ($page - 1) * $per_page;
 
 $base_where  = "n.user_id = ?";
+$types       = "i";
 $base_params = [$sup_id];
 if ($type_filter !== '') {
     $base_where  .= " AND n.type = ?";
+    $types       .= "s";
     $base_params[] = $type_filter;
 }
 
-$count_stmt = $pdo->prepare("SELECT COUNT(*) FROM notifications n WHERE {$base_where}");
-$count_stmt->execute($base_params);
-$total_notifs = (int) $count_stmt->fetchColumn();
+$count_stmt = $db->prepare("SELECT COUNT(*) FROM notifications n WHERE {$base_where}");
+$count_stmt->bind_param($types, ...$base_params);
+$count_stmt->execute();
+$res = $count_stmt->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_notifs = (int) ($row[0] ?? 0);
 $total_pages  = max(1, (int) ceil($total_notifs / $per_page));
 if ($page > $total_pages) { $page = $total_pages; $offset = ($page - 1) * $per_page; }
 
@@ -67,11 +78,16 @@ $list_sql = "
     LEFT JOIN student_profiles sp ON sp.user_id = n.student_id
     WHERE {$base_where}
     ORDER BY n.created_at DESC
-    LIMIT {$per_page} OFFSET {$offset}
+    LIMIT ? OFFSET ?
 ";
-$list_stmt = $pdo->prepare($list_sql);
-$list_stmt->execute($base_params);
-$notifications = $list_stmt->fetchAll();
+$fetch_types = $types . "ii";
+$fetch_params = array_merge($base_params, [$per_page, $offset]);
+
+$list_stmt = $db->prepare($list_sql);
+$list_stmt->bind_param($fetch_types, ...$fetch_params);
+$list_stmt->execute();
+$res = $list_stmt->get_result();
+$notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 function build_query_url($overrides = []) {
     $q = array_merge($_GET, $overrides);

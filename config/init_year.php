@@ -2,7 +2,7 @@
 /**
  * init_year.php – Session-based academic year tracker.
  *
- * Include this AFTER database.php on every page that needs year context.
+ * Include this AFTER db.php on every page that needs year context.
  *
  * Handles:
  *   1. POST year switching (admin form submission)
@@ -22,15 +22,16 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-global $pdo;
+global $mysqli, $conn;
+$db = $mysqli ?? $conn;
 
 // ── Fetch all academic years (cached per request) ────────────────
-$stmt = $pdo->query("
+$res = $db->query("
     SELECT id, year_label, start_date, end_date, status, is_current, created_at
     FROM academic_years
     ORDER BY start_date DESC
 ");
-$all_academic_years = $stmt ? $stmt->fetchAll() : [];
+$all_academic_years = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Build a lookup map for O(1) validation ──────────────────────
 $ay_map = [];

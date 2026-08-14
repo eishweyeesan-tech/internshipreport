@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../includes/phone_validation.php';
 
@@ -9,7 +9,8 @@ if ($_SESSION['role'] !== 'admin') {
 }
 
 $admin_name = $_SESSION['username'];
-$admin_id   = $_SESSION['user_id'];
+$admin_id   = (int) $_SESSION['user_id'];
+$db         = $mysqli ?? $conn;
 $msg = '';
 $err = '';
 
@@ -28,13 +29,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_company'])) {
         $err = $phone_err;
     } else {
         $contact_phone = normalize_phone($contact_phone);
-        $check = $pdo->prepare("SELECT id FROM companies WHERE company_name = ?");
-        $check->execute([$company_name]);
-        if ($check->fetch()) {
+        $check = $db->prepare("SELECT id FROM companies WHERE company_name = ?");
+        $check->bind_param("s", $company_name);
+        $check->execute();
+        $res = $check->get_result();
+        if ($res && $res->fetch_row()) {
             $err = 'This company already exists.';
         } else {
-            $stmt = $pdo->prepare("INSERT INTO companies (company_name, address, contact_person, contact_email, contact_phone, website) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$company_name, $address, $contact_person, $contact_email, $contact_phone, $website]);
+            $stmt = $db->prepare("INSERT INTO companies (company_name, address, contact_person, contact_email, contact_phone, website) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssss", $company_name, $address, $contact_person, $contact_email, $contact_phone, $website);
+            $stmt->execute();
             $msg = "Company \"{$company_name}\" added successfully.";
         }
     }
@@ -58,13 +62,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_company'])) {
         $err = $phone_err;
     } else {
         $contact_phone = normalize_phone($contact_phone);
-        $check = $pdo->prepare("SELECT id FROM companies WHERE company_name = ? AND id != ?");
-        $check->execute([$company_name, $cid]);
-        if ($check->fetch()) {
+        $check = $db->prepare("SELECT id FROM companies WHERE company_name = ? AND id != ?");
+        $check->bind_param("si", $company_name, $cid);
+        $check->execute();
+        $res = $check->get_result();
+        if ($res && $res->fetch_row()) {
             $err = 'Another company with this name already exists.';
         } else {
-            $stmt = $pdo->prepare("UPDATE companies SET company_name=?, address=?, contact_person=?, contact_email=?, contact_phone=?, website=? WHERE id=?");
-            $stmt->execute([$company_name, $address, $contact_person, $contact_email, $contact_phone, $website, $cid]);
+            $stmt = $db->prepare("UPDATE companies SET company_name=?, address=?, contact_person=?, contact_email=?, contact_phone=?, website=? WHERE id=?");
+            $stmt->bind_param("ssssssi", $company_name, $address, $contact_person, $contact_email, $contact_phone, $website, $cid);
+            $stmt->execute();
             $msg = "Company updated successfully.";
         }
     }
@@ -74,13 +81,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_company'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_company'])) {
     $cid = (int) ($_POST['company_id'] ?? 0);
     if ($cid > 0) {
-        $pdo->prepare("DELETE FROM companies WHERE id = ?")->execute([$cid]);
+        $del = $db->prepare("DELETE FROM companies WHERE id = ?");
+        $del->bind_param("i", $cid);
+        $del->execute();
         $msg = 'Company deleted.';
     }
 }
 
 // ── Fetch companies ──────────────────────────────────────────────
-$companies = $pdo->query("SELECT * FROM companies ORDER BY company_name ASC")->fetchAll();
+$res = $db->query("SELECT * FROM companies ORDER BY company_name ASC");
+$companies = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Check if editing a specific company ──────────────────────────
 $edit_company = null;

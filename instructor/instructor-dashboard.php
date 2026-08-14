@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/internship_progress.php';
 
@@ -10,17 +10,21 @@ if ($_SESSION['role'] !== 'instructor') {
 
 $inst_id   = $_SESSION['user_id'];
 $inst_name = $_SESSION['username'];
+$db        = $mysqli ?? $conn;
 
 // Fetch instructor email
-$inst_email_q = $pdo->prepare("SELECT email FROM users WHERE id = ?");
-$inst_email_q->execute([$inst_id]);
-$inst_email = $inst_email_q->fetchColumn();
+$inst_email_q = $db->prepare("SELECT email FROM users WHERE id = ?");
+$inst_email_q->bind_param("i", $inst_id);
+$inst_email_q->execute();
+$res = $inst_email_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$inst_email = $row[0] ?? '';
 
 // ══════════════════════════════════════════════════════════════════════
 // FETCH ASSIGNED STUDENTS
 // Students where instructor_id matches OR instructor_email matches
 // ══════════════════════════════════════════════════════════════════════
-$stu_stmt = $pdo->prepare("
+$stu_stmt = $db->prepare("
     SELECT u.id AS uid, u.username, u.email, u.academic_year,
            sp.full_name, sp.student_roll, sp.major, sp.company_name,
            sp.job_role, sp.supervisor_id,
@@ -33,8 +37,10 @@ $stu_stmt = $pdo->prepare("
       AND (sp.instructor_id = ? OR (sp.instructor_email != '' AND sp.instructor_email = ?))
     ORDER BY sp.full_name ASC
 ");
-$stu_stmt->execute([$inst_id, $inst_email]);
-$all_students = $stu_stmt->fetchAll();
+$stu_stmt->bind_param("is", $inst_id, $inst_email);
+$stu_stmt->execute();
+$res = $stu_stmt->get_result();
+$all_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ══════════════════════════════════════════════════════════════════════
 // COMPUTE PER-STUDENT STATUS FOR CURRENT WEEK
@@ -73,37 +79,50 @@ foreach ($all_students as $stu) {
     }
 
     // Daily logs count for current week
-    $log_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
-    $log_q->execute([$uid, $sws, $swe]);
-    $log_count = (int) $log_q->fetchColumn();
+    $log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $log_q->bind_param("iss", $uid, $sws, $swe);
+    $log_q->execute();
+    $res = $log_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $log_count = (int) ($row[0] ?? 0);
 
     // Instructor evaluation status
-    $eval_q = $pdo->prepare("SELECT report_status, grade, evaluated_at FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-    $eval_q->execute([$uid, $dw]);
-    $eval = $eval_q->fetch();
+    $eval_q = $db->prepare("SELECT report_status, grade, evaluated_at FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+    $eval_q->bind_param("ii", $uid, $dw);
+    $eval_q->execute();
+    $res = $eval_q->get_result();
+    $eval = $res ? $res->fetch_assoc() : null;
     $eval_status = $eval ? $eval['report_status'] : 'pending';
 
     // Magic link available?
-    $link_q = $pdo->prepare("SELECT token, expires_at FROM magic_links WHERE internship_id = ? AND week_number = ? AND expires_at > NOW() LIMIT 1");
-    $link_q->execute([$uid, $dw]);
-    $magic_link = $link_q->fetch();
+    $link_q = $db->prepare("SELECT token, expires_at FROM magic_links WHERE internship_id = ? AND week_number = ? AND expires_at > NOW() LIMIT 1");
+    $link_q->bind_param("ii", $uid, $dw);
+    $link_q->execute();
+    $res = $link_q->get_result();
+    $magic_link = $res ? $res->fetch_assoc() : null;
 
     // Total logs count
-    $total_log_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ?");
-    $total_log_q->execute([$uid]);
-    $total_logs = (int) $total_log_q->fetchColumn();
+    $total_log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ?");
+    $total_log_q->bind_param("i", $uid);
+    $total_log_q->execute();
+    $res = $total_log_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $total_logs = (int) ($row[0] ?? 0);
 
     // Total graded weeks
-    $graded_q = $pdo->prepare("SELECT COUNT(*) FROM report_evaluations WHERE student_id = ? AND report_status IN ('approved_by_instructor', 'approved_by_supervisor')");
-    $graded_q->execute([$uid]);
-    $graded_weeks = (int) $graded_q->fetchColumn();
+    $graded_q = $db->prepare("SELECT COUNT(*) FROM report_evaluations WHERE student_id = ? AND report_status IN ('approved_by_instructor', 'approved_by_supervisor')");
+    $graded_q->bind_param("i", $uid);
+    $graded_q->execute();
+    $res = $graded_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $graded_weeks = (int) ($row[0] ?? 0);
 
     $student_status[$uid] = [
         'current_week'  => $dw,
         'not_started'   => $not_started,
         'log_count'     => $log_count,
         'eval_status'   => $eval_status,
-        'has_link'      => $magic_link !== false,
+        'has_link'      => $magic_link !== null,
         'magic_token'   => $magic_link ? $magic_link['token'] : null,
         'total_logs'    => $total_logs,
         'graded_weeks'  => $graded_weeks,
@@ -137,13 +156,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
         $token = bin2hex(random_bytes(16));
         $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
 
-        $esc_token = $pdo->quote($token);
-        $esc_exp   = $pdo->quote($expires_at);
-
-        $pdo->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
+        $ins_link = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
             VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)")
-            ->execute([$link_student_id, $link_week, $token, $expires_at]);
+            ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
+        $ins_link->bind_param("iiss", $link_student_id, $link_week, $token, $expires_at);
+        $ins_link->execute();
 
         $generated_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
             . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')

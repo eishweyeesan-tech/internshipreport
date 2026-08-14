@@ -1,6 +1,8 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $user_id  = $_SESSION['user_id'];
 $username = $_SESSION['username'];
@@ -11,38 +13,49 @@ if ($role !== 'student') {
     exit;
 }
 
-$esc_uid = $conn->real_escape_string($user_id);
+$db = $mysqli ?? $conn;
 
-// ── Fetch Student Profile (for the shared top bar) ───────────────
-$profile_r = $conn->query("SELECT sp.full_name, sp.student_roll, u.profile_pic
+// Fetch Student Profile (for top bar)
+$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
-    WHERE sp.user_id = {$esc_uid}");
-$profile_row = $profile_r ? $profile_r->fetch_assoc() : null;
+    WHERE sp.user_id = ?");
+$profile_stmt->bind_param("i", $user_id);
+$profile_stmt->execute();
+$res = $profile_stmt->get_result();
+$profile_row = $res ? $res->fetch_assoc() : null;
 
-$student_name = ($profile_row['full_name'] ?: $username);
+$student_name = (($profile_row['full_name'] ?? '') ?: $username);
 $student_roll = $profile_row['student_roll'] ?? '';
 $profile_pic  = $profile_row['profile_pic'] ?? '';
 
-// ── Mark a single notification as read (student-scoped) ──────────
+// Mark single notification read
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
     $notif_id = (int) ($_POST['notification_id'] ?? 0);
     if ($notif_id > 0) {
-        $conn->query("UPDATE notifications SET is_read = 1 WHERE id = {$notif_id} AND user_id = {$esc_uid}");
+        $upd_stmt = $db->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?");
+        $upd_stmt->bind_param("ii", $notif_id, $user_id);
+        $upd_stmt->execute();
     }
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
         header('Content-Type: application/json');
-        $count_r = $conn->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$esc_uid} AND is_read = 0");
-        echo json_encode(['unread_count' => ($count_r && $count_r->num_rows > 0) ? (int) $count_r->fetch_row()[0] : 0]);
+        $unr_stmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        $unr_stmt->bind_param("i", $user_id);
+        $unr_stmt->execute();
+        $res = $unr_stmt->get_result();
+        $row = $res ? $res->fetch_row() : null;
+        echo json_encode(['unread_count' => (int) ($row[0] ?? 0)]);
         exit;
     }
     header('Location: notifications.php');
     exit;
 }
 
-// ── Mark all notifications as read (student-scoped) ──────────────
+// Mark all notifications read
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notifications_read'])) {
-    $conn->query("UPDATE notifications SET is_read = 1 WHERE user_id = {$esc_uid} AND is_read = 0");
+    $upd_all = $db->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0");
+    $upd_all->bind_param("i", $user_id);
+    $upd_all->execute();
     if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
         header('Content-Type: application/json');
         echo json_encode(['unread_count' => 0]);
@@ -52,18 +65,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
     exit;
 }
 
-// ── Unread count + recent (for the shared top bar bell) ──────────
-$unread_count_r = $conn->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$esc_uid} AND is_read = 0");
-$unread_notif_count = ($unread_count_r && $unread_count_r->num_rows > 0) ? (int) $unread_count_r->fetch_row()[0] : 0;
+// Unread count + recent
+$unr_stmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unr_stmt->bind_param("i", $user_id);
+$unr_stmt->execute();
+$res = $unr_stmt->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_r = $conn->query("SELECT * FROM notifications WHERE user_id = {$esc_uid} ORDER BY created_at DESC LIMIT 15");
-$recent_notifications = [];
-if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent_notifications[] = $row; } }
+$rec_stmt = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 15");
+$rec_stmt->bind_param("i", $user_id);
+$rec_stmt->execute();
+$res = $rec_stmt->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-// ── All notifications for this student ───────────────────────────
-$all_notifs_r = $conn->query("SELECT * FROM notifications WHERE user_id = {$esc_uid} ORDER BY created_at DESC");
-$notifications = [];
-if ($all_notifs_r) { while ($row = $all_notifs_r->fetch_assoc()) { $notifications[] = $row; } }
+// All notifications for this student
+$all_stmt = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC");
+$all_stmt->bind_param("i", $user_id);
+$all_stmt->execute();
+$res = $all_stmt->get_result();
+$notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 if (!function_exists('student_notif_url')) {
     function student_notif_url($type, $related_week, $announcement_id = null) {
@@ -130,6 +151,7 @@ if (!function_exists('student_notif_meta')) {
         }
     </script>
     <style>
+        html { scrollbar-gutter: stable; overflow-y: scroll; }
         .glass-sidebar {
             background: #0f172a;
             border-right: 1px solid rgba(255, 255, 255, 0.08);
@@ -147,9 +169,9 @@ if (!function_exists('student_notif_meta')) {
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 glass-sidebar flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">InternReport</span>
+    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
+        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+            <span class="font-black text-white tracking-tight text-lg">InternReport</span>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
@@ -182,21 +204,22 @@ if (!function_exists('student_notif_meta')) {
         <?php $pageTitle = 'Notifications'; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-6 md:p-8">
+            <div class="max-w-7xl mx-auto w-full">
 
             <!-- ════ PAGE HEADER ════ -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div>
-                    <h1 class="text-xl font-extrabold text-slate-800 tracking-tight">Notifications</h1>
-                    <p class="text-xs text-slate-500 mt-1">Updates about your weekly reports and internship progress.</p>
+                    <h1 class="text-xl font-bold text-slate-800">Notifications</h1>
+                    <p class="text-xs text-gray-400 mt-1">Updates about your weekly reports and internship progress.</p>
                 </div>
                 <div class="flex items-center gap-3">
                     <span class="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-full shadow-sm">
                         <span class="w-2 h-2 rounded-full <?= $unread_notif_count > 0 ? 'bg-blue-500 animate-pulse' : 'bg-slate-300' ?>"></span>
-                        <span class="text-xs font-bold text-slate-600"><span id="page-unread-count"><?= $unread_notif_count ?></span> unread</span>
+                        <span class="text-xs font-medium text-slate-600"><span id="page-unread-count"><?= $unread_notif_count ?></span> unread</span>
                     </span>
                     <?php if ($unread_notif_count > 0): ?>
-                    <button id="mark-all-btn" onclick="markAllNotificationsRead()" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-500/20 transition-all duration-200 cursor-pointer">
+                    <button id="mark-all-btn" onclick="markAllNotificationsRead()" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl shadow-md shadow-indigo-500/20 transition-all duration-200 cursor-pointer">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                         Mark all as read
                     </button>
@@ -206,7 +229,7 @@ if (!function_exists('student_notif_meta')) {
 
             <?php if (!empty($notifications)): ?>
 
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200/60 overflow-hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <?php foreach ($notifications as $notif): ?>
                 <?php
                     $meta      = student_notif_meta($notif['type']);
@@ -214,20 +237,20 @@ if (!function_exists('student_notif_meta')) {
                 ?>
                 <div onclick="onNotificationItemClick(event, this)" data-notif-id="<?= (int)$notif['id'] ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>"
                      class="flex items-start gap-4 px-5 py-4 cursor-pointer transition-all duration-150 border-b border-slate-100 last:border-0 <?= !$notif['is_read'] ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-slate-50' ?>">
-                    <div class="w-10 h-10 rounded-xl <?= $meta['classes'] ?> flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?= $meta['icon'] ?>"/></svg>
+                    <div class="w-9 h-9 rounded-xl <?= $meta['classes'] ?> flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?= $meta['icon'] ?>"/></svg>
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <p class="text-sm <?= !$notif['is_read'] ? 'font-bold text-slate-800' : 'font-semibold text-slate-600' ?> leading-snug"><?= htmlspecialchars($notif['title']) ?></p>
+                            <p class="text-sm <?= !$notif['is_read'] ? 'font-semibold text-slate-800' : 'font-medium text-slate-700' ?> leading-normal"><?= htmlspecialchars($notif['title']) ?></p>
                             <?php if (!empty($notif['related_week'])): ?>
-                            <span class="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">Week <?= (int)$notif['related_week'] ?></span>
+                            <span class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">Week <?= (int)$notif['related_week'] ?></span>
                             <?php endif; ?>
                         </div>
-                        <p class="text-xs text-slate-500 mt-0.5 leading-relaxed line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
-                        <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-2">
+                        <p class="text-sm text-gray-700 mt-0.5 leading-normal line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
+                        <p class="text-xs text-gray-400 mt-1.5 flex items-center gap-2">
                             <span data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></span>
-                            <span class="font-bold <?= !$notif['is_read'] ? 'text-blue-500' : 'text-blue-600' ?>">Open →</span>
+                            <span class="font-medium <?= !$notif['is_read'] ? 'text-blue-500' : 'text-blue-600' ?>">Open →</span>
                         </p>
                     </div>
                     <?php if (!$notif['is_read']): ?>
@@ -249,6 +272,7 @@ if (!function_exists('student_notif_meta')) {
 
             <?php endif; ?>
 
+        </div>
         </main>
     </div>
 </div>

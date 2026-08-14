@@ -14,16 +14,28 @@
  *   $recent_notifications (array)    – Notification rows (auto-fetched if not set)
  */
 
+require_once __DIR__ . '/../config/db.php';
+
+$student_user_id = (int)($_SESSION['user_id'] ?? 0);
+
+$db = $mysqli ?? $conn ?? null;
+
 if (!isset($unread_notif_count) || !isset($recent_notifications)) {
-    if (isset($conn) && $conn instanceof mysqli && isset($esc_uid)) {
+    if ($student_user_id > 0 && $db) {
         if (!isset($unread_notif_count)) {
-            $_unr = $conn->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$esc_uid} AND is_read = 0");
-            $unread_notif_count = ($_unr && $_unr->num_rows > 0) ? (int)$_unr->fetch_row()[0] : 0;
+            $_unr = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+            $_unr->bind_param("i", $student_user_id);
+            $_unr->execute();
+            $_res = $_unr->get_result();
+            $_row = $_res ? $_res->fetch_row() : null;
+            $unread_notif_count = (int)($_row[0] ?? 0);
         }
         if (!isset($recent_notifications)) {
-            $_rnr = $conn->query("SELECT * FROM notifications WHERE user_id = {$esc_uid} ORDER BY created_at DESC LIMIT 15");
-            $recent_notifications = [];
-            if ($_rnr) { while ($_row = $_rnr->fetch_assoc()) { $recent_notifications[] = $_row; } }
+            $_rnr = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 15");
+            $_rnr->bind_param("i", $student_user_id);
+            $_rnr->execute();
+            $_res = $_rnr->get_result();
+            $recent_notifications = $_res ? $_res->fetch_all(MYSQLI_ASSOC) : [];
         }
     } else {
         if (!isset($unread_notif_count)) $unread_notif_count = 0;
@@ -32,21 +44,14 @@ if (!isset($unread_notif_count) || !isset($recent_notifications)) {
 }
 
 $student_academic_year = '';
-if (isset($conn) && $conn instanceof mysqli) {
-    $student_user_id = null;
-    if (isset($esc_uid) && is_scalar($esc_uid)) {
-        $student_user_id = (int) $esc_uid;
-    } elseif (!empty($_SESSION['user_id'])) {
-        $student_user_id = (int) $_SESSION['user_id'];
-    }
-
-    if ($student_user_id) {
-        $student_user_id_esc = $conn->real_escape_string($student_user_id);
-        $student_year_result = $conn->query("SELECT u.academic_year, ay.year_label FROM users u LEFT JOIN academic_years ay ON ay.id = u.academic_year_id WHERE u.id = {$student_user_id_esc} LIMIT 1");
-        if ($student_year_result && $student_year_result->num_rows > 0) {
-            $student_year_row = $student_year_result->fetch_assoc();
-            $student_academic_year = trim((string) ($student_year_row['year_label'] ?? $student_year_row['academic_year'] ?? ''));
-        }
+if ($student_user_id > 0 && $db) {
+    $student_year_stmt = $db->prepare("SELECT u.academic_year, ay.year_label FROM users u LEFT JOIN academic_years ay ON ay.id = u.academic_year_id WHERE u.id = ? LIMIT 1");
+    $student_year_stmt->bind_param("i", $student_user_id);
+    $student_year_stmt->execute();
+    $_res = $student_year_stmt->get_result();
+    $student_year_row = $_res ? $_res->fetch_assoc() : null;
+    if ($student_year_row) {
+        $student_academic_year = trim((string) ($student_year_row['year_label'] ?? $student_year_row['academic_year'] ?? ''));
     }
 }
 
@@ -67,7 +72,7 @@ if (!function_exists('student_notif_url')) {
     }
 }
 ?>
-<header class="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50">
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50">
     <div class="flex items-center gap-3">
         <span class="text-lg font-semibold text-slate-600"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></span>
         <?php if (!empty($student_academic_year)): ?>

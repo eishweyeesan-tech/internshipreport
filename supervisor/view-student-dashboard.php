@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
@@ -47,28 +47,34 @@ if ($_SESSION['role'] !== 'supervisor') {
     exit;
 }
 
-$sup_id   = $_SESSION['user_id'];
+$sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
+$db       = $mysqli ?? $conn;
 
 // ── Notification redirect URL helper ────────────────────────────
 require_once __DIR__ . '/../config/notify.php';
 
 // ── Centralized Notification Action Handler ────────────────────
-handle_notification_ajax_actions($pdo, $sup_id);
+handle_notification_ajax_actions($db, $sup_id);
 
 // ── Fetch notifications ─────────────────────────────────────────
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$sup_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $sup_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$sup_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $sup_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 $student_id = (int) ($_GET['id'] ?? 0);
 
 // ── Academic year filter ───────────────────────────────────────
-$ay_filter = get_ay_filter($pdo, 'u');
+$ay_filter = get_ay_filter($db, 'u');
 
 // ── No student selected: show student picker ──────────────────────
 if ($student_id <= 0) {
@@ -93,9 +99,13 @@ if ($student_id <= 0) {
         WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay_filter['sql'] . "
         ORDER BY sp.full_name ASC
     ";
-    $all_stu_q = $pdo->prepare($sql);
-    $all_stu_q->execute(array_merge([$sup_id], $ay_filter['params']));
-    $all_students = $all_stu_q->fetchAll();
+    $all_stu_q = $db->prepare($sql);
+    $types = "i" . str_repeat("i", count($ay_filter['params']));
+    $params = array_merge([$sup_id], $ay_filter['params']);
+    $all_stu_q->bind_param($types, ...$params);
+    $all_stu_q->execute();
+    $res = $all_stu_q->get_result();
+    $all_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
     $total_assigned = count($all_students);
     $selected_year_label = $_SESSION['selected_academic_year_label'] ?? '';
@@ -531,18 +541,20 @@ if ($student_id <= 0) {
 <?php exit; }
 // ── Student selected: continue with normal page ───────────────────
 
-$check = $pdo->prepare("
+$check = $db->prepare("
     SELECT 1 FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.id = ? AND sp.supervisor_id = ? AND u.role = 'student'
 ");
-$check->execute([$student_id, $sup_id]);
-if (!$check->fetch()) {
+$check->bind_param("ii", $student_id, $sup_id);
+$check->execute();
+$res = $check->get_result();
+if (!$res || !$res->fetch_row()) {
     header('Location: supervisor-dashboard.php');
     exit;
 }
 
-$profile_r = $pdo->prepare("
+$profile_r = $db->prepare("
     SELECT sp.*, u.username, u.email, u.profile_pic,
            sup_u.username AS supervisor_name
     FROM student_profiles sp
@@ -550,8 +562,10 @@ $profile_r = $pdo->prepare("
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     WHERE sp.user_id = ?
 ");
-$profile_r->execute([$student_id]);
-$profile = $profile_r->fetch();
+$profile_r->bind_param("i", $student_id);
+$profile_r->execute();
+$res = $profile_r->get_result();
+$profile = $res ? $res->fetch_assoc() : null;
 
 if (!$profile) {
     header('Location: supervisor-dashboard.php');
@@ -569,9 +583,13 @@ $phone         = $profile['phone'] ?? '';
 $instructor_name = $profile['instructor_name'] ?? '—';
 $profile_pic   = $profile['profile_pic'] ?? '';
 
-$total_assigned_q = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
-$total_assigned_q->execute(array_merge([$sup_id], $ay_filter['params']));
-$total_assigned = (int) $total_assigned_q->fetchColumn();
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
+$p_types = "i" . str_repeat("i", count($ay_filter['params']));
+$total_assigned_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$total_assigned_q->execute();
+$res = $total_assigned_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_assigned = (int) ($row[0] ?? 0);
 $selected_year_label = $_SESSION['selected_academic_year_label'] ?? '';
 
 $weeks = [];
@@ -600,25 +618,22 @@ if (!empty($weeks[$selected_week])) {
 }
 
 if (!empty($weeks)) {
-    $esc_ws = $pdo->quote($weeks[$selected_week]['start']);
-    $esc_we = $pdo->quote($weeks[$selected_week]['end']);
-    $log_r = $pdo->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
-    $log_r->execute([$student_id, $weeks[$selected_week]['start'], $weeks[$selected_week]['end']]);
+    $log_r = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
+    $log_r->bind_param("iss", $student_id, $weeks[$selected_week]['start'], $weeks[$selected_week]['end']);
+    $log_r->execute();
 } else {
-    $log_r = $pdo->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC");
-    $log_r->execute([$student_id]);
+    $log_r = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC");
+    $log_r->bind_param("i", $student_id);
+    $log_r->execute();
 }
-$recent_logs = $log_r->fetchAll();
+$res = $log_r->get_result();
+$recent_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Selected-week summary (used only by the weekly sections below) ─
-// Attendance is recorded per day (one daily_log row per date, enforced by
-// the unique index on internship_id + log_date). Missing days simply have
-// no row and are NOT counted as present or absent — matching the rest of
-// the app (attendance_rate = present / logged_days).
 $week_logs_count = count($recent_logs);
 
 $week_att = !empty($weeks[$selected_week])
-    ? internship_attendance($pdo, $student_id, $weeks[$selected_week]['start'], $weeks[$selected_week]['end'])
+    ? internship_attendance($db, $student_id, $weeks[$selected_week]['start'], $weeks[$selected_week]['end'])
     : ['present' => 0, 'absent' => 0, 'expected' => 0, 'rate' => 0];
 $week_present_count = $week_att['present'];
 $week_absent_count  = $week_att['absent'];
@@ -626,36 +641,46 @@ $week_absent_count  = $week_att['absent'];
 // ── Entire-internship summary (statistics cards) ──────────────────
 $total_internship_weeks = count($weeks);
 
-$intern_att    = internship_attendance($pdo, $student_id);
-$intern_logs_q = $pdo->prepare("SELECT log_date, calculated_duration FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
-$intern_logs_q->execute([$student_id]);
+$intern_att    = internship_attendance($db, $student_id);
+$intern_logs_q = $db->prepare("SELECT log_date, calculated_duration FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$intern_logs_q->bind_param("i", $student_id);
+$intern_logs_q->execute();
+$res = $intern_logs_q->get_result();
 $intern_total_minutes = 0;
 $intern_log_days      = 0;
 $seen_intern_dates    = [];
-foreach ($intern_logs_q->fetchAll() as $log) {
-    if (!isset($seen_intern_dates[$log['log_date']])) {
-        $seen_intern_dates[$log['log_date']] = true;
-        $intern_log_days++;
-    }
-    $dur_parts = explode(':', (string) ($log['calculated_duration'] ?? ''));
-    if (count($dur_parts) === 2) {
-        $intern_total_minutes += ((int)$dur_parts[0] * 60) + (int)$dur_parts[1];
+if ($res) {
+    while ($log = $res->fetch_assoc()) {
+        if (!isset($seen_intern_dates[$log['log_date']])) {
+            $seen_intern_dates[$log['log_date']] = true;
+            $intern_log_days++;
+        }
+        $dur_parts = explode(':', (string) ($log['calculated_duration'] ?? ''));
+        if (count($dur_parts) === 2) {
+            $intern_total_minutes += ((int)$dur_parts[0] * 60) + (int)$dur_parts[1];
+        }
     }
 }
 $intern_hours = floor($intern_total_minutes / 60);
 $intern_mins  = $intern_total_minutes % 60;
 
-$ref_r = $pdo->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-$ref_r->execute([$student_id, $selected_week]);
-$weekly_refs = $ref_r->fetchAll();
+$ref_r = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
+$ref_r->bind_param("ii", $student_id, $selected_week);
+$ref_r->execute();
+$res = $ref_r->get_result();
+$weekly_refs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$eval_r = $pdo->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$eval_r->execute([$student_id, $selected_week]);
-$evaluation = $eval_r->fetch();
+$eval_r = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+$eval_r->bind_param("ii", $student_id, $selected_week);
+$eval_r->execute();
+$res = $eval_r->get_result();
+$evaluation = $res ? $res->fetch_assoc() : null;
 
-$sup_eval_r = $pdo->prepare("SELECT * FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
-$sup_eval_r->execute([$student_id, $selected_week]);
-$sup_evaluation = $sup_eval_r->fetch();
+$sup_eval_r = $db->prepare("SELECT * FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
+$sup_eval_r->bind_param("ii", $student_id, $selected_week);
+$sup_eval_r->execute();
+$res = $sup_eval_r->get_result();
+$sup_evaluation = $res ? $res->fetch_assoc() : null;
 
 $today_obj = new DateTime();
 $today_str = $today_obj->format('Y-m-d');

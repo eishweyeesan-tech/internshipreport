@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config/db.php';
 
 // Redirect to dashboard if already logged in
 if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
@@ -35,24 +35,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // First, check if this is an email address
         $is_email = filter_var($username, FILTER_VALIDATE_EMAIL);
 
+        $db = $mysqli ?? $conn;
         if ($is_email) {
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :val LIMIT 1");
-            $stmt->execute([':val' => $username]);
-            $user = $stmt->fetch();
+            $stmt = $db->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");
+            $stmt->bind_param("s", $username);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $user = $res ? $res->fetch_assoc() : null;
         } else {
             // Check how many users share this username (roll number)
-            $cnt_stmt = $pdo->prepare("SELECT COUNT(*) FROM users WHERE username = :val");
-            $cnt_stmt->execute([':val' => $username]);
-            $cnt = (int) $cnt_stmt->fetchColumn();
+            $cnt_stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+            $cnt_stmt->bind_param("s", $username);
+            $cnt_stmt->execute();
+            $res_cnt = $cnt_stmt->get_result();
+            $cnt_row = $res_cnt ? $res_cnt->fetch_row() : [0];
+            $cnt = (int) ($cnt_row[0] ?? 0);
 
             if ($cnt > 1) {
                 // Same roll number exists across multiple academic years
                 $error = 'Multiple accounts found for this roll number. Please log in with your email address instead.';
                 $user = null;
             } elseif ($cnt === 1) {
-                $stmt = $pdo->prepare("SELECT * FROM users WHERE username = :val LIMIT 1");
-                $stmt->execute([':val' => $username]);
-                $user = $stmt->fetch();
+                $stmt = $db->prepare("SELECT * FROM users WHERE username = ? LIMIT 1");
+                $stmt->bind_param("s", $username);
+                $stmt->execute();
+                $res = $stmt->get_result();
+                $user = $res ? $res->fetch_assoc() : null;
             } else {
                 $user = null;
             }
@@ -64,12 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['role'] = $user['role'];
             $_SESSION['is_first_login'] = (bool) $user['is_first_login'];
 
-            // Update last_login_at timestamp (safe fallback if column doesn't exist yet)
+            // Update last_login_at timestamp
             try {
-                $login_update = $pdo->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
-                $login_update->execute([$user['id']]);
-            } catch (PDOException $e) {
-                // Column not yet added — silently ignore until migration is run
+                $login_update = $db->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
+                $uid = (int) $user['id'];
+                $login_update->bind_param("i", $uid);
+                $login_update->execute();
+            } catch (Throwable $e) {
+                // Silently ignore if error occurs
             }
 
             if ($user['is_first_login'] == 1) {

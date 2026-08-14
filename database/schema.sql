@@ -1,3 +1,8 @@
+-- ============================================================
+-- InternReport Management System — Normalized Database Schema
+-- File: database/schema.sql
+-- ============================================================
+
 CREATE DATABASE IF NOT EXISTS intern_report_db;
 USE intern_report_db;
 
@@ -5,7 +10,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ============================================================
--- INDEPENDENT TABLES (no foreign keys)
+-- 1. INDEPENDENT TABLES
 -- ============================================================
 
 -- Academic years dimension table
@@ -22,7 +27,7 @@ CREATE TABLE IF NOT EXISTS academic_years (
     INDEX idx_is_current (is_current)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Users table (admins, students, supervisors, instructors)
+-- Unified Users table (admins, students, supervisors, instructors)
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(100) NOT NULL,
@@ -45,7 +50,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_username_year (username, academic_year),
     CONSTRAINT fk_users_academic_year FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE SET NULL ON UPDATE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Companies table
 CREATE TABLE IF NOT EXISTS companies (
@@ -66,7 +71,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
     setting_key VARCHAR(100) NOT NULL UNIQUE,
     setting_value TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Public holidays (Myanmar calendar)
 CREATE TABLE IF NOT EXISTS holidays (
@@ -79,15 +84,21 @@ CREATE TABLE IF NOT EXISTS holidays (
     UNIQUE KEY unique_holiday_date (holiday_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- System Announcements
+CREATE TABLE IF NOT EXISTS announcements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    sender_name VARCHAR(100) DEFAULT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ============================================================
--- STUDENT PROFILE TABLES (depends on: users, companies)
+-- 2. STUDENT & SUPERVISOR PROFILE & ASSIGNMENT TABLES
 -- ============================================================
 
 -- Student profiles table
--- FK: user_id      -> users.id          (CASCADE)
--- FK: supervisor_id -> users.id          (SET NULL)
--- FK: instructor_id -> users.id          (SET NULL)
--- FK: company_id   -> companies.id       (SET NULL)
 CREATE TABLE IF NOT EXISTS student_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
@@ -111,12 +122,9 @@ CREATE TABLE IF NOT EXISTS student_profiles (
     FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Supervisor assignments (maps supervisors to students per academic year)
--- FK: supervisor_id  -> users.id  (CASCADE)
--- FK: student_id     -> users.id  (SET NULL)
--- FK: academic_year_id -> academic_years.id  (SET NULL)
 CREATE TABLE IF NOT EXISTS supervisor_assignments (
     assignment_id INT PRIMARY KEY AUTO_INCREMENT,
     supervisor_id INT NOT NULL,
@@ -125,18 +133,17 @@ CREATE TABLE IF NOT EXISTS supervisor_assignments (
     academic_year_id INT DEFAULT NULL,
     department VARCHAR(100) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_sup_year_student (supervisor_id, academic_year, student_id),
     FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE SET NULL,
-    CONSTRAINT fk_supassign_academic_year FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE SET NULL ON UPDATE CASCADE,
-    UNIQUE KEY unique_sup_year_student (supervisor_id, academic_year, student_id)
+    CONSTRAINT fk_supassign_academic_year FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- LOGGING TABLES (depends on: student_profiles via internship_id)
+-- 3. INTERNSHIP LOGGING & REFLECTION TABLES
 -- ============================================================
 
 -- Daily logs table
--- FK: internship_id -> student_profiles.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS daily_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     internship_id INT NOT NULL,
@@ -144,22 +151,21 @@ CREATE TABLE IF NOT EXISTS daily_logs (
     attendance_status ENUM('present', 'leave', 'absent') NOT NULL DEFAULT 'present',
     reason_for_absence TEXT DEFAULT NULL,
     task_title VARCHAR(255) NOT NULL DEFAULT '',
-    task_detail TEXT,
+    task_detail TEXT DEFAULT NULL,
     tasks_performed TEXT NOT NULL,
-    actual_tasks TEXT,
-    tools_used VARCHAR(255),
-    learnt_skills VARCHAR(255),
-    challenges VARCHAR(255),
+    actual_tasks TEXT DEFAULT NULL,
+    tools_used VARCHAR(255) DEFAULT NULL,
+    learnt_skills VARCHAR(255) DEFAULT NULL,
+    challenges VARCHAR(255) DEFAULT NULL,
     start_time VARCHAR(5) NOT NULL DEFAULT '09:00',
     end_time VARCHAR(5) NOT NULL DEFAULT '17:00',
     calculated_duration VARCHAR(20) NOT NULL DEFAULT '00:00',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_log (internship_id, log_date),
     FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Weekly reflections table
--- FK: internship_id -> student_profiles.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS weekly_reflections (
     id INT AUTO_INCREMENT PRIMARY KEY,
     internship_id INT NOT NULL,
@@ -170,14 +176,13 @@ CREATE TABLE IF NOT EXISTS weekly_reflections (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_week (internship_id, week_number),
     FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- LINK & EVALUATION TABLES (depends on: users, student_profiles)
+-- 4. LINK & EVALUATION TABLES
 -- ============================================================
 
 -- Magic links for students
--- FK: internship_id -> student_profiles.id  (CASCADE)
 CREATE TABLE IF NOT EXISTS magic_links (
     id INT AUTO_INCREMENT PRIMARY KEY,
     internship_id INT NOT NULL,
@@ -187,22 +192,9 @@ CREATE TABLE IF NOT EXISTS magic_links (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_week_link (internship_id, week_number),
     FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Instructor magic links
--- FK: student_id -> users.id  (CASCADE)
-CREATE TABLE IF NOT EXISTS instructor_magic_links (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_id INT NOT NULL,
-    week_number INT NOT NULL,
-    magic_token VARCHAR(64) NOT NULL UNIQUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NULL,
-    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Report evaluations (instructor grading)
--- FK: student_id -> users.id  (CASCADE)
+-- Report evaluations (instructor grading & approval)
 CREATE TABLE IF NOT EXISTS report_evaluations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
@@ -218,44 +210,27 @@ CREATE TABLE IF NOT EXISTS report_evaluations (
     evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_eval (student_id, week_number),
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Supervisor evaluations (university grading)
--- FK: student_id -> users.id  (CASCADE)
-CREATE TABLE IF NOT EXISTS supervisor_evaluations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_id INT NOT NULL,
-    week_number INT NOT NULL,
-    university_grade ENUM('A', 'B', 'C', 'D', 'F') NOT NULL DEFAULT 'C',
-    supervisor_remarks TEXT,
-    evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_sup_eval (student_id, week_number),
-    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Weekly grading evaluations by supervisor
--- FK: student_id    -> users.id  (CASCADE)
--- FK: supervisor_id -> users.id  (CASCADE)
+-- Supervisor weekly evaluations (university grading)
 CREATE TABLE IF NOT EXISTS supervisor_weekly_evaluations (
     id INT AUTO_INCREMENT PRIMARY KEY,
     student_id INT NOT NULL,
     week_number INT NOT NULL,
     supervisor_id INT NOT NULL,
     weekly_grade ENUM('A', 'B', 'C', 'D', 'F') NOT NULL,
-    supervisor_comments TEXT,
+    supervisor_comments TEXT DEFAULT NULL,
     evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_weekly_eval (student_id, week_number),
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- SYSTEM & NOTIFICATION TABLES (depends on: users)
+-- 5. NOTIFICATION & SYSTEM ALERT TABLES
 -- ============================================================
 
--- Supervisor email alerts (to track sent notifications)
--- FK: supervisor_id -> users.id  (CASCADE)
--- FK: student_id    -> users.id  (CASCADE)
+-- Supervisor email alerts
 CREATE TABLE IF NOT EXISTS supervisor_alerts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     supervisor_id INT NOT NULL,
@@ -264,14 +239,14 @@ CREATE TABLE IF NOT EXISTS supervisor_alerts (
     alert_date DATE NOT NULL,
     week_number INT DEFAULT NULL,
     email_sent TINYINT(1) NOT NULL DEFAULT 0,
-    sent_at TIMESTAMP NULL,
+    sent_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_alert (supervisor_id, student_id, alert_type, alert_date),
     FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-
+-- Notifications table
 CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -299,16 +274,12 @@ CREATE TABLE IF NOT EXISTS notifications (
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- ============================================================
 -- TRIGGERS
 -- ============================================================
 
--- Enforce only one academic year has is_current = 1.
--- NOTE: a trigger cannot issue UPDATE/INSERT/DELETE against the same table it
--- fires on (MySQL error 1442), so this trigger only *guards* (SIGNAL) instead
--- of rewriting sibling rows. The application's transition code
--- (admin/transition_year.php) is responsible for the actual flip, using
--- row-level locks and explicit clearing of the previous current year.
+-- Guard trigger enforcing single current academic year
 DROP TRIGGER IF EXISTS trg_enforce_single_current_year;
 DELIMITER //
 CREATE TRIGGER trg_enforce_single_current_year
@@ -327,7 +298,7 @@ DELIMITER ;
 -- SEED DATA
 -- ============================================================
 
--- Default academic year (current)
+-- Default academic year (active)
 INSERT IGNORE INTO academic_years (year_label, start_date, end_date, status, is_current) VALUES
 ('2025-2026', '2025-09-01', '2026-08-31', 'ACTIVE', 1);
 
@@ -337,7 +308,7 @@ INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES
 ('default_supervisor_password', 'password1234');
 
 -- Default admin account (password: "password")
-INSERT INTO users (username, email, password, role, is_first_login) VALUES
+INSERT IGNORE INTO users (username, email, password, role, is_first_login) VALUES
 ('admin', 'admin@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 0);
 
 SET FOREIGN_KEY_CHECKS = 1;

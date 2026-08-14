@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
@@ -13,27 +13,33 @@ if ($_SESSION['role'] !== 'supervisor') {
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
+$db       = $mysqli ?? $conn;
 
 // ── Notification redirect URL helper ────────────────────────────
 require_once __DIR__ . '/../config/notify.php';
 
 // ── Centralized Notification Action Handler ────────────────────
-handle_notification_ajax_actions($pdo, $sup_id);
+handle_notification_ajax_actions($db, $sup_id);
 
 // ── Fetch notifications ─────────────────────────────────────────
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$sup_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $sup_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$sup_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $sup_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Search filter ───────────────────────────────────────────────
 $search = trim($_GET['search'] ?? '');
 
 // ── Summary counts (assigned students scope) ───────────────────
-$pending_reviews_q = $pdo->prepare("
+$pending_reviews_q = $db->prepare("
     SELECT COUNT(*) FROM report_evaluations re
     WHERE re.report_status = 'approved_by_instructor'
       AND re.student_id IN (
@@ -46,17 +52,23 @@ $pending_reviews_q = $pdo->prepare("
           WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
-$pending_reviews_q->execute([$sup_id]);
-$pending_reviews = (int) $pending_reviews_q->fetchColumn();
+$pending_reviews_q->bind_param("i", $sup_id);
+$pending_reviews_q->execute();
+$res = $pending_reviews_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$pending_reviews = (int) ($row[0] ?? 0);
 
-$company_count_q = $pdo->prepare("
+$company_count_q = $db->prepare("
     SELECT COUNT(DISTINCT sp.company_name) FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
       AND sp.company_name IS NOT NULL AND sp.company_name != ''
 ");
-$company_count_q->execute([$sup_id]);
-$company_count = (int) $company_count_q->fetchColumn();
+$company_count_q->bind_param("i", $sup_id);
+$company_count_q->execute();
+$res = $company_count_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$company_count = (int) ($row[0] ?? 0);
 
 // ── Students grouped by company (assigned students scope) ──────
 $sql = "
@@ -69,19 +81,23 @@ $sql = "
     WHERE u.role = 'student' AND sp.supervisor_id = ?
       AND sp.company_name IS NOT NULL AND sp.company_name != ''
 ";
+$types = "i";
 $params = [$sup_id];
 
 if ($search) {
     $sql .= " AND (sp.company_name LIKE ? OR sp.full_name LIKE ? OR sp.job_role LIKE ? OR c.contact_person LIKE ? OR c.contact_email LIKE ?)";
     $like = '%' . $search . '%';
+    $types .= "sssss";
     array_push($params, $like, $like, $like, $like, $like);
 }
 
 $sql .= " ORDER BY sp.company_name ASC, sp.full_name ASC";
 
-$companies_stmt = $pdo->prepare($sql);
-$companies_stmt->execute($params);
-$company_rows = $companies_stmt->fetchAll();
+$companies_stmt = $db->prepare($sql);
+$companies_stmt->bind_param($types, ...$params);
+$companies_stmt->execute();
+$res = $companies_stmt->get_result();
+$company_rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Group rows by company name in PHP
 $companies = [];

@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config/db.php';
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -22,16 +22,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($new_password !== $confirm_password) {
         $error = 'New passwords do not match.';
     } else {
-        $stmt = $pdo->prepare("SELECT password FROM users WHERE id = :id LIMIT 1");
-        $stmt->execute([':id' => $_SESSION['user_id']]);
-        $user = $stmt->fetch();
+        $db = $mysqli ?? $conn;
+        $stmt = $db->prepare("SELECT password FROM users WHERE id = ? LIMIT 1");
+        $uid = (int) $_SESSION['user_id'];
+        $stmt->bind_param("i", $uid);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $user = $res ? $res->fetch_assoc() : null;
 
         if (!$user || !password_verify($current_password, $user['password'])) {
             $error = 'Current password is incorrect.';
         } else {
             $hashed = password_hash($new_password, PASSWORD_DEFAULT);
-            $update = $pdo->prepare("UPDATE users SET password = :password, is_first_login = 0 WHERE id = :id");
-            $update->execute([':password' => $hashed, ':id' => $_SESSION['user_id']]);
+            $update = $db->prepare("UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?");
+            $update->bind_param("si", $hashed, $uid);
+            $update->execute();
 
             $_SESSION['is_first_login'] = false;
 

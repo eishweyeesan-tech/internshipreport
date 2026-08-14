@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
@@ -14,22 +14,28 @@ if ($_SESSION['role'] !== 'supervisor') {
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
+$db       = $mysqli ?? $conn;
 
 require_once __DIR__ . '/../config/notify.php';
 
 // ── Centralized Notification Action Handler ────────────────────
-handle_notification_ajax_actions($pdo, $sup_id);
+handle_notification_ajax_actions($db, $sup_id);
 
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$sup_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $sup_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$sup_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $sup_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Academic year filter (from session, same as dashboard) ──────
-$ay_filter = get_ay_filter($pdo, 'u');
+$ay_filter = get_ay_filter($db, 'u');
 
 // ── Filters ─────────────────────────────────────────────────────
 $filter_status = $_GET['status'] ?? '';
@@ -37,7 +43,7 @@ if (!in_array($filter_status, ['red', 'amber', 'green', 'none'], true)) $filter_
 $search = trim($_GET['search'] ?? '');
 
 // ── Summary counts (assigned students scope) ───────────────────
-$pending_reviews_q = $pdo->prepare("
+$pending_reviews_q = $db->prepare("
     SELECT COUNT(*) FROM report_evaluations re
     WHERE re.report_status = 'approved_by_instructor'
       AND re.student_id IN (
@@ -50,12 +56,19 @@ $pending_reviews_q = $pdo->prepare("
           WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
-$pending_reviews_q->execute(array_merge([$sup_id], $ay_filter['params']));
-$pending_reviews = (int) $pending_reviews_q->fetchColumn();
+$p_types = "i" . str_repeat("i", count($ay_filter['params']));
+$pending_reviews_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$pending_reviews_q->execute();
+$res = $pending_reviews_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$pending_reviews = (int) ($row[0] ?? 0);
 
-$total_assigned_q = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
-$total_assigned_q->execute(array_merge([$sup_id], $ay_filter['params']));
-$total_assigned = (int) $total_assigned_q->fetchColumn();
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
+$total_assigned_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$total_assigned_q->execute();
+$res = $total_assigned_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_assigned = (int) ($row[0] ?? 0);
 
 // ── Students detail (assigned + active) ─────────────────────────
 $sql = "
@@ -68,25 +81,30 @@ $sql = "
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql'] . "
 ";
+$types = "i" . str_repeat("i", count($ay_filter['params']));
 $params = array_merge([$sup_id], $ay_filter['params']);
 
 if ($search) {
     $sql .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ? OR sp.job_role LIKE ? OR u.email LIKE ?)";
     $like = '%' . $search . '%';
+    $types .= "ssssss";
     array_push($params, $like, $like, $like, $like, $like, $like);
 }
 
 $sql .= " ORDER BY sp.full_name ASC";
-$students_stmt = $pdo->prepare($sql);
-$students_stmt->execute($params);
-$students = $students_stmt->fetchAll();
+$students_stmt = $db->prepare($sql);
+$students_stmt->bind_param($types, ...$params);
+$students_stmt->execute();
+$res = $students_stmt->get_result();
+$students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Attendance per student ──────────────────────────────────────
 $attendance = [];
 if (!empty($students)) {
     $ids = array_map(function ($s) { return (int) $s['uid']; }, $students);
     $in_placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $att_q = $pdo->prepare("
+    $att_types = str_repeat("i", count($ids));
+    $att_q = $db->prepare("
         SELECT dl.internship_id,
                SUM(CASE WHEN dl.attendance_status = 'present' THEN 1 ELSE 0 END) AS present_count,
                COUNT(*) AS total_count
@@ -94,9 +112,13 @@ if (!empty($students)) {
         WHERE dl.internship_id IN ($in_placeholders)
         GROUP BY dl.internship_id
     ");
-    $att_q->execute($ids);
-    foreach ($att_q->fetchAll() as $row) {
-        $attendance[(int) $row['internship_id']] = $row;
+    $att_q->bind_param($att_types, ...$ids);
+    $att_q->execute();
+    $res = $att_q->get_result();
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $attendance[(int) $row['internship_id']] = $row;
+        }
     }
 }
 
@@ -106,15 +128,26 @@ $graded_counts = [];
 if (!empty($students)) {
     $ids = array_map(function ($s) { return (int) $s['uid']; }, $students);
     $in_placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $rc_q = $pdo->prepare("SELECT student_id, COUNT(*) AS cnt FROM report_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
-    $rc_q->execute($ids);
-    foreach ($rc_q->fetchAll() as $row) {
-        $report_counts[(int) $row['student_id']] = (int) $row['cnt'];
+    $rg_types = str_repeat("i", count($ids));
+
+    $rc_q = $db->prepare("SELECT student_id, COUNT(*) AS cnt FROM report_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
+    $rc_q->bind_param($rg_types, ...$ids);
+    $rc_q->execute();
+    $res = $rc_q->get_result();
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $report_counts[(int) $row['student_id']] = (int) $row['cnt'];
+        }
     }
-    $gc_q = $pdo->prepare("SELECT student_id, COUNT(*) AS cnt FROM supervisor_weekly_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
-    $gc_q->execute($ids);
-    foreach ($gc_q->fetchAll() as $row) {
-        $graded_counts[(int) $row['student_id']] = (int) $row['cnt'];
+
+    $gc_q = $db->prepare("SELECT student_id, COUNT(*) AS cnt FROM supervisor_weekly_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
+    $gc_q->bind_param($rg_types, ...$ids);
+    $gc_q->execute();
+    $res = $gc_q->get_result();
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $graded_counts[(int) $row['student_id']] = (int) $row['cnt'];
+        }
     }
 }
 
@@ -123,7 +156,8 @@ $student_pending = [];
 if (!empty($students)) {
     $ids = array_map(function ($s) { return (int) $s['uid']; }, $students);
     $in_placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $pq = $pdo->prepare("
+    $p_types = str_repeat("i", count($ids));
+    $pq = $db->prepare("
         SELECT re.student_id, re.week_number FROM report_evaluations re
         WHERE re.report_status = 'approved_by_instructor'
           AND re.student_id IN ($in_placeholders)
@@ -132,9 +166,13 @@ if (!empty($students)) {
               WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
           )
     ");
-    $pq->execute($ids);
-    foreach ($pq->fetchAll() as $row) {
-        $student_pending[(int) $row['student_id']] = (int) $row['week_number'];
+    $pq->bind_param($p_types, ...$ids);
+    $pq->execute();
+    $res = $pq->get_result();
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $student_pending[(int) $row['student_id']] = (int) $row['week_number'];
+        }
     }
 }
 
@@ -164,19 +202,23 @@ foreach ($students as $sd) {
 
     $student_dynamic_week[$uid]  = $dynamic_week;
     $student_not_started[$uid]   = $not_started;
-    $student_progress[$uid]      = internship_progress($pdo, $uid, $sd['internship_start_date'], $sd['internship_end_date']);
+    $student_progress[$uid]      = internship_progress($db, $uid, $sd['internship_start_date'], $sd['internship_end_date']);
 }
 
 $progress_status = [];
 $report_status_cache = [];
+$rs_q = $db->prepare("SELECT report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
 foreach ($students as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
-    $rs_q = $pdo->prepare("SELECT report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-    $rs_q->execute([$uid, $dw]);
-    $report_status_cache[$uid] = $rs_q->fetchColumn() ?: 'pending';
+    $rs_q->bind_param("ii", $uid, $dw);
+    $rs_q->execute();
+    $res = $rs_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $report_status_cache[$uid] = $row[0] ?? 'pending';
 }
 
+$log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
 foreach ($students as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
@@ -202,9 +244,11 @@ foreach ($students as $sd) {
         $swe = (new DateTime('sunday this week'))->format('Y-m-d');
     }
 
-    $log_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
-    $log_q->execute([$uid, $sws, $swe]);
-    $log_count = (int) $log_q->fetchColumn();
+    $log_q->bind_param("iss", $uid, $sws, $swe);
+    $log_q->execute();
+    $res = $log_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $log_count = (int) ($row[0] ?? 0);
 
     if ($dayOfWeek >= 3 && $log_count === 0) {
         $progress_status[$uid] = 'red';

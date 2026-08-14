@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
@@ -12,8 +12,9 @@ if ($_SESSION['role'] !== 'supervisor') {
     exit;
 }
 
-$sup_id   = $_SESSION['user_id'];
+$sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
+$db       = $mysqli ?? $conn;
 $msg = '';
 $err = '';
 
@@ -23,7 +24,7 @@ $err = '';
 require_once __DIR__ . '/../config/notify.php';
 
 // ── Centralized Notification Action Handler ────────────────────
-handle_notification_ajax_actions($pdo, $sup_id);
+handle_notification_ajax_actions($db, $sup_id);
 
 // ══════════════════════════════════════════════════════════════════
 // FETCH NOTIFICATIONS
@@ -31,22 +32,25 @@ handle_notification_ajax_actions($pdo, $sup_id);
 $unread_notif_count = 0;
 $recent_notifications = [];
 try {
-    $notif_stmt = $pdo->prepare("SELECT is_read FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-    $notif_stmt->execute([$sup_id]);
-    $recent_notifications = $notif_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $notif_stmt2 = $db->prepare("SELECT id, title, message, type, related_week, announcement_id, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+    $notif_stmt2->bind_param("i", $sup_id);
+    $notif_stmt2->execute();
+    $res = $notif_stmt2->get_result();
+    $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
     foreach ($recent_notifications as $n) { if (!$n['is_read']) $unread_notif_count++; }
-    $notif_stmt2 = $pdo->prepare("SELECT id, title, message, type, related_week, announcement_id, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-    $notif_stmt2->execute([$sup_id]);
-    $recent_notifications = $notif_stmt2->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) { /* table may not exist yet */ }
+} catch (Throwable $e) { /* table may not exist yet */ }
 
 // ══════════════════════════════════════════════════════════════════
 // ACTIVE YEAR BADGE DATA
 // ══════════════════════════════════════════════════════════════════
-$ay_filter = get_ay_filter($pdo, 'u');
-$total_assigned_q = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
-$total_assigned_q->execute(array_merge([$sup_id], $ay_filter['params']));
-$total_assigned = (int) $total_assigned_q->fetchColumn();
+$ay_filter = get_ay_filter($db, 'u');
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
+$p_types = "i" . str_repeat("i", count($ay_filter['params']));
+$total_assigned_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$total_assigned_q->execute();
+$res = $total_assigned_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_assigned = (int) ($row[0] ?? 0);
 $selected_year_label = $_SESSION['selected_academic_year_label'] ?? '';
 
 // ══════════════════════════════════════════════════════════════════
@@ -56,15 +60,19 @@ $profile_pic   = '';
 $last_login_at = '';
 
 try {
-    $sup = $pdo->prepare("SELECT id, username, email, phone, department, position, role, profile_pic, last_login_at FROM users WHERE id = ?");
-    $sup->execute([$sup_id]);
-    $sup = $sup->fetch();
+    $sup_stmt = $db->prepare("SELECT id, username, email, phone, department, position, role, profile_pic, last_login_at FROM users WHERE id = ?");
+    $sup_stmt->bind_param("i", $sup_id);
+    $sup_stmt->execute();
+    $res = $sup_stmt->get_result();
+    $sup = $res ? $res->fetch_assoc() : null;
     $profile_pic   = $sup['profile_pic'] ?? '';
     $last_login_at = $sup['last_login_at'] ?? '';
-} catch (PDOException $e) {
-    $sup = $pdo->prepare("SELECT id, username, email, role FROM users WHERE id = ?");
-    $sup->execute([$sup_id]);
-    $sup = $sup->fetch();
+} catch (Throwable $e) {
+    $sup_stmt = $db->prepare("SELECT id, username, email, role FROM users WHERE id = ?");
+    $sup_stmt->bind_param("i", $sup_id);
+    $sup_stmt->execute();
+    $res = $sup_stmt->get_result();
+    $sup = $res ? $res->fetch_assoc() : null;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -87,14 +95,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         $err = $phone_err;
     } else {
         $new_phone = normalize_phone($new_phone);
-        $chk = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-        $chk->execute([$new_email, $sup_id]);
-        if ($chk->fetch()) {
+        $chk = $db->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+        $chk->bind_param("si", $new_email, $sup_id);
+        $chk->execute();
+        $res = $chk->get_result();
+        if ($res && $res->fetch_row()) {
             $err = 'This email is already in use.';
         } else {
             try {
-                $pdo->prepare("UPDATE users SET username = ?, email = ?, phone = ?, department = ?, position = ? WHERE id = ?")
-                    ->execute([$new_name, $new_email, $new_phone, $new_dept, $new_position, $sup_id]);
+                $up = $db->prepare("UPDATE users SET username = ?, email = ?, phone = ?, department = ?, position = ? WHERE id = ?");
+                $up->bind_param("sssssi", $new_name, $new_email, $new_phone, $new_dept, $new_position, $sup_id);
+                $up->execute();
                 $_SESSION['username'] = $new_name;
                 $sup['username'] = $new_name;
                 $sup['email'] = $new_email;
@@ -103,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 $sup['position'] = $new_position;
                 $sup_name = $new_name;
                 $msg = 'Profile updated successfully.';
-            } catch (PDOException $e) {
+            } catch (Throwable $e) {
                 $err = 'Could not save all fields. Please run the migration database/migrate_supervisor_profile_fields.sql to add the Phone / Department / Position columns, then try again.';
             }
         }
@@ -123,16 +134,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     } elseif ($new_pw !== $confirm) {
         $err = 'New passwords do not match.';
     } else {
-        $hash_row = $pdo->prepare("SELECT password FROM users WHERE id = ?");
-        $hash_row->execute([$sup_id]);
-        $current_hash = $hash_row->fetchColumn();
+        $hash_row = $db->prepare("SELECT password FROM users WHERE id = ?");
+        $hash_row->bind_param("i", $sup_id);
+        $hash_row->execute();
+        $res = $hash_row->get_result();
+        $row = $res ? $res->fetch_row() : null;
+        $current_hash = $row[0] ?? '';
 
         if (!password_verify($current, $current_hash)) {
             $err = 'Current password is incorrect.';
         } else {
             $new_hash = password_hash($new_pw, PASSWORD_DEFAULT);
-            $pdo->prepare("UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?")
-                ->execute([$new_hash, $sup_id]);
+            $up = $db->prepare("UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?");
+            $up->bind_param("si", $new_hash, $sup_id);
+            $up->execute();
             $_SESSION['is_first_login'] = false;
             $msg = 'Password changed successfully.';
         }
@@ -163,9 +178,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                     if (file_exists($old_path)) unlink($old_path);
                 }
                 try {
-                    $pdo->prepare("UPDATE users SET profile_pic = ? WHERE id = ?")
-                        ->execute([$filename, $sup_id]);
-                } catch (PDOException $e) {
+                    $up = $db->prepare("UPDATE users SET profile_pic = ? WHERE id = ?");
+                    $up->bind_param("si", $filename, $sup_id);
+                    $up->execute();
+                } catch (Throwable $e) {
                     $avatar_msg = 'Avatar uploaded but database column not ready. Run migration SQL.';
                 }
                 $profile_pic = $filename;

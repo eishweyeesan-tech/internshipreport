@@ -115,34 +115,37 @@ if (!function_exists('internship_total_weeks')) {
      * report_evaluations (student_id = users.id) and is not 'rejected'.
      * Distinct weeks only — daily-log volume inside a week never inflates it.
      *
-     * @param PDO  $pdo
-     * @param int  $student_user_id users.id of the student
+     * @param mysqli|mixed  $db
+     * @param int           $student_user_id users.id of the student
      * @return int
      */
-    function internship_completed_weeks(PDO $pdo, int $student_user_id): int
+    function internship_completed_weeks($db, int $student_user_id): int
     {
-        $q = $pdo->prepare(
+        $stmt = $db->prepare(
             "SELECT COUNT(DISTINCT week_number) FROM report_evaluations
              WHERE student_id = ? AND report_status <> 'rejected'"
         );
-        $q->execute([$student_user_id]);
-        return (int) $q->fetchColumn();
+        $stmt->bind_param("i", $student_user_id);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res ? $res->fetch_row() : null;
+        return (int) ($row[0] ?? 0);
     }
 
     /**
      * Full progress summary for one student.
      *
-     * @param PDO   $pdo
-     * @param int   $student_user_id users.id of the student
-     * @param string|null $start internship_start_date
-     * @param string|null $end   internship_end_date
+     * @param mysqli|mixed  $db
+     * @param int           $student_user_id users.id of the student
+     * @param string|null   $start internship_start_date
+     * @param string|null   $end   internship_end_date
      * @return array{total:int, completed:int, pct:int}
      *   pct = round(completed / total * 100), 0 when the duration is unknown.
      */
-    function internship_progress(PDO $pdo, int $student_user_id, ?string $start, ?string $end): array
+    function internship_progress($db, int $student_user_id, ?string $start, ?string $end): array
     {
         $total     = internship_total_weeks($start, $end);
-        $completed = $total > 0 ? internship_completed_weeks($pdo, $student_user_id) : 0;
+        $completed = $total > 0 ? internship_completed_weeks($db, $student_user_id) : 0;
         $pct       = $total > 0 ? min(100, (int) round(($completed / $total) * 100)) : 0;
 
         return ['total' => $total, 'completed' => $completed, 'pct' => $pct];
@@ -158,32 +161,39 @@ if (!function_exists('internship_total_weeks')) {
      * that have an attendance record; days with no record are not counted and
      * 'leave' counts as absent.
      *
-     * @param PDO  $pdo
-     * @param int  $internship_id daily_logs.internship_id (= the student's users.id)
-     * @param string|null $start Optional Y-m-d lower bound (inclusive).
-     *                           Passed together with $end to scope to one week.
-     * @param string|null $end   Optional Y-m-d upper bound (inclusive).
+     * @param mysqli|mixed $db
+     * @param int          $internship_id daily_logs.internship_id (= the student's users.id)
+     * @param string|null  $start Optional Y-m-d lower bound (inclusive).
+     *                            Passed together with $end to scope to one week.
+     * @param string|null  $end   Optional Y-m-d upper bound (inclusive).
      * @return array{present:int, absent:int, expected:int, rate:int}
      *   rate = round(present / expected * 100), 0 when there are no records.
      */
-    function internship_attendance(PDO $pdo, int $internship_id, ?string $start = null, ?string $end = null): array
+    function internship_attendance($db, int $internship_id, ?string $start = null, ?string $end = null): array
     {
-        $sql = "SELECT
+        if ($start && $end) {
+            $stmt = $db->prepare(
+                "SELECT
                     SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_cnt,
                     SUM(CASE WHEN attendance_status IN ('leave','absent') THEN 1 ELSE 0 END) AS absent_cnt
                 FROM daily_logs
-                WHERE internship_id = ?";
-        $params = [$internship_id];
-
-        if ($start && $end) {
-            $sql     .= " AND log_date BETWEEN ? AND ?";
-            $params[] = $start;
-            $params[] = $end;
+                WHERE internship_id = ? AND log_date BETWEEN ? AND ?"
+            );
+            $stmt->bind_param("iss", $internship_id, $start, $end);
+        } else {
+            $stmt = $db->prepare(
+                "SELECT
+                    SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_cnt,
+                    SUM(CASE WHEN attendance_status IN ('leave','absent') THEN 1 ELSE 0 END) AS absent_cnt
+                FROM daily_logs
+                WHERE internship_id = ?"
+            );
+            $stmt->bind_param("i", $internship_id);
         }
 
-        $q = $pdo->prepare($sql);
-        $q->execute($params);
-        $row = $q->fetch(PDO::FETCH_ASSOC);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $row = $res ? $res->fetch_assoc() : [];
 
         $present  = (int) ($row['present_cnt'] ?? 0);
         $absent   = (int) ($row['absent_cnt'] ?? 0);

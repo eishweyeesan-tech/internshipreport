@@ -8,29 +8,30 @@
  * with `notif_action_url()`.
  */
 
-if (!isset($pdo)) {
-    require_once __DIR__ . '/database.php';
+if (!isset($mysqli) && !isset($conn)) {
+    require_once __DIR__ . '/db.php';
 }
 
 /**
  * Insert a notification for a recipient.
  *
- * @param PDO    $pdo
- * @param int    $user_id      Recipient user id
- * @param string $title
- * @param string $message
- * @param string $type         Must be a valid `notifications.type` enum value
- * @param int|null $related_week
- * @param int|null $student_id Related student (for action links)
- * @param int|null $report_id  Related report_evaluations id (optional)
+ * @param mysqli|mixed $db           Database connection ($mysqli or $conn)
+ * @param int          $user_id      Recipient user id
+ * @param string       $title
+ * @param string       $message
+ * @param string       $type         Must be a valid `notifications.type` enum value
+ * @param int|null     $related_week
+ * @param int|null     $student_id Related student (for action links)
+ * @param int|null     $report_id  Related report_evaluations id (optional)
  * @return int  New notification id
  */
-function notify_user($pdo, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null)
+function notify_user($db, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null)
 {
-    $stmt = $pdo->prepare("INSERT INTO notifications (user_id, title, message, type, related_week, student_id, report_id)
+    $stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, type, related_week, student_id, report_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->execute([$user_id, $title, $message, $type, $related_week, $student_id, $report_id]);
-    return (int) $pdo->lastInsertId();
+    $stmt->bind_param("isssiii", $user_id, $title, $message, $type, $related_week, $student_id, $report_id);
+    $stmt->execute();
+    return (int) $db->insert_id;
 }
 
 /**
@@ -40,26 +41,26 @@ function notify_user($pdo, $user_id, $title, $message, $type = 'info', $related_
  *
  * @return int|false  New notification id, or false when a duplicate exists
  */
-function notify_user_once($pdo, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null, $daily = false)
+function notify_user_once($db, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null, $daily = false)
 {
     $sql = "SELECT id FROM notifications
             WHERE user_id = ? AND type = ?
               AND COALESCE(student_id, 0) = COALESCE(?, 0)
               AND COALESCE(related_week, 0) = COALESCE(?, 0)";
-    $params = [$user_id, $type, $student_id, $related_week];
-
     if ($daily) {
         $sql .= " AND DATE(created_at) = CURDATE()";
     }
     $sql .= " LIMIT 1";
 
-    $check = $pdo->prepare($sql);
-    $check->execute($params);
-    if ($check->fetchColumn()) {
+    $check = $db->prepare($sql);
+    $check->bind_param("isii", $user_id, $type, $student_id, $related_week);
+    $check->execute();
+    $res = $check->get_result();
+    if ($res && $res->fetch_row()) {
         return false;
     }
 
-    return notify_user($pdo, $user_id, $title, $message, $type, $related_week, $student_id, $report_id);
+    return notify_user($db, $user_id, $title, $message, $type, $related_week, $student_id, $report_id);
 }
 
 /**

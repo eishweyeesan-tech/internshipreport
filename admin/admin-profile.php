@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 
 if ($_SESSION['role'] !== 'admin') {
@@ -7,8 +7,9 @@ if ($_SESSION['role'] !== 'admin') {
     exit;
 }
 
-$admin_id   = $_SESSION['user_id'];
+$admin_id   = (int) $_SESSION['user_id'];
 $admin_name = $_SESSION['username'];
+$db         = $mysqli ?? $conn;
 $msg = '';
 $err = '';
 $tab = $_GET['tab'] ?? '';
@@ -21,25 +22,31 @@ $portfolio_link = '';
 $last_login_at = '';
 
 try {
-    $admin = $pdo->prepare("SELECT id, username, email, role, profile_pic, github_link, linkedin_link, portfolio_link, last_login_at FROM users WHERE id = ?");
-    $admin->execute([$admin_id]);
-    $admin = $admin->fetch();
+    $admin_stmt = $db->prepare("SELECT id, username, email, role, profile_pic, github_link, linkedin_link, portfolio_link, last_login_at FROM users WHERE id = ?");
+    $admin_stmt->bind_param("i", $admin_id);
+    $admin_stmt->execute();
+    $res = $admin_stmt->get_result();
+    $admin = $res ? $res->fetch_assoc() : null;
     $profile_pic   = $admin['profile_pic'] ?? '';
     $github_link   = $admin['github_link'] ?? '';
     $linkedin_link = $admin['linkedin_link'] ?? '';
     $portfolio_link = $admin['portfolio_link'] ?? '';
     $last_login_at = $admin['last_login_at'] ?? '';
-} catch (PDOException $e) {
-    $admin = $pdo->prepare("SELECT id, username, email, role FROM users WHERE id = ?");
-    $admin->execute([$admin_id]);
-    $admin = $admin->fetch();
+} catch (Throwable $e) {
+    $admin_stmt = $db->prepare("SELECT id, username, email, role FROM users WHERE id = ?");
+    $admin_stmt->bind_param("i", $admin_id);
+    $admin_stmt->execute();
+    $res = $admin_stmt->get_result();
+    $admin = $res ? $res->fetch_assoc() : null;
 }
 
 // ── Fetch system settings ────────────────────────────────────────
-$get_settings = $pdo->query("SELECT setting_key, setting_value FROM system_settings");
+$get_settings = $db->query("SELECT setting_key, setting_value FROM system_settings");
 $settings = [];
-while ($row = $get_settings->fetch()) {
-    $settings[$row['setting_key']] = $row['setting_value'];
+if ($get_settings) {
+    while ($row = $get_settings->fetch_assoc()) {
+        $settings[$row['setting_key']] = $row['setting_value'];
+    }
 }
 $default_student_pw  = $settings['default_student_password'] ?? 'password123';
 $default_supervisor_pw = $settings['default_supervisor_password'] ?? 'password123';
@@ -59,13 +66,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         $err = 'Invalid email format.';
     } else {
         // Check email uniqueness (exclude self)
-        $chk = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-        $chk->execute([$new_email, $admin_id]);
-        if ($chk->fetch()) {
+        $chk = $db->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
+        $chk->bind_param("si", $new_email, $admin_id);
+        $chk->execute();
+        $res = $chk->get_result();
+        if ($res && $res->fetch_row()) {
             $err = 'This email is already in use by another account.';
         } else {
-            $pdo->prepare("UPDATE users SET username = ?, email = ? WHERE id = ?")
-                ->execute([$new_name, $new_email, $admin_id]);
+            $up = $db->prepare("UPDATE users SET username = ?, email = ? WHERE id = ?");
+            $up->bind_param("ssi", $new_name, $new_email, $admin_id);
+            $up->execute();
             $_SESSION['username'] = $new_name;
             $admin['username'] = $new_name;
             $admin['email'] = $new_email;
@@ -88,16 +98,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     } elseif ($new_pw !== $confirm) {
         $err = 'New passwords do not match.';
     } else {
-        $hash_row = $pdo->prepare("SELECT password FROM users WHERE id = ?");
-        $hash_row->execute([$admin_id]);
-        $current_hash = $hash_row->fetchColumn();
+        $hash_row = $db->prepare("SELECT password FROM users WHERE id = ?");
+        $hash_row->bind_param("i", $admin_id);
+        $hash_row->execute();
+        $res = $hash_row->get_result();
+        $row = $res ? $res->fetch_row() : null;
+        $current_hash = $row[0] ?? '';
 
         if (!password_verify($current, $current_hash)) {
             $err = 'Current password is incorrect.';
         } else {
             $new_hash = password_hash($new_pw, PASSWORD_DEFAULT);
-            $pdo->prepare("UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?")
-                ->execute([$new_hash, $admin_id]);
+            $up = $db->prepare("UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?");
+            $up->bind_param("si", $new_hash, $admin_id);
+            $up->execute();
             $_SESSION['is_first_login'] = false;
             $msg = 'Password changed successfully.';
         }
@@ -114,10 +128,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_defaults'])) {
     } elseif (strlen($d_student) < 6 || strlen($d_sup) < 6) {
         $err = 'Default passwords must be at least 6 characters.';
     } else {
-        $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_student_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")
-            ->execute([$d_student]);
-        $pdo->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_supervisor_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)")
-            ->execute([$d_sup]);
+        $st1 = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_student_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $st1->bind_param("s", $d_student);
+        $st1->execute();
+
+        $st2 = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_supervisor_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+        $st2->bind_param("s", $d_sup);
+        $st2->execute();
+
         $default_student_pw = $d_student;
         $default_supervisor_pw = $d_sup;
         $msg = 'Default passwords updated.';
@@ -148,9 +166,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                     if (file_exists($old_path)) unlink($old_path);
                 }
                 try {
-                    $pdo->prepare("UPDATE users SET profile_pic = ? WHERE id = ?")
-                        ->execute([$filename, $admin_id]);
-                } catch (PDOException $e) {
+                    $up = $db->prepare("UPDATE users SET profile_pic = ? WHERE id = ?");
+                    $up->bind_param("si", $filename, $admin_id);
+                    $up->execute();
+                } catch (Throwable $e) {
                     $avatar_msg = 'Avatar uploaded but database column not ready. Run migration SQL.';
                 }
                 $profile_pic = $filename;
@@ -170,13 +189,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     $portfolio = trim($_POST['portfolio_link'] ?? '');
 
     try {
-        $pdo->prepare("UPDATE users SET github_link = ?, linkedin_link = ?, portfolio_link = ? WHERE id = ?")
-            ->execute([$github, $linkedin, $portfolio, $admin_id]);
+        $up = $db->prepare("UPDATE users SET github_link = ?, linkedin_link = ?, portfolio_link = ? WHERE id = ?");
+        $up->bind_param("sssi", $github, $linkedin, $portfolio, $admin_id);
+        $up->execute();
         $github_link   = $github;
         $linkedin_link = $linkedin;
         $portfolio_link = $portfolio;
         $portfolio_msg = 'Portfolio links updated successfully.';
-    } catch (PDOException $e) {
+    } catch (Throwable $e) {
         $portfolio_msg = 'Database columns not ready yet. Run migration SQL first.';
     }
 }

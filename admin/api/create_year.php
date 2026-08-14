@@ -13,7 +13,7 @@
  * Response: JSON { success, id, year_label, message | error }
  */
 
-require_once __DIR__ . '/../../config/database.php';
+require_once __DIR__ . '/../../config/db.php';
 require_once __DIR__ . '/../../auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -35,6 +35,7 @@ if (($_SESSION['role'] ?? '') !== 'admin') {
 $label = trim($_POST['year_label'] ?? '');
 $start = trim($_POST['start_date'] ?? '');
 $end   = trim($_POST['end_date'] ?? '');
+$db    = $mysqli ?? $conn;
 
 // ── Validation ──────────────────────────────────────────────────
 $errors = [];
@@ -86,26 +87,29 @@ if (!empty($errors)) {
 
 // ── Insert (in transaction) ────────────────────────────────────
 try {
-    $pdo->beginTransaction();
+    $db->begin_transaction();
 
     // Check duplicate label (within transaction for consistency)
-    $dup = $pdo->prepare("SELECT id FROM academic_years WHERE year_label = ? FOR UPDATE");
-    $dup->execute([$label]);
-    if ($dup->fetch()) {
-        $pdo->rollBack();
+    $dup = $db->prepare("SELECT id FROM academic_years WHERE year_label = ? FOR UPDATE");
+    $dup->bind_param("s", $label);
+    $dup->execute();
+    $res = $dup->get_result();
+    if ($res && $res->fetch_row()) {
+        $db->rollback();
         echo json_encode(['success' => false, 'error' => "Academic year \"{$label}\" already exists."]);
         exit;
     }
 
-    $ins = $pdo->prepare("
+    $ins = $db->prepare("
         INSERT INTO academic_years (year_label, start_date, end_date, status, is_current)
         VALUES (?, ?, ?, 'UPCOMING', 0)
     ");
-    $ins->execute([$label, $start, $end]);
+    $ins->bind_param("sss", $label, $start, $end);
+    $ins->execute();
 
-    $new_id = (int) $pdo->lastInsertId();
+    $new_id = (int) $db->insert_id;
 
-    $pdo->commit();
+    $db->commit();
 
     echo json_encode([
         'success'    => true,
@@ -117,9 +121,7 @@ try {
         'message'    => "Academic year {$label} created as UPCOMING.",
     ]);
 
-} catch (Exception $e) {
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
+} catch (Throwable $e) {
+    @$db->rollback();
     echo json_encode(['success' => false, 'error' => 'Failed to create academic year: ' . $e->getMessage()]);
 }

@@ -1,50 +1,50 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $user_id       = $_SESSION['user_id'];
+$username      = $_SESSION['username'];
 $internship_id = $user_id;
 
-// ══════════════════════════════════════════════════════════════════════
+$db = $mysqli ?? $conn;
+
 // FETCH INTERNSHIP DATE RANGE
-// ══════════════════════════════════════════════════════════════════════
-$esc_uid = $conn->real_escape_string($user_id);
-$profile_r = $conn->query("SELECT sp.full_name, sp.internship_start_date, sp.internship_end_date,
+$profile_stmt = $db->prepare("SELECT sp.full_name, sp.internship_start_date, sp.internship_end_date,
     sp.company_name, sp.job_role, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
-    WHERE sp.user_id = {$esc_uid}");
-$profile_row = $profile_r ? $profile_r->fetch_assoc() : null;
+    WHERE sp.user_id = ?");
+$profile_stmt->bind_param("i", $user_id);
+$profile_stmt->execute();
+$res = $profile_stmt->get_result();
+$profile_row = $res ? $res->fetch_assoc() : null;
 $intern_start = $profile_row['internship_start_date'] ?? null;
 $intern_end   = $profile_row['internship_end_date'] ?? null;
-$student_name = $profile_row['full_name'] ?? $username;
+$student_name = ($profile_row['full_name'] ?? '') ?: $username;
 $profile_pic  = $profile_row['profile_pic'] ?? null;
 
-// ══════════════════════════════════════════════════════════════════════
 // FETCH PUBLIC HOLIDAYS
-// ══════════════════════════════════════════════════════════════════════
-$all_holidays = [];
-$hol_r = $conn->query("SELECT holiday_date, holiday_name FROM holidays ORDER BY holiday_date ASC");
-if ($hol_r) { while ($row = $hol_r->fetch_assoc()) { $all_holidays[] = $row; } }
+$hol_stmt = $db->query("SELECT holiday_date, holiday_name FROM holidays ORDER BY holiday_date ASC");
+$all_holidays = $hol_stmt ? $hol_stmt->fetch_all(MYSQLI_ASSOC) : [];
 $holiday_dates = [];
 foreach ($all_holidays as $hl) { $holiday_dates[$hl['holiday_date']] = $hl['holiday_name']; }
 $holiday_date_list = array_keys($holiday_dates);
 
-// ══════════════════════════════════════════════════════════════════════
 // FETCH EXISTING LOG DATES
-// ══════════════════════════════════════════════════════════════════════
-$esc_iid = $conn->real_escape_string($internship_id);
-$log_dates_r = $conn->query("SELECT log_date FROM daily_logs WHERE internship_id = {$esc_iid}");
+$log_dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ?");
+$log_dates_stmt->bind_param("i", $internship_id);
+$log_dates_stmt->execute();
+$res = $log_dates_stmt->get_result();
 $existing_logs = [];
-if ($log_dates_r) {
-    while ($row = $log_dates_r->fetch_assoc()) {
-        $existing_logs[] = $row['log_date'];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $existing_logs[] = $row[0];
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // BUILD WEEK RANGES
-// ══════════════════════════════════════════════════════════════════════
 $weeks = [];
 if ($intern_start) {
     $w = 1;
@@ -60,55 +60,51 @@ if ($intern_start) {
 $progress_weeks_completed = 0;
 $progress_total_weeks = count($weeks);
 if (!empty($weeks)) {
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
-        $esc_wk_s = $conn->real_escape_string($wr['start']);
-        $esc_wk_e = $conn->real_escape_string($wr['end']);
-        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
-        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+        $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
+        $wc_stmt->execute();
+        $res = $wc_stmt->get_result();
+        $wc_row = $res ? $res->fetch_row() : null;
+        if ((int) ($wc_row[0] ?? 0) > 0) {
             $progress_weeks_completed++;
         }
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // SELECTED WEEK & LOCK STATUS
-// ══════════════════════════════════════════════════════════════════════
 $selected_week = (int) ($_GET['week'] ?? $_POST['selected_week'] ?? 0);
 if ($selected_week < 1 || $selected_week > count($weeks)) {
     $selected_week = count($weeks) > 0 ? count($weeks) : 1;
 }
 
-// Check if logs are locked for this week (student signed and not rejected)
 $log_locked = false;
-$esc_sw = $conn->real_escape_string($selected_week);
-$lock_r = $conn->query("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_sw}");
-if ($lock_r && $lock_r->num_rows > 0) {
-    $lock_row = $lock_r->fetch_assoc();
-    if (!empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
-        $log_locked = true;
-    }
+$lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+$lock_stmt->bind_param("ii", $internship_id, $selected_week);
+$lock_stmt->execute();
+$res = $lock_stmt->get_result();
+$lock_row = $res ? $res->fetch_assoc() : null;
+if ($lock_row && !empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
+    $log_locked = true;
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// HANDLE FORM SUBMISSIONS
-// ══════════════════════════════════════════════════════════════════════
 $error   = '';
 $success = '';
 
-// ── ADD LOG ──────────────────────────────────────────────────────
+// ADD LOG
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
     $add_week = (int) ($_POST['selected_week'] ?? 0);
     if ($add_week > 0) {
-        $esc_aw = $conn->real_escape_string($add_week);
-        $add_lock_r = $conn->query("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_aw}");
-        if ($add_lock_r && $add_lock_r->num_rows > 0) {
-            $add_lock_row = $add_lock_r->fetch_assoc();
-            if (!empty($add_lock_row['student_signature_type']) && !empty($add_lock_row['student_signature_value']) && $add_lock_row['report_status'] !== 'rejected') {
-                $error = 'This week has been signed and cannot be edited.';
-            }
+        $add_lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $add_lock_stmt->bind_param("ii", $internship_id, $add_week);
+        $add_lock_stmt->execute();
+        $res = $add_lock_stmt->get_result();
+        $add_lock_row = $res ? $res->fetch_assoc() : null;
+        if ($add_lock_row && !empty($add_lock_row['student_signature_type']) && !empty($add_lock_row['student_signature_value']) && $add_lock_row['report_status'] !== 'rejected') {
+            $error = 'This week has been signed and cannot be edited.';
         }
     }
-    $log_date      = trim($_POST['log_date'] ?? '');
+    $log_date = trim($_POST['log_date'] ?? '');
 
     if ($selected_week < 1 || $selected_week > count($weeks)) {
         $error = 'Invalid week selection.';
@@ -119,9 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
         if (!$week_range || $log_date < $week_range['start'] || $log_date > $week_range['end']) {
             $error = "Date must be between {$week_range['start']} and {$week_range['end']} (Week {$selected_week}).";
         } else {
-            $esc_log = $conn->real_escape_string($log_date);
-            $dup_r = $conn->query("SELECT id FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date = '{$esc_log}' LIMIT 1");
-            if ($dup_r && $dup_r->num_rows > 0) {
+            $dup_stmt = $db->prepare("SELECT id FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
+            $dup_stmt->bind_param("is", $internship_id, $log_date);
+            $dup_stmt->execute();
+            $res = $dup_stmt->get_result();
+            if ($res && $res->fetch_row()) {
                 $error = "duplicate_log";
             } else {
                 $attendance_status  = trim($_POST['attendance_status'] ?? 'present');
@@ -150,21 +148,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
                     $hours_worked     = '00:00';
                 }
 
-                $esc_att  = $conn->real_escape_string($attendance_status);
-                $esc_rfa  = $conn->real_escape_string($reason_for_absence);
-                $esc_it   = $conn->real_escape_string($intended_task);
-                $esc_td   = $conn->real_escape_string($task_detail);
-                $esc_at   = $conn->real_escape_string($actual_task);
-                $esc_tu   = $conn->real_escape_string($tools_used);
-                $esc_kg   = $conn->real_escape_string($knowledge_gained);
-                $esc_hw   = $conn->real_escape_string($hours_worked);
-                $esc_ld   = $conn->real_escape_string($log_date);
-
-                $conn->query("INSERT INTO daily_logs
+                $ins_stmt = $db->prepare("INSERT INTO daily_logs
                     (internship_id, log_date, attendance_status, reason_for_absence,
                      task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
-                    VALUES ({$esc_iid}, '{$esc_ld}', '{$esc_att}', '{$esc_rfa}',
-                            '{$esc_it}', '{$esc_td}', '{$esc_at}', '{$esc_tu}', '{$esc_kg}', '{$esc_hw}')");
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins_stmt->bind_param("isssssssss",
+                    $internship_id, $log_date, $attendance_status, $reason_for_absence,
+                    $intended_task, $task_detail, $actual_task, $tools_used, $knowledge_gained, $hours_worked
+                );
+                $ins_stmt->execute();
 
                 $success = "Daily log for {$log_date} saved successfully.";
                 $existing_logs[] = $log_date;
@@ -174,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
     }
 }
 
-// ── UPDATE LOG ──────────────────────────────────────────────────
+// UPDATE LOG
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
     $edit_id           = (int) ($_POST['log_id'] ?? 0);
     $log_date          = trim($_POST['log_date'] ?? '');
@@ -187,7 +179,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
     $knowledge_gained  = trim($_POST['knowledge_gained'] ?? '');
     $hours_worked      = trim($_POST['hours_worked'] ?? '00:00');
 
-    // Check if this log is locked (student signed and not rejected)
     if ($edit_id && $log_locked) {
         $error = 'This week has been signed and cannot be edited.';
     }
@@ -205,52 +196,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
             $knowledge_gained = 'N/A - Absent';
             $hours_worked     = '00:00';
         }
-        $esc_att  = $conn->real_escape_string($attendance_status);
-        $esc_rfa  = $conn->real_escape_string($reason_for_absence);
-        $esc_it   = $conn->real_escape_string($intended_task);
-        $esc_td   = $conn->real_escape_string($task_detail);
-        $esc_at   = $conn->real_escape_string($actual_task);
-        $esc_tu   = $conn->real_escape_string($tools_used);
-        $esc_kg   = $conn->real_escape_string($knowledge_gained);
-        $esc_hw   = $conn->real_escape_string($hours_worked);
-        $esc_ld   = $conn->real_escape_string($log_date);
-        $esc_eid  = $conn->real_escape_string($edit_id);
-
-        $conn->query("UPDATE daily_logs SET
-            log_date = '{$esc_ld}', attendance_status = '{$esc_att}', reason_for_absence = '{$esc_rfa}',
-            task_title = '{$esc_it}', task_detail = '{$esc_td}', tasks_performed = '{$esc_at}',
-            tools_used = '{$esc_tu}', learnt_skills = '{$esc_kg}', calculated_duration = '{$esc_hw}'
-            WHERE id = {$esc_eid} AND internship_id = {$esc_iid}");
+        $upd_stmt = $db->prepare("UPDATE daily_logs SET
+            log_date = ?, attendance_status = ?, reason_for_absence = ?,
+            task_title = ?, task_detail = ?, tasks_performed = ?,
+            tools_used = ?, learnt_skills = ?, calculated_duration = ?
+            WHERE id = ? AND internship_id = ?");
+        $upd_stmt->bind_param("sssssssssii",
+            $log_date, $attendance_status, $reason_for_absence,
+            $intended_task, $task_detail, $actual_task,
+            $tools_used, $knowledge_gained, $hours_worked,
+            $edit_id, $internship_id
+        );
+        $upd_stmt->execute();
         $success = "Daily log for {$log_date} updated successfully.";
     }
 }
 
-// ── DELETE LOG ──────────────────────────────────────────────────
+// DELETE LOG
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_log'])) {
     $del_id = (int) ($_POST['log_id'] ?? 0);
     if ($del_id) {
-        // Check if this log is locked (student signed and not rejected)
         if ($log_locked) {
             $error = 'This week has been signed and cannot be edited.';
         } else {
-            $esc_del = $conn->real_escape_string($del_id);
-            $conn->query("DELETE FROM daily_logs WHERE id = {$esc_del} AND internship_id = {$esc_iid}");
+            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND internship_id = ?");
+            $del_stmt->bind_param("ii", $del_id, $internship_id);
+            $del_stmt->execute();
             $success = 'Log entry deleted.';
         }
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
 // EDIT MODE
-// ══════════════════════════════════════════════════════════════════════
 $editing_log = null;
 $edit_att = 'present';
 if (isset($_GET['edit'])) {
-    $esc_edit_id = $conn->real_escape_string((int)$_GET['edit']);
-    $edit_r = $conn->query("SELECT * FROM daily_logs WHERE id = {$esc_edit_id} AND internship_id = {$esc_iid}");
-    $editing_log = ($edit_r && $edit_r->num_rows > 0) ? $edit_r->fetch_assoc() : null;
+    $edit_id = (int)$_GET['edit'];
+    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND internship_id = ?");
+    $edit_stmt->bind_param("ii", $edit_id, $internship_id);
+    $edit_stmt->execute();
+    $res = $edit_stmt->get_result();
+    $editing_log = $res ? $res->fetch_assoc() : null;
     if ($editing_log) {
-        // Check if this log is locked (student signed and not rejected)
         if ($log_locked) {
             $editing_log = null;
             $error = 'This week has been signed and cannot be edited.';
@@ -260,24 +247,18 @@ if (isset($_GET['edit'])) {
     }
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// TABLE DATA: Fetch all logs for table
-// ══════════════════════════════════════════════════════════════════════
-$all_logs_r = $conn->query("SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} ORDER BY log_date ASC");
-$recent_logs = [];
-if ($all_logs_r) {
-    while ($row = $all_logs_r->fetch_assoc()) {
-        $recent_logs[] = $row;
-    }
-}
+// TABLE DATA
+$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$all_logs_stmt->bind_param("i", $internship_id);
+$all_logs_stmt->execute();
+$res = $all_logs_stmt->get_result();
+$recent_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-// Build log-by-date for table
 $log_by_date = [];
 foreach ($recent_logs as $log) {
     $log_by_date[$log['log_date']] = $log;
 }
 
-// Generate dates for selected week
 $week_dates = [];
 if (!empty($weeks[$selected_week])) {
     $ws = new DateTime($weeks[$selected_week]['start']);
@@ -333,6 +314,7 @@ if (!empty($weeks[$selected_week])) {
         #logDateWrap { position: relative; }
         #logDateWrap .fp-input { padding-right: 2.5rem; }
         .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+        html { scrollbar-gutter: stable; overflow-y: scroll; }
         .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
         .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
         .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
@@ -347,12 +329,12 @@ if (!empty($weeks[$selected_week])) {
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 glass-sidebar flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">InternReport</span>
+    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
+        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+            <span class="font-black text-white tracking-tight text-lg">InternReport</span>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
-            <a href="student-dashboard.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+            <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
             </a>
             <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
@@ -382,13 +364,13 @@ if (!empty($weeks[$selected_week])) {
         <?php $pageTitle = 'Daily Log'; $show_back_link = true; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6 no-print">
-            <div class="max-w-5xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto p-6 md:p-8 no-print">
+            <div class="max-w-7xl mx-auto w-full space-y-6">
 
                 <!-- Header -->
-                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6">
-                    <h1 class="text-lg font-black text-slate-800 mb-1">Daily Log Sheet</h1>
-                    <p class="text-xs text-slate-400 leading-relaxed">
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <h1 class="text-xl font-bold text-slate-800 mb-1">Daily Log Sheet</h1>
+                    <p class="text-xs text-gray-400 leading-relaxed">
                         Select a <strong class="text-slate-600">Week</strong> first, then pick a valid <strong class="text-slate-600">Date</strong>.
                         Weekends, public holidays, and previously submitted dates are greyed out.
                     </p>
@@ -399,7 +381,7 @@ if (!empty($weeks[$selected_week])) {
                 <div class="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
                     <div class="w-8 h-8 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-sm shrink-0">✕</div>
                     <div>
-                        <h3 class="text-xs font-bold text-red-700">Validation Error</h3>
+                        <h3 class="text-xs font-semibold text-red-700 uppercase tracking-wider">Validation Error</h3>
                         <p class="text-xs text-red-600 mt-0.5"><?= htmlspecialchars($error) ?></p>
                     </div>
                 </div>
@@ -409,7 +391,7 @@ if (!empty($weeks[$selected_week])) {
                 <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-start gap-3">
                     <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-500 flex items-center justify-center text-sm shrink-0">✓</div>
                     <div>
-                        <h3 class="text-xs font-bold text-emerald-700">Success</h3>
+                        <h3 class="text-xs font-semibold text-emerald-700 uppercase tracking-wider">Success</h3>
                         <p class="text-xs text-emerald-600 mt-0.5"><?= htmlspecialchars($success) ?></p>
                     </div>
                 </div>
@@ -421,14 +403,14 @@ if (!empty($weeks[$selected_week])) {
                     <div class="flex items-center gap-3">
                         <svg class="w-6 h-6 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h.01M5 21h14a2 2 0 001.71-3L13.71 4.86a2 2 0 00-3.42 0L3.29 18a2 2 0 001.71 3z"/></svg>
                         <div>
-                            <h2 class="text-sm font-black text-amber-800 uppercase tracking-wider">Week <?= $selected_week ?> is Locked</h2>
+                            <h2 class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Week <?= $selected_week ?> is Locked</h2>
                             <p class="text-xs text-amber-600 mt-1">You have signed this week's report. Daily logs cannot be edited until the instructor reviews and rejects the report.</p>
                         </div>
                     </div>
                 </div>
                 <?php endif; ?>
-                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-6 <?= $log_locked ? 'hidden' : '' ?>">
-                    <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= $log_locked ? 'hidden' : '' ?>">
+                    <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
                         <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg> <?= $editing_log ? 'Edit Log Entry' : 'New Log Entry' ?>
                     </h2>
 

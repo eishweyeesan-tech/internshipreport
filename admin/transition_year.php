@@ -3,7 +3,7 @@
  * transition_year.php – Safely transition academic years.
  *
  * Archives the current ACTIVE year and promotes a selected UPCOMING
- * year to ACTIVE. Uses PDO transactions with row-level locking to
+ * year to ACTIVE. Uses MySQLi transactions with row-level locking to
  * prevent race conditions during concurrent admin requests.
  *
  * POST params:
@@ -12,7 +12,7 @@
  * Response: JSON { success, archived, activated | error }
  */
 
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 
 header('Content-Type: application/json; charset=utf-8');
@@ -31,6 +31,7 @@ if (($_SESSION['role'] ?? '') !== 'admin') {
 }
 
 $upcoming_id = (int) ($_POST['upcoming_year_id'] ?? 0);
+$db          = $mysqli ?? $conn;
 
 if ($upcoming_id <= 0) {
     echo json_encode(['success' => false, 'error' => 'No upcoming year selected.']);
@@ -39,12 +40,10 @@ if ($upcoming_id <= 0) {
 
 // ── Transition (single transaction with row-level locks) ────────
 try {
-    $pdo->beginTransaction();
+    $db->begin_transaction();
 
     // 1. Lock and fetch the currently ACTIVE year
-    //    FOR UPDATE prevents two concurrent transitions from both
-    //    seeing the same ACTIVE row and double-archiving.
-    $cur_stmt = $pdo->prepare("
+    $cur_stmt = $db->prepare("
         SELECT id, year_label
         FROM academic_years
         WHERE status = 'ACTIVE' AND is_current = 1
@@ -52,21 +51,24 @@ try {
         FOR UPDATE
     ");
     $cur_stmt->execute();
-    $cur = $cur_stmt->fetch();
+    $res = $cur_stmt->get_result();
+    $cur = $res ? $res->fetch_assoc() : null;
 
     // 2. Lock and validate the target UPCOMING year
-    $next_stmt = $pdo->prepare("
+    $next_stmt = $db->prepare("
         SELECT id, year_label
         FROM academic_years
         WHERE id = ? AND status = 'UPCOMING'
         LIMIT 1
         FOR UPDATE
     ");
-    $next_stmt->execute([$upcoming_id]);
-    $next = $next_stmt->fetch();
+    $next_stmt->bind_param("i", $upcoming_id);
+    $next_stmt->execute();
+    $res = $next_stmt->get_result();
+    $next = $res ? $res->fetch_assoc() : null;
 
     if (!$next) {
-        $pdo->rollBack();
+        $db->rollback();
         echo json_encode([
             'success' => false,
             'error'   => 'Selected year is not UPCOMING or does not exist.',
@@ -74,9 +76,9 @@ try {
         exit;
     }
 
-    // Prevent transitioning a year onto itself (shouldn't happen, but defensive)
+    // Prevent transitioning a year onto itself
     if ($cur && (int) $cur['id'] === $upcoming_id) {
-        $pdo->rollBack();
+        $db->rollback();
         echo json_encode([
             'success' => false,
             'error'   => 'Cannot transition a year onto itself.',
@@ -86,52 +88,64 @@ try {
 
     // 3. Archive the current ACTIVE year
     if ($cur) {
-        $pdo->prepare("
+        $cur_id = (int) $cur['id'];
+        $stmt1 = $db->prepare("
             UPDATE academic_years
             SET status = 'ARCHIVED', is_current = 0
             WHERE id = ?
-        ")->execute([$cur['id']]);
+        ");
+        $stmt1->bind_param("i", $cur_id);
+        $stmt1->execute();
 
         // Batch-archive students linked to this year via FK
-        $pdo->prepare("
+        $stmt2 = $db->prepare("
             UPDATE users SET status = 'Archived'
             WHERE academic_year_id = ?
               AND role = 'student'
               AND status = 'Active'
-        ")->execute([$cur['id']]);
+        ");
+        $stmt2->bind_param("i", $cur_id);
+        $stmt2->execute();
 
         // Fallback: archive by string label for rows where FK was never backfilled
-        $pdo->prepare("
+        $stmt3 = $db->prepare("
             UPDATE users SET status = 'Archived'
             WHERE academic_year = ?
               AND academic_year_id IS NULL
               AND role = 'student'
               AND status = 'Active'
-        ")->execute([$cur['year_label']]);
+        ");
+        $stmt3->bind_param("s", $cur['year_label']);
+        $stmt3->execute();
     }
 
     // 4. Promote the selected UPCOMING year to ACTIVE
-    $pdo->prepare("
+    $stmt4 = $db->prepare("
         UPDATE academic_years
         SET status = 'ACTIVE', is_current = 1
         WHERE id = ?
-    ")->execute([$upcoming_id]);
+    ");
+    $stmt4->bind_param("i", $upcoming_id);
+    $stmt4->execute();
 
     // 5. Belt & suspenders: ensure no other rows have is_current = 1
-    $pdo->prepare("
+    $stmt5 = $db->prepare("
         UPDATE academic_years
         SET is_current = 0
         WHERE id != ? AND is_current = 1
-    ")->execute([$upcoming_id]);
+    ");
+    $stmt5->bind_param("i", $upcoming_id);
+    $stmt5->execute();
 
     // 6. Also sync is_current for any rows that are ARCHIVED but still marked current
-    $pdo->prepare("
+    $stmt6 = $db->prepare("
         UPDATE academic_years
         SET is_current = 0
         WHERE status != 'ACTIVE' AND is_current = 1
-    ")->execute();
+    ");
+    $stmt6->execute();
 
-    $pdo->commit();
+    $db->commit();
 
     // 7. Update session to reflect the new active year
     $_SESSION['selected_academic_year_id']   = $upcoming_id;
@@ -145,10 +159,8 @@ try {
                      . ($cur ? " Previous year {$cur['year_label']} archived." : ''),
     ]);
 
-} catch (Exception $e) {
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
+} catch (Throwable $e) {
+    @$db->rollback();
     echo json_encode([
         'success' => false,
         'error'   => 'Transition failed: ' . $e->getMessage(),

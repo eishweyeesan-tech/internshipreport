@@ -1,9 +1,11 @@
 <?php
-require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/includes/ui_helpers.php';
 
 $uid = (int) ($_GET['uid'] ?? 0);
+$db  = $mysqli ?? $conn;
+
 if ($uid <= 0) {
     $role = $_SESSION['role'] ?? '';
     if ($role === 'admin') header('Location: admin/admin-dashboard.php');
@@ -13,7 +15,7 @@ if ($uid <= 0) {
 }
 
 // ── Fetch Student Profile ────────────────────────────────────────
-$stu = $pdo->prepare("
+$stu = $db->prepare("
     SELECT u.id, u.username, u.email, u.academic_year, u.created_at,
            sp.full_name, sp.student_roll, sp.major, sp.company_name,
            sp.job_role, sp.instructor_name, sp.internship_start_date,
@@ -24,8 +26,10 @@ $stu = $pdo->prepare("
     LEFT JOIN users sup_u ON sup_u.id = sp2.supervisor_id
     WHERE u.id = ? AND u.role = 'student'
 ");
-$stu->execute([$uid]);
-$student = $stu->fetch();
+$stu->bind_param("i", $uid);
+$stu->execute();
+$res = $stu->get_result();
+$student = $res ? $res->fetch_assoc() : null;
 
 if (!$student) {
     $role = $_SESSION['role'] ?? '';
@@ -38,9 +42,16 @@ if (!$student) {
 $student_name = $student['full_name'] ?: $student['username'];
 
 // ── Compute Week Ranges ──────────────────────────────────────────
-$all_dates = $pdo->prepare("SELECT DISTINCT log_date FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
-$all_dates->execute([$uid]);
-$log_dates = $all_dates->fetchAll(PDO::FETCH_COLUMN);
+$all_dates = $db->prepare("SELECT DISTINCT log_date FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$all_dates->bind_param("i", $uid);
+$all_dates->execute();
+$res = $all_dates->get_result();
+$log_dates = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $log_dates[] = $row[0];
+    }
+}
 
 $weeks = [];
 if (!empty($log_dates)) {
@@ -57,17 +68,23 @@ if (!empty($log_dates)) {
 }
 
 // ── Fetch All Logs, Reflections, Evaluations ─────────────────────
-$all_logs = $pdo->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
-$all_logs->execute([$uid]);
-$all_logs = $all_logs->fetchAll();
+$all_logs_q = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$all_logs_q->bind_param("i", $uid);
+$all_logs_q->execute();
+$res = $all_logs_q->get_result();
+$all_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$all_refs = $pdo->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? ORDER BY week_number ASC");
-$all_refs->execute([$uid]);
-$all_refs = $all_refs->fetchAll();
+$all_refs_q = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? ORDER BY week_number ASC");
+$all_refs_q->bind_param("i", $uid);
+$all_refs_q->execute();
+$res = $all_refs_q->get_result();
+$all_refs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$all_evals = $pdo->prepare("SELECT * FROM report_evaluations WHERE student_id = ? ORDER BY week_number ASC");
-$all_evals->execute([$uid]);
-$all_evals = $all_evals->fetchAll();
+$all_evals_q = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? ORDER BY week_number ASC");
+$all_evals_q->bind_param("i", $uid);
+$all_evals_q->execute();
+$res = $all_evals_q->get_result();
+$all_evals = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 $eval_by_week = [];
 foreach ($all_evals as $ev) {
     $eval_by_week[$ev['week_number']] = $ev;
@@ -93,13 +110,19 @@ foreach ($all_refs as $ref) {
 }
 
 // ── Overall Stats ────────────────────────────────────────────────
-$present_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
-$present_q->execute([$uid]);
-$total_present = (int) $present_q->fetchColumn();
+$present_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
+$present_q->bind_param("i", $uid);
+$present_q->execute();
+$res = $present_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_present = (int) ($row[0] ?? 0);
 
-$absent_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
-$absent_q->execute([$uid]);
-$total_absent = (int) $absent_q->fetchColumn();
+$absent_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
+$absent_q->bind_param("i", $uid);
+$absent_q->execute();
+$res = $absent_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_absent = (int) ($row[0] ?? 0);
 
 $total_logs = count($all_logs);
 $total_weeks = count($weeks);

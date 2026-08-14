@@ -2,11 +2,11 @@
 /**
  * ay_helper.php – Academic year filter helper.
  *
- * Include AFTER database.php and init_year.php.
+ * Include AFTER db.php and init_year.php.
  *
  * Provides:
  *   get_current_ay_id()          – returns the active year ID (int|null)
- *   get_ay_filter($pdo, $table) – returns ['sql' => 'AND ...', 'params' => [...]]
+ *   get_ay_filter($db, $table)   – returns ['sql' => 'AND ...', 'params' => [...]]
  */
 
 /**
@@ -27,16 +27,11 @@ function get_current_ay_id(): ?int {
  *
  * If no year is selected, returns an empty fragment (no filter applied).
  *
- * Usage:
- *   $ay = get_ay_filter($pdo);
- *   $sql = "SELECT ... FROM users u WHERE u.role = 'student'" . $ay['sql'];
- *   $stmt->execute($ay['params']);
- *
- * @param PDO    $pdo   Database connection (used only to verify the column exists)
+ * @param mysqli $db    Database connection (optional)
  * @param string $table The table alias or name that owns the academic_year_id column
  *                      (defaults to 'u' for the users table)
  */
-function get_ay_filter(PDO $pdo, string $table = 'u'): array {
+function get_ay_filter($db = null, string $table = 'u'): array {
     $ay_id = get_current_ay_id();
 
     if ($ay_id === null) {

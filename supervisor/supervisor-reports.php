@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
@@ -13,21 +13,27 @@ if ($_SESSION['role'] !== 'supervisor') {
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
+$db       = $mysqli ?? $conn;
 
 // ── Notification redirect URL helper ────────────────────────────
 require_once __DIR__ . '/../config/notify.php';
 
 // ── Centralized Notification Action Handler ────────────────────
-handle_notification_ajax_actions($pdo, $sup_id);
+handle_notification_ajax_actions($db, $sup_id);
 
 // ── Fetch notifications ─────────────────────────────────────────
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$sup_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $sup_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$sup_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $sup_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Filters ─────────────────────────────────────────────────────
 $filter_status = $_GET['status'] ?? '';
@@ -42,7 +48,7 @@ $page = (isset($_GET['page']) && (int) $_GET['page'] > 0) ? (int) $_GET['page'] 
 $per_page = 12;
 
 // ── Summary counts (assigned students scope) ───────────────────
-$pending_reviews_q = $pdo->prepare("
+$pending_reviews_q = $db->prepare("
     SELECT COUNT(*) FROM report_evaluations re
     WHERE re.report_status = 'approved_by_instructor'
       AND re.student_id IN (
@@ -55,20 +61,26 @@ $pending_reviews_q = $pdo->prepare("
           WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
-$pending_reviews_q->execute([$sup_id]);
-$pending_reviews = (int) $pending_reviews_q->fetchColumn();
+$pending_reviews_q->bind_param("i", $sup_id);
+$pending_reviews_q->execute();
+$res = $pending_reviews_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$pending_reviews = (int) ($row[0] ?? 0);
 
-$total_reports_q = $pdo->prepare("
+$total_reports_q = $db->prepare("
     SELECT COUNT(*) FROM report_evaluations re
     JOIN users u ON u.id = re.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
 ");
-$total_reports_q->execute([$sup_id]);
-$total_reports = (int) $total_reports_q->fetchColumn();
+$total_reports_q->bind_param("i", $sup_id);
+$total_reports_q->execute();
+$res = $total_reports_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_reports = (int) ($row[0] ?? 0);
 
 // ── Available filter options ────────────────────────────────────
-$weeks_q = $pdo->prepare("
+$weeks_q = $db->prepare("
     SELECT DISTINCT re.week_number
     FROM report_evaluations re
     JOIN users u ON u.id = re.student_id
@@ -76,10 +88,17 @@ $weeks_q = $pdo->prepare("
     WHERE u.role = 'student' AND sp.supervisor_id = ?
     ORDER BY re.week_number DESC
 ");
-$weeks_q->execute([$sup_id]);
-$available_weeks = $weeks_q->fetchAll(PDO::FETCH_COLUMN);
+$weeks_q->bind_param("i", $sup_id);
+$weeks_q->execute();
+$res = $weeks_q->get_result();
+$available_weeks = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $available_weeks[] = $row[0];
+    }
+}
 
-$companies_q = $pdo->prepare("
+$companies_q = $db->prepare("
     SELECT DISTINCT sp.company_name
     FROM student_profiles sp
     JOIN users u ON u.id = sp.user_id
@@ -87,8 +106,15 @@ $companies_q = $pdo->prepare("
       AND sp.company_name IS NOT NULL AND sp.company_name != ''
     ORDER BY sp.company_name ASC
 ");
-$companies_q->execute([$sup_id]);
-$available_companies = $companies_q->fetchAll(PDO::FETCH_COLUMN);
+$companies_q->bind_param("i", $sup_id);
+$companies_q->execute();
+$res = $companies_q->get_result();
+$available_companies = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $available_companies[] = $row[0];
+    }
+}
 
 // ── Main reports query ─────────────────────────────────────────
 $base_sql = "
@@ -103,23 +129,28 @@ $base_sql = "
     WHERE u.role = 'student' AND sp.supervisor_id = ?
 ";
 $where = '';
+$types = 'i';
 $params = [$sup_id];
 
 if ($filter_status) {
     $where .= " AND re.report_status = ?";
+    $types .= "s";
     $params[] = $filter_status;
 }
 if ($filter_week) {
     $where .= " AND re.week_number = ?";
+    $types .= "i";
     $params[] = $filter_week;
 }
 if ($filter_company) {
     $where .= " AND sp.company_name = ?";
+    $types .= "s";
     $params[] = $filter_company;
 }
 if ($search) {
     $where .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ?)";
     $like = '%' . $search . '%';
+    $types .= "ssss";
     array_push($params, $like, $like, $like, $like);
 }
 
@@ -127,17 +158,25 @@ $count_sql = "SELECT COUNT(*) FROM report_evaluations re
               JOIN users u ON u.id = re.student_id
               JOIN student_profiles sp ON sp.user_id = u.id
               WHERE u.role = 'student' AND sp.supervisor_id = ?" . $where;
-$count_stmt = $pdo->prepare($count_sql);
-$count_stmt->execute($params);
-$total_filtered = (int) $count_stmt->fetchColumn();
+$count_stmt = $db->prepare($count_sql);
+$count_stmt->bind_param($types, ...$params);
+$count_stmt->execute();
+$res = $count_stmt->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_filtered = (int) ($row[0] ?? 0);
 $total_pages = max(1, (int) ceil($total_filtered / $per_page));
 $page = min($page, $total_pages);
 $offset = ($page - 1) * $per_page;
 
-$sql = $base_sql . $where . " ORDER BY re.evaluated_at DESC LIMIT $per_page OFFSET $offset";
-$reports_stmt = $pdo->prepare($sql);
-$reports_stmt->execute($params);
-$reports = $reports_stmt->fetchAll();
+$sql = $base_sql . $where . " ORDER BY re.evaluated_at DESC LIMIT ? OFFSET ?";
+$fetch_types = $types . "ii";
+$fetch_params = array_merge($params, [$per_page, $offset]);
+
+$reports_stmt = $db->prepare($sql);
+$reports_stmt->bind_param($fetch_types, ...$fetch_params);
+$reports_stmt->execute();
+$res = $reports_stmt->get_result();
+$reports = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ── Status badge helper ────────────────────────────────────────
 function report_status_badge($status) {

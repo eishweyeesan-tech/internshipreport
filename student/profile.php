@@ -1,7 +1,9 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../includes/phone_validation.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $user_id  = $_SESSION['user_id'];
 $username = $_SESSION['username'];
@@ -12,20 +14,26 @@ if ($role !== 'student') {
     exit;
 }
 
-$esc_uid = $conn->real_escape_string($user_id);
+$db = $mysqli ?? $conn;
 
-// ── Fetch or create profile row ──────────────────────────────────
-$profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
-$profile = $profile_r ? $profile_r->fetch_assoc() : null;
+// Fetch or create profile row
+$profile_stmt = $db->prepare("SELECT * FROM student_profiles WHERE user_id = ?");
+$profile_stmt->bind_param("i", $user_id);
+$profile_stmt->execute();
+$res = $profile_stmt->get_result();
+$profile = $res ? $res->fetch_assoc() : null;
 
 if (!$profile) {
-    $esc_un = $conn->real_escape_string($username);
-    $conn->query("INSERT INTO student_profiles (user_id, full_name) VALUES ({$esc_uid}, '{$esc_un}')");
-    $profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
-    $profile = $profile_r ? $profile_r->fetch_assoc() : null;
+    $ins_prof = $db->prepare("INSERT INTO student_profiles (user_id, full_name) VALUES (?, ?)");
+    $ins_prof->bind_param("is", $user_id, $username);
+    $ins_prof->execute();
+    $profile_stmt->bind_param("i", $user_id);
+    $profile_stmt->execute();
+    $res = $profile_stmt->get_result();
+    $profile = $res ? $res->fetch_assoc() : null;
 }
 
-$student_name = $profile['full_name'] ?? $username;
+$student_name = ($profile['full_name'] ?? '') ?: $username;
 $student_roll = $profile['student_roll'] ?? '';
 $intern_start = $profile['internship_start_date'] ?? null;
 $intern_end   = $profile['internship_end_date'] ?? null;
@@ -45,39 +53,33 @@ if ($intern_start) {
 $progress_weeks_completed = 0;
 $progress_total_weeks = count($weeks);
 if (!empty($weeks)) {
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
-        $esc_wk_s = $conn->real_escape_string($wr['start']);
-        $esc_wk_e = $conn->real_escape_string($wr['end']);
-        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_uid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
-        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+        $wc_stmt->bind_param("iss", $user_id, $wr['start'], $wr['end']);
+        $wc_stmt->execute();
+        $res = $wc_stmt->get_result();
+        $wc_row = $res ? $res->fetch_row() : null;
+        if ((int) ($wc_row[0] ?? 0) > 0) {
             $progress_weeks_completed++;
         }
     }
 }
 
-// ── Fetch user data ─────────────────────────────────────────────
-$user_email    = '';
-$profile_pic   = '';
-$github_link   = '';
-$linkedin_link = '';
-$portfolio_link = '';
-$last_login_at = '';
+// Fetch user data
+$user_stmt = $db->prepare("SELECT email, profile_pic, github_link, linkedin_link, portfolio_link, last_login_at FROM users WHERE id = ?");
+$user_stmt->bind_param("i", $user_id);
+$user_stmt->execute();
+$res = $user_stmt->get_result();
+$user_data = $res ? $res->fetch_assoc() : [];
 
-$user_r = $conn->query("SELECT email, profile_pic, github_link, linkedin_link, portfolio_link, last_login_at FROM users WHERE id = {$esc_uid}");
-if ($user_r && $user_r->num_rows > 0) {
-    $user_data = $user_r->fetch_assoc();
-    $user_email     = $user_data['email'];
-    $profile_pic    = $user_data['profile_pic'] ?? '';
-    $github_link    = $user_data['github_link'] ?? '';
-    $linkedin_link  = $user_data['linkedin_link'] ?? '';
-    $portfolio_link = $user_data['portfolio_link'] ?? '';
-    $last_login_at  = $user_data['last_login_at'] ?? '';
-} else {
-    $email_r = $conn->query("SELECT email FROM users WHERE id = {$esc_uid}");
-    $user_email = ($email_r && $email_r->num_rows > 0) ? $email_r->fetch_row()[0] : '';
-}
+$user_email     = $user_data['email'] ?? '';
+$profile_pic    = $user_data['profile_pic'] ?? '';
+$github_link    = $user_data['github_link'] ?? '';
+$linkedin_link  = $user_data['linkedin_link'] ?? '';
+$portfolio_link = $user_data['portfolio_link'] ?? '';
+$last_login_at  = $user_data['last_login_at'] ?? '';
 
-// ── Handle Profile Update ────────────────────────────────────────
+// Handle Profile Update
 $profile_msg = '';
 $profile_err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
@@ -99,34 +101,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     } elseif ($instructor_err !== null) {
         $profile_err = $instructor_err;
     } else {
-    $phone            = normalize_phone($phone);
-    $instructor_phone = normalize_phone($instructor_phone);
+        $phone            = normalize_phone($phone);
+        $instructor_phone = normalize_phone($instructor_phone);
 
-    $esc_fn  = $conn->real_escape_string($full_name);
-    $esc_sr  = $conn->real_escape_string($student_roll);
-    $esc_mj  = $conn->real_escape_string($major);
-    $esc_ph  = $conn->real_escape_string($phone);
-    $esc_cn  = $conn->real_escape_string($company_name);
-    $esc_jr  = $conn->real_escape_string($job_role);
-    $esc_in  = $conn->real_escape_string($instructor_name);
-    $esc_ie  = $conn->real_escape_string($instructor_email);
-    $esc_ip  = $conn->real_escape_string($instructor_phone);
-    $esc_is  = $conn->real_escape_string($internship_start ?: '');
+        $upd_prof = $db->prepare("UPDATE student_profiles SET
+            full_name = ?, student_roll = ?, major = ?, phone = ?,
+            company_name = ?, job_role = ?, instructor_name = ?,
+            instructor_email = ?, instructor_phone = ?, internship_start_date = ?
+            WHERE user_id = ?");
+        $istart = $internship_start ?: null;
+        $upd_prof->bind_param("ssssssssssi",
+            $full_name, $student_roll, $major, $phone,
+            $company_name, $job_role, $instructor_name,
+            $instructor_email, $instructor_phone, $istart,
+            $user_id
+        );
+        $upd_prof->execute();
 
-    $conn->query("UPDATE student_profiles SET
-        full_name = '{$esc_fn}', student_roll = '{$esc_sr}', major = '{$esc_mj}', phone = '{$esc_ph}',
-        company_name = '{$esc_cn}', job_role = '{$esc_jr}', instructor_name = '{$esc_in}',
-        instructor_email = '{$esc_ie}', instructor_phone = '{$esc_ip}', internship_start_date = " . ($internship_start ? "'{$esc_is}'" : "NULL") . "
-        WHERE user_id = {$esc_uid}");
-
-    // Refresh profile data
-    $profile_r = $conn->query("SELECT * FROM student_profiles WHERE user_id = {$esc_uid}");
-    $profile = $profile_r ? $profile_r->fetch_assoc() : null;
-    $profile_msg = 'saved';
+        $profile_stmt->bind_param("i", $user_id);
+        $profile_stmt->execute();
+        $res = $profile_stmt->get_result();
+        $profile = $res ? $res->fetch_assoc() : null;
+        $profile_msg = 'saved';
     }
 }
 
-// ── Handle Password Change ───────────────────────────────────────
+// Handle Password Change
 $pw_msg = '';
 $pw_err = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
@@ -141,22 +141,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     } elseif ($new_pw !== $confirm) {
         $pw_err = 'New passwords do not match.';
     } else {
-        $check_r = $conn->query("SELECT password FROM users WHERE id = {$esc_uid}");
-        $hash = ($check_r && $check_r->num_rows > 0) ? $check_r->fetch_row()[0] : '';
+        $check_stmt = $db->prepare("SELECT password FROM users WHERE id = ?");
+        $check_stmt->bind_param("i", $user_id);
+        $check_stmt->execute();
+        $res = $check_stmt->get_result();
+        $row = $res ? $res->fetch_row() : null;
+        $hash = $row[0] ?? '';
 
         if (!password_verify($current, $hash)) {
             $pw_err = 'Current password is incorrect.';
         } else {
             $new_hash = password_hash($new_pw, PASSWORD_DEFAULT);
-            $esc_nw = $conn->real_escape_string($new_hash);
-            $conn->query("UPDATE users SET password = '{$esc_nw}', is_first_login = 0 WHERE id = {$esc_uid}");
+            $upd_pw = $db->prepare("UPDATE users SET password = ?, is_first_login = 0 WHERE id = ?");
+            $upd_pw->bind_param("si", $new_hash, $user_id);
+            $upd_pw->execute();
             $_SESSION['is_first_login'] = false;
             $pw_msg = 'Password updated successfully.';
         }
     }
 }
 
-// ── Handle Avatar Upload ─────────────────────────────────────────
+// Handle Avatar Upload
 $avatar_msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
@@ -179,8 +184,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                     $old_path = $upload_dir . $profile_pic;
                     if (file_exists($old_path)) unlink($old_path);
                 }
-                $esc_fn2 = $conn->real_escape_string($filename);
-                $conn->query("UPDATE users SET profile_pic = '{$esc_fn2}' WHERE id = {$esc_uid}");
+                $upd_pic = $db->prepare("UPDATE users SET profile_pic = ? WHERE id = ?");
+                $upd_pic->bind_param("si", $filename, $user_id);
+                $upd_pic->execute();
                 $profile_pic = $filename;
                 $avatar_msg = 'Avatar updated successfully.';
             } else {
@@ -190,17 +196,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     }
 }
 
-// ── Handle Portfolio Links ───────────────────────────────────────
+// Handle Portfolio Links
 $portfolio_msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) {
     $github   = trim($_POST['github_link'] ?? '');
     $linkedin = trim($_POST['linkedin_link'] ?? '');
     $portfolio = trim($_POST['portfolio_link'] ?? '');
 
-    $esc_gh = $conn->real_escape_string($github);
-    $esc_li = $conn->real_escape_string($linkedin);
-    $esc_pl = $conn->real_escape_string($portfolio);
-    $conn->query("UPDATE users SET github_link = '{$esc_gh}', linkedin_link = '{$esc_li}', portfolio_link = '{$esc_pl}' WHERE id = {$esc_uid}");
+    $upd_links = $db->prepare("UPDATE users SET github_link = ?, linkedin_link = ?, portfolio_link = ? WHERE id = ?");
+    $upd_links->bind_param("sssi", $github, $linkedin, $portfolio, $user_id);
+    $upd_links->execute();
     $github_link    = $github;
     $linkedin_link  = $linkedin;
     $portfolio_link = $portfolio;
@@ -221,6 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+    html { scrollbar-gutter: stable; overflow-y: scroll; }
     .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
@@ -272,9 +278,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 glass-sidebar flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">InternReport</span>
+    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
+        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+            <span class="font-black text-white tracking-tight text-lg">InternReport</span>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
@@ -307,8 +313,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
         <?php $pageTitle = 'My Profile'; $show_back_link = true; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6">
-            <div class="max-w-3xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto p-6 md:p-8">
+            <div class="max-w-7xl mx-auto w-full space-y-6">
 
                 <?php if ($profile_msg === 'saved'): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">

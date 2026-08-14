@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
@@ -14,11 +14,15 @@ if ($_SESSION['role'] !== 'supervisor') {
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
+$db       = $mysqli ?? $conn;
 
 // Get supervisor email for alerts
-$sup_email_q = $pdo->prepare("SELECT email FROM users WHERE id = ?");
-$sup_email_q->execute([$sup_id]);
-$sup_email = $sup_email_q->fetchColumn();
+$sup_email_q = $db->prepare("SELECT email FROM users WHERE id = ?");
+$sup_email_q->bind_param("i", $sup_id);
+$sup_email_q->execute();
+$res = $sup_email_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$sup_email = $row[0] ?? '';
 
 // ══════════════════════════════════════════════════════════════════════
 // WARNING NOTIFICATION HANDLER
@@ -27,8 +31,9 @@ $sup_email = $sup_email_q->fetchColumn();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
     $warn_student_id = (int) ($_POST['student_id'] ?? 0);
     if ($warn_student_id > 0) {
-        $warn_q = $pdo->prepare("UPDATE users SET is_warned = 1 WHERE id = ? AND role = 'student'");
-        $warn_q->execute([$warn_student_id]);
+        $warn_q = $db->prepare("UPDATE users SET is_warned = 1 WHERE id = ? AND role = 'student'");
+        $warn_q->bind_param("i", $warn_student_id);
+        $warn_q->execute();
         header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
         exit;
     }
@@ -38,38 +43,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
 require_once __DIR__ . '/../config/notify.php';
 
 // ── Centralized Notification Action Handler ────────────────────
-handle_notification_ajax_actions($pdo, $sup_id);o->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-        $count_q->execute([$sup_id]);
-        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
-        exit;
-    }
-    header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-    exit;
-}
+handle_notification_ajax_actions($db, $sup_id);
 
 // ── Fetch notifications ─────────────────────────────────────────
-$unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-$unread_notif_q->execute([$sup_id]);
-$unread_notif_count = (int) $unread_notif_q->fetchColumn();
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $sup_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
 
-$recent_notifs_q = $pdo->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
-$recent_notifs_q->execute([$sup_id]);
-$recent_notifications = $recent_notifs_q->fetchAll();
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $sup_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ══════════════════════════════════════════════════════════════════════
 // EMAIL ALERT HELPER FUNCTION
 // ══════════════════════════════════════════════════════════════════════
-function sendRedBadgeAlert($pdo, $supervisor_id, $supervisor_name, $supervisor_email, $student_id, $student_name, $student_roll, $company_name) {
+function sendRedBadgeAlert($db, $supervisor_id, $supervisor_name, $supervisor_email, $student_id, $student_name, $student_roll, $company_name) {
     $today = date('Y-m-d');
     $today_display = date('l, d M Y');
 
     // Check if alert already sent today for this student
-    $check = $pdo->prepare("SELECT id FROM supervisor_alerts WHERE supervisor_id = ? AND student_id = ? AND alert_type = 'red_badge' AND alert_date = ?");
-    $check->execute([$supervisor_id, $student_id, $today]);
-    if ($check->fetch()) {
+    $check = $db->prepare("SELECT id FROM supervisor_alerts WHERE supervisor_id = ? AND student_id = ? AND alert_type = 'red_badge' AND alert_date = ?");
+    $check->bind_param("iis", $supervisor_id, $student_id, $today);
+    $check->execute();
+    $res = $check->get_result();
+    if ($res && $res->fetch_row()) {
         return false; // Already sent today
     }
-
 
     // Email subject and body
     $subject = "⚠️ Student Behind Schedule Alert - " . $student_name;
@@ -144,13 +148,15 @@ function sendRedBadgeAlert($pdo, $supervisor_id, $supervisor_name, $supervisor_e
     $email_sent = sendAlertEmail($supervisor_email, $subject, $body, $supervisor_email);
 
     // Record alert in database
-    $insert = $pdo->prepare("INSERT INTO supervisor_alerts (supervisor_id, student_id, alert_type, alert_date, email_sent, sent_at) VALUES (?, ?, 'red_badge', ?, ?, NOW())");
-    $insert->execute([$supervisor_id, $student_id, $today, $email_sent ? 1 : 0]);
+    $insert = $db->prepare("INSERT INTO supervisor_alerts (supervisor_id, student_id, alert_type, alert_date, email_sent, sent_at) VALUES (?, ?, 'red_badge', ?, ?, NOW())");
+    $email_flag = $email_sent ? 1 : 0;
+    $insert->bind_param("iisi", $supervisor_id, $student_id, $today, $email_flag);
+    $insert->execute();
 
-    // In-app notification (once per day — guarded above by supervisor_alerts)
+    // In-app notification
     require_once __DIR__ . '/../config/notify.php';
     notify_user_once(
-        $pdo,
+        $db,
         $supervisor_id,
         'Student Behind Schedule',
         $student_name . ' (' . ($student_roll ?: 'No roll no.') . ') has not submitted any daily logs this week and is behind schedule.',
@@ -173,7 +179,7 @@ $tab = $_GET['tab'] ?? 'dashboard';
 if (!in_array($tab, ['dashboard', 'trainee-archive'])) $tab = 'dashboard';
 
 // Valid academic years for filter dropdown (from dimension table)
-$vy_stmt = $pdo->prepare("
+$vy_stmt = $db->prepare("
     SELECT DISTINCT ay.year_label
     FROM academic_years ay
     INNER JOIN users u ON u.academic_year_id = ay.id
@@ -181,14 +187,27 @@ $vy_stmt = $pdo->prepare("
     WHERE sp.supervisor_id = ?
     ORDER BY ay.year_label DESC
 ");
-$vy_stmt->execute([$sup_id]);
-$valid_years = $vy_stmt->fetchAll(PDO::FETCH_COLUMN);
+$vy_stmt->bind_param("i", $sup_id);
+$vy_stmt->execute();
+$res = $vy_stmt->get_result();
+$valid_years = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $valid_years[] = $row[0];
+    }
+}
 
 // Fallback: if no FK matches, also check string column for legacy data
 if (empty($valid_years)) {
-    $vy_stmt2 = $pdo->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.academic_year IS NOT NULL AND u.academic_year != '' ORDER BY u.academic_year DESC");
-    $vy_stmt2->execute([$sup_id]);
-    $valid_years = $vy_stmt2->fetchAll(PDO::FETCH_COLUMN);
+    $vy_stmt2 = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.academic_year IS NOT NULL AND u.academic_year != '' ORDER BY u.academic_year DESC");
+    $vy_stmt2->bind_param("i", $sup_id);
+    $vy_stmt2->execute();
+    $res = $vy_stmt2->get_result();
+    if ($res) {
+        while ($row = $res->fetch_row()) {
+            $valid_years[] = $row[0];
+        }
+    }
 }
 
 // ── Detect Current Active Academic Year ─────────────────────────────
@@ -209,9 +228,12 @@ $selected_year = $filter_year ?: $current_academic_year;
 // Resolve selected year to academic_year_id for FK-based filtering
 $selected_year_id = null;
 if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
-    $ayid_stmt = $pdo->prepare("SELECT id FROM academic_years WHERE year_label = ?");
-    $ayid_stmt->execute([$selected_year]);
-    $selected_year_id = $ayid_stmt->fetchColumn() ?: null;
+    $ayid_stmt = $db->prepare("SELECT id FROM academic_years WHERE year_label = ?");
+    $ayid_stmt->bind_param("s", $selected_year);
+    $ayid_stmt->execute();
+    $res = $ayid_stmt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $selected_year_id = $row[0] ?? null;
 }
 
 // ── Current Week Boundaries ─────────────────────────────────────────
@@ -229,14 +251,28 @@ $ay_sql    = $selected_year_id ? ' AND u.academic_year_id = ?' : '';
 $ay_params = $selected_year_id ? [$selected_year_id] : [];
 
 // 1. ALL STUDENTS: Count active assigned students for selected year
-$sc = $pdo->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_sql);
-$sc->execute(array_merge([$sup_id], $ay_params));
-$total_assigned = (int) $sc->fetchColumn();
+$sc = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_sql);
+if ($selected_year_id) {
+    $sc->bind_param("ii", $sup_id, $selected_year_id);
+} else {
+    $sc->bind_param("i", $sup_id);
+}
+$sc->execute();
+$res = $sc->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_assigned = (int) ($row[0] ?? 0);
 
 // 2. COMPANIES: Count distinct companies for selected year
-$cc = $pdo->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''" . $ay_sql);
-$cc->execute(array_merge([$sup_id], $ay_params));
-$company_count = (int) $cc->fetchColumn();
+$cc = $db->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''" . $ay_sql);
+if ($selected_year_id) {
+    $cc->bind_param("ii", $sup_id, $selected_year_id);
+} else {
+    $cc->bind_param("i", $sup_id);
+}
+$cc->execute();
+$res = $cc->get_result();
+$row = $res ? $res->fetch_row() : null;
+$company_count = (int) ($row[0] ?? 0);
 
 // 3. TOTAL REPORTS: Count submitted reports (instructor evaluations) from assigned students
 $tr_sql = "
@@ -244,13 +280,19 @@ $tr_sql = "
     JOIN users u ON u.id = re.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay_sql;
-$tr = $pdo->prepare($tr_sql);
-$tr->execute(array_merge([$sup_id], $ay_params));
-$total_reports = (int) $tr->fetchColumn();
+$tr = $db->prepare($tr_sql);
+if ($selected_year_id) {
+    $tr->bind_param("ii", $sup_id, $selected_year_id);
+} else {
+    $tr->bind_param("i", $sup_id);
+}
+$tr->execute();
+$res = $tr->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_reports = (int) ($row[0] ?? 0);
 
 // Build base query for active students in selected year
 $base_where  = "u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_sql;
-$base_params = array_merge([$sup_id], $ay_params);
 
 // ══════════════════════════════════════════════════════════════════════
 // DYNAMIC CURRENT WEEK CALCULATION (per student)
@@ -266,9 +308,15 @@ $stu_detail_sql = "
     WHERE {$base_where}
     ORDER BY sp.full_name ASC
 ";
-$stu_detail_stmt = $pdo->prepare($stu_detail_sql);
-$stu_detail_stmt->execute($base_params);
-$all_students_detail = $stu_detail_stmt->fetchAll();
+$stu_detail_stmt = $db->prepare($stu_detail_sql);
+if ($selected_year_id) {
+    $stu_detail_stmt->bind_param("ii", $sup_id, $selected_year_id);
+} else {
+    $stu_detail_stmt->bind_param("i", $sup_id);
+}
+$stu_detail_stmt->execute();
+$res = $stu_detail_stmt->get_result();
+$all_students_detail = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 $today_obj = new DateTime();
 $today_str = $today_obj->format('Y-m-d');
@@ -293,7 +341,7 @@ foreach ($all_students_detail as $sd) {
             // Notify supervisor that this student's internship is over (once)
             require_once __DIR__ . '/../config/notify.php';
             notify_user_once(
-                $pdo,
+                $db,
                 $sup_id,
                 'Internship Completed',
                 ($sd['full_name'] ?: $sd['username']) . ' has completed their internship (ended ' . $sd['internship_end_date'] . ').',
@@ -309,7 +357,7 @@ foreach ($all_students_detail as $sd) {
 
     $student_dynamic_week[$uid]  = $dynamic_week;
     $student_not_started[$uid]   = $not_started;
-    $student_progress[$uid]      = internship_progress($pdo, $uid, $sd['internship_start_date'], $sd['internship_end_date']);
+    $student_progress[$uid]      = internship_progress($db, $uid, $sd['internship_start_date'], $sd['internship_end_date']);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -321,14 +369,18 @@ $complete = 0;
 $progress_status = [];
 
 $report_status_cache = [];
+$rs_q = $db->prepare("SELECT report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
 foreach ($all_students_detail as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
-    $rs_q = $pdo->prepare("SELECT report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-    $rs_q->execute([$uid, $dw]);
-    $report_status_cache[$uid] = $rs_q->fetchColumn() ?: 'pending';
+    $rs_q->bind_param("ii", $uid, $dw);
+    $rs_q->execute();
+    $res = $rs_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $report_status_cache[$uid] = $row[0] ?? 'pending';
 }
 
+$log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
 foreach ($all_students_detail as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
@@ -357,16 +409,18 @@ foreach ($all_students_detail as $sd) {
         $swe = $weekEnd;
     }
 
-    $log_q = $pdo->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
-    $log_q->execute([$uid, $sws, $swe]);
-    $log_count = (int) $log_q->fetchColumn();
+    $log_q->bind_param("iss", $uid, $sws, $swe);
+    $log_q->execute();
+    $res = $log_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $log_count = (int) ($row[0] ?? 0);
 
     if ($dayOfWeek >= 3 && $log_count === 0) {
         $behind_schedule++;
         $progress_status[$uid] = 'red';
 
         sendRedBadgeAlert(
-            $pdo, $sup_id, $sup_name, $sup_email,
+            $db, $sup_id, $sup_name, $sup_email,
             $uid, $sd['full_name'] ?: $sd['username'],
             $sd['student_roll'], $sd['company_name']
         );
@@ -414,39 +468,50 @@ $report_counts = [];
 if (!empty($all_students_detail)) {
     $ids = array_map(function ($sd) { return (int) $sd['uid']; }, $all_students_detail);
     $in_placeholders = implode(',', array_fill(0, count($ids), '?'));
-    $rc_q = $pdo->prepare("SELECT student_id, COUNT(*) AS cnt FROM report_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
-    $rc_q->execute($ids);
-    foreach ($rc_q->fetchAll() as $row) {
-        $report_counts[(int) $row['student_id']] = (int) $row['cnt'];
+    $types = str_repeat("i", count($ids));
+    $rc_q = $db->prepare("SELECT student_id, COUNT(*) AS cnt FROM report_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
+    $rc_q->bind_param($types, ...$ids);
+    $rc_q->execute();
+    $res = $rc_q->get_result();
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $report_counts[(int) $row['student_id']] = (int) $row['cnt'];
+        }
     }
 }
 
 // ── Unreviewed status per student ───────────────────────────────────
 $unreviewed = [];
+$unrev_q = $db->prepare("
+    SELECT COUNT(*) FROM report_evaluations re
+    WHERE re.student_id = ?
+      AND re.report_status = 'approved_by_instructor'
+      AND NOT EXISTS (
+          SELECT 1 FROM supervisor_weekly_evaluations swe
+          WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
+      )
+");
 foreach ($students as $s) {
-    $q = $pdo->prepare("
-        SELECT COUNT(*) FROM report_evaluations re
-        WHERE re.student_id = ?
-          AND re.report_status = 'approved_by_instructor'
-          AND NOT EXISTS (
-              SELECT 1 FROM supervisor_weekly_evaluations swe
-              WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
-          )
-    ");
-    $q->execute([$s['uid']]);
-    $unreviewed[$s['uid']] = (int) $q->fetchColumn();
+    $unrev_q->bind_param("i", $s['uid']);
+    $unrev_q->execute();
+    $res = $unrev_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $unreviewed[$s['uid']] = (int) ($row[0] ?? 0);
 }
 
 // ── Fully evaluated count per student ───────────────────────────────
 $evaluated = [];
+$eval_q = $db->prepare("
+    SELECT COUNT(*) FROM report_evaluations re
+    WHERE re.student_id = ?
+      AND re.report_status = 'approved_by_supervisor'
+");
 foreach ($students as $s) {
-    $q = $pdo->prepare("
-        SELECT COUNT(*) FROM report_evaluations re
-        WHERE re.student_id = ?
-          AND re.report_status = 'approved_by_supervisor'
-    ");
-    $q->execute([$s['uid']]);
-    $evaluated[$s['uid']] = (int) $q->fetchColumn();
+    $eval_q->bind_param("i", $s['uid']);
+    $eval_q->execute();
+    $res = $eval_q->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $evaluated[$s['uid']] = (int) ($row[0] ?? 0);
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -454,7 +519,7 @@ foreach ($students as $s) {
 // ══════════════════════════════════════════════════════════════════════
 
 // 1. Overall attendance rate across all assigned students
-$att_q = $pdo->prepare("
+$att_q = $db->prepare("
     SELECT
         SUM(CASE WHEN dl.attendance_status = 'present' THEN 1 ELSE 0 END) AS total_present,
         COUNT(*) AS total_logs
@@ -463,14 +528,16 @@ $att_q = $pdo->prepare("
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
 ");
-$att_q->execute([$sup_id]);
-$att_row = $att_q->fetch();
+$att_q->bind_param("i", $sup_id);
+$att_q->execute();
+$res = $att_q->get_result();
+$att_row = $res ? $res->fetch_assoc() : null;
 $cohort_present = (int) ($att_row['total_present'] ?? 0);
 $cohort_total_logs = (int) ($att_row['total_logs'] ?? 0);
 $cohort_attendance_rate = $cohort_total_logs > 0 ? round(($cohort_present / $cohort_total_logs) * 100) : 0;
 
 // 2. Pending reviews count (approved by instructor, awaiting supervisor grade)
-$pending_reviews_q = $pdo->prepare("
+$pending_reviews_q = $db->prepare("
     SELECT COUNT(*) FROM report_evaluations re
     WHERE re.report_status = 'approved_by_instructor'
       AND re.student_id IN (
@@ -483,30 +550,44 @@ $pending_reviews_q = $pdo->prepare("
           WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
-$pending_reviews_q->execute(array_merge([$sup_id], $ay_params));
-$pending_reviews = (int) $pending_reviews_q->fetchColumn();
+if ($selected_year_id) {
+    $pending_reviews_q->bind_param("ii", $sup_id, $selected_year_id);
+} else {
+    $pending_reviews_q->bind_param("i", $sup_id);
+}
+$pending_reviews_q->execute();
+$res = $pending_reviews_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$pending_reviews = (int) ($row[0] ?? 0);
 
 // 3. Total graded weeks across all students
-$total_graded_q = $pdo->prepare("
+$total_graded_q = $db->prepare("
     SELECT COUNT(*) FROM supervisor_weekly_evaluations swe
     JOIN student_profiles sp ON sp.user_id = swe.student_id
     WHERE sp.supervisor_id = ?
 ");
-$total_graded_q->execute([$sup_id]);
-$total_graded_weeks = (int) $total_graded_q->fetchColumn();
+$total_graded_q->bind_param("i", $sup_id);
+$total_graded_q->execute();
+$res = $total_graded_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$total_graded_weeks = (int) ($row[0] ?? 0);
 
 // 4. Grade distribution across all graded weeks
-$grade_dist_q = $pdo->prepare("
+$grade_dist_q = $db->prepare("
     SELECT swe.weekly_grade, COUNT(*) AS cnt
     FROM supervisor_weekly_evaluations swe
     JOIN student_profiles sp ON sp.user_id = swe.student_id
     WHERE sp.supervisor_id = ?
     GROUP BY swe.weekly_grade
 ");
-$grade_dist_q->execute([$sup_id]);
+$grade_dist_q->bind_param("i", $sup_id);
+$grade_dist_q->execute();
+$res = $grade_dist_q->get_result();
 $grade_distribution = ['A' => 0, 'B' => 0, 'C' => 0, 'D' => 0, 'F' => 0];
-while ($gr = $grade_dist_q->fetch()) {
-    $grade_distribution[$gr['weekly_grade']] = (int) $gr['cnt'];
+if ($res) {
+    while ($gr = $res->fetch_assoc()) {
+        $grade_distribution[$gr['weekly_grade']] = (int) $gr['cnt'];
+    }
 }
 $avg_grade_points = 0;
 $grade_point_map = ['A' => 4, 'B' => 3, 'C' => 2, 'D' => 1, 'F' => 0];
@@ -520,7 +601,7 @@ if ($total_graded_sum > 0) {
 }
 
 // 5. Company breakdown for cohort
-$company_q = $pdo->prepare("
+$company_q = $db->prepare("
     SELECT sp.company_name, COUNT(*) AS student_count
     FROM student_profiles sp
     JOIN users u ON u.id = sp.user_id
@@ -529,11 +610,13 @@ $company_q = $pdo->prepare("
     GROUP BY sp.company_name
     ORDER BY student_count DESC
 ");
-$company_q->execute([$sup_id]);
-$company_breakdown = $company_q->fetchAll();
+$company_q->bind_param("i", $sup_id);
+$company_q->execute();
+$res = $company_q->get_result();
+$company_breakdown = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // 6. Per-student attendance rates (for table/CSV display)
-$stu_att_q = $pdo->prepare("
+$stu_att_q = $db->prepare("
     SELECT dl.internship_id,
            SUM(CASE WHEN dl.attendance_status = 'present' THEN 1 ELSE 0 END) AS present_count,
            COUNT(*) AS total_count
@@ -543,19 +626,23 @@ $stu_att_q = $pdo->prepare("
     WHERE u.role = 'student' AND sp.supervisor_id = ?
     GROUP BY dl.internship_id
 ");
-$stu_att_q->execute([$sup_id]);
+$stu_att_q->bind_param("i", $sup_id);
+$stu_att_q->execute();
+$res = $stu_att_q->get_result();
 $student_attendance = [];
-while ($sa = $stu_att_q->fetch()) {
-    $sid = (int) $sa['internship_id'];
-    $pc = (int) $sa['present_count'];
-    $tc = (int) $sa['total_count'];
-    $student_attendance[$sid] = $tc > 0 ? round(($pc / $tc) * 100) : 0;
+if ($res) {
+    while ($sa = $res->fetch_assoc()) {
+        $sid = (int) $sa['internship_id'];
+        $pc = (int) $sa['present_count'];
+        $tc = (int) $sa['total_count'];
+        $student_attendance[$sid] = $tc > 0 ? round(($pc / $tc) * 100) : 0;
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════
 // RECENT REPORTS (from assigned students)
 // ══════════════════════════════════════════════════════════════════════
-$recent_reports_q = $pdo->prepare("
+$recent_reports_q = $db->prepare("
     SELECT re.week_number, re.report_status, re.evaluated_at,
            u.id AS student_id, u.username,
            sp.full_name, sp.company_name
@@ -566,8 +653,10 @@ $recent_reports_q = $pdo->prepare("
     ORDER BY re.evaluated_at DESC
     LIMIT 6
 ");
-$recent_reports_q->execute([$sup_id]);
-$recent_reports = $recent_reports_q->fetchAll();
+$recent_reports_q->bind_param("i", $sup_id);
+$recent_reports_q->execute();
+$res = $recent_reports_q->get_result();
+$recent_reports = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // ══════════════════════════════════════════════════════════════════════
 // MY TASKS & REMINDERS (real pending actions)
@@ -575,7 +664,7 @@ $recent_reports = $recent_reports_q->fetchAll();
 $tasks = [];
 
 // a) Pending weekly report reviews (instructor approved, no supervisor grade)
-$pending_task_q = $pdo->prepare("
+$pending_task_q = $db->prepare("
     SELECT re.week_number, re.evaluated_at, u.id AS student_id, u.username, sp.full_name
     FROM report_evaluations re
     JOIN users u ON u.id = re.student_id
@@ -588,14 +677,18 @@ $pending_task_q = $pdo->prepare("
       )
     ORDER BY re.evaluated_at ASC
 ");
-$pending_task_q->execute([$sup_id]);
-foreach ($pending_task_q->fetchAll() as $ptr) {
-    $tasks[] = [
-        'type'    => 'review',
-        'label'   => 'Review weekly report',
-        'text'    => htmlspecialchars($ptr['full_name'] ?: $ptr['username']) . ' – Week ' . (int) $ptr['week_number'],
-        'url'     => 'supervisor-review.php?student_id=' . (int) $ptr['student_id'] . '&week=' . (int) $ptr['week_number'],
-    ];
+$pending_task_q->bind_param("i", $sup_id);
+$pending_task_q->execute();
+$res = $pending_task_q->get_result();
+if ($res) {
+    while ($ptr = $res->fetch_assoc()) {
+        $tasks[] = [
+            'type'    => 'review',
+            'label'   => 'Review weekly report',
+            'text'    => htmlspecialchars($ptr['full_name'] ?: $ptr['username']) . ' – Week ' . (int) $ptr['week_number'],
+            'url'     => 'supervisor-review.php?student_id=' . (int) $ptr['student_id'] . '&week=' . (int) $ptr['week_number'],
+        ];
+    }
 }
 
 // b) Students behind schedule
@@ -611,7 +704,7 @@ foreach ($all_students_detail as $sd) {
 }
 
 // c) Final evaluations due (internship ended without full grading)
-$final_task_q = $pdo->prepare("
+$final_task_q = $db->prepare("
     SELECT u.id AS student_id, u.username, sp.full_name,
            sp.internship_start_date, sp.internship_end_date,
            (SELECT COUNT(*) FROM supervisor_weekly_evaluations swe WHERE swe.student_id = u.id) AS graded_weeks
@@ -620,17 +713,21 @@ $final_task_q = $pdo->prepare("
     WHERE u.role = 'student' AND sp.supervisor_id = ?
       AND sp.internship_end_date > '2000-01-01'
 ");
-$final_task_q->execute([$sup_id]);
-foreach ($final_task_q->fetchAll() as $ftr) {
-    $graded = (int) $ftr['graded_weeks'];
-    $ftr_total = internship_total_weeks($ftr['internship_start_date'], $ftr['internship_end_date']);
-    if ($ftr_total > 0 && $graded < $ftr_total) {
-        $tasks[] = [
-            'type'    => 'final',
-            'label'   => 'Final evaluation',
-            'text'    => htmlspecialchars($ftr['full_name'] ?: $ftr['username']) . ' – internship completed (' . $graded . '/' . $ftr_total . ' weeks graded)',
-            'url'     => 'supervisor-review.php?student_id=' . (int) $ftr['student_id'],
-        ];
+$final_task_q->bind_param("i", $sup_id);
+$final_task_q->execute();
+$res = $final_task_q->get_result();
+if ($res) {
+    while ($ftr = $res->fetch_assoc()) {
+        $graded = (int) $ftr['graded_weeks'];
+        $ftr_total = internship_total_weeks($ftr['internship_start_date'], $ftr['internship_end_date']);
+        if ($ftr_total > 0 && $graded < $ftr_total) {
+            $tasks[] = [
+                'type'    => 'final',
+                'label'   => 'Final evaluation',
+                'text'    => htmlspecialchars($ftr['full_name'] ?: $ftr['username']) . ' – internship completed (' . $graded . '/' . $ftr_total . ' weeks graded)',
+                'url'     => 'supervisor-review.php?student_id=' . (int) $ftr['student_id'],
+            ];
+        }
     }
 }
 
@@ -1533,7 +1630,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         <!-- ═══ TRAINEE ARCHIVE CONTENT ═══ -->
         <?php
         $ta_year = $_GET['academic_year'] ?? '';
-        $ta_years = $pdo->prepare("
+        $ta_years = $db->prepare("
             SELECT DISTINCT ay.year_label
             FROM academic_years ay
             INNER JOIN users u ON u.academic_year_id = ay.id
@@ -1541,22 +1638,38 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived'
             ORDER BY ay.year_label DESC
         ");
-        $ta_years->execute([$sup_id]);
-        $ta_valid_years = $ta_years->fetchAll(PDO::FETCH_COLUMN);
+        $ta_years->bind_param("i", $sup_id);
+        $ta_years->execute();
+        $res = $ta_years->get_result();
+        $ta_valid_years = [];
+        if ($res) {
+            while ($row = $res->fetch_row()) {
+                $ta_valid_years[] = $row[0];
+            }
+        }
 
         // Fallback: also check string column for legacy data
         if (empty($ta_valid_years)) {
-            $ta_years2 = $pdo->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived' AND u.academic_year IS NOT NULL ORDER BY u.academic_year DESC");
-            $ta_years2->execute([$sup_id]);
-            $ta_valid_years = $ta_years2->fetchAll(PDO::FETCH_COLUMN);
+            $ta_years2 = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived' AND u.academic_year IS NOT NULL ORDER BY u.academic_year DESC");
+            $ta_years2->bind_param("i", $sup_id);
+            $ta_years2->execute();
+            $res = $ta_years2->get_result();
+            if ($res) {
+                while ($row = $res->fetch_row()) {
+                    $ta_valid_years[] = $row[0];
+                }
+            }
         }
 
         // Resolve selected archive year to FK
         $ta_year_id = null;
         if ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
-            $ta_ayid = $pdo->prepare("SELECT id FROM academic_years WHERE year_label = ?");
-            $ta_ayid->execute([$ta_year]);
-            $ta_year_id = $ta_ayid->fetchColumn() ?: null;
+            $ta_ayid = $db->prepare("SELECT id FROM academic_years WHERE year_label = ?");
+            $ta_ayid->bind_param("s", $ta_year);
+            $ta_ayid->execute();
+            $res = $ta_ayid->get_result();
+            $row = $res ? $res->fetch_row() : null;
+            $ta_year_id = $row[0] ?? null;
         }
 
         $ta_sql = "
@@ -1567,18 +1680,22 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             JOIN student_profiles sp ON sp.user_id = u.id
             WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived'
         ";
-        $ta_params = [$sup_id];
         if ($ta_year_id) {
-            $ta_sql .= " AND u.academic_year_id = ?";
-            $ta_params[] = $ta_year_id;
+            $ta_sql .= " AND u.academic_year_id = ? ORDER BY sp.full_name ASC";
+            $ta_stmt = $db->prepare($ta_sql);
+            $ta_stmt->bind_param("ii", $sup_id, $ta_year_id);
         } elseif ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
-            $ta_sql .= " AND u.academic_year = ?";
-            $ta_params[] = $ta_year;
+            $ta_sql .= " AND u.academic_year = ? ORDER BY sp.full_name ASC";
+            $ta_stmt = $db->prepare($ta_sql);
+            $ta_stmt->bind_param("is", $sup_id, $ta_year);
+        } else {
+            $ta_sql .= " ORDER BY sp.full_name ASC";
+            $ta_stmt = $db->prepare($ta_sql);
+            $ta_stmt->bind_param("i", $sup_id);
         }
-        $ta_sql .= " ORDER BY sp.full_name ASC";
-        $ta_stmt = $pdo->prepare($ta_sql);
-        $ta_stmt->execute($ta_params);
-        $ta_students = $ta_stmt->fetchAll();
+        $ta_stmt->execute();
+        $res = $ta_stmt->get_result();
+        $ta_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
         $ta_total = count($ta_students);
         $ta_companies = [];
@@ -1587,10 +1704,13 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         }
 
         $ta_grades = [];
+        $gq = $db->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
         foreach ($ta_students as $ts) {
-            $gq = $pdo->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
-            $gq->execute([$ts['uid']]);
-            $ta_grades[$ts['uid']] = $gq->fetchColumn() ?: null;
+            $gq->bind_param("i", $ts['uid']);
+            $gq->execute();
+            $res = $gq->get_result();
+            $row = $res ? $res->fetch_row() : null;
+            $ta_grades[$ts['uid']] = $row[0] ?? null;
         }
 
         $ta_grade_dist = ['excellent' => 0, 'good' => 0, 'average' => 0, 'needs_improvement' => 0];

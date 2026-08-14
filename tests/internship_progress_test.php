@@ -128,21 +128,17 @@ check(internship_current_week('', '2026-07-31') === 1,
 echo "\n== Scenario 3: live database sanity (read-only, graceful skip)\n";
 
 try {
-    $host = getenv('DB_HOST') ?: 'localhost';
-    $port = getenv('DB_PORT') ?: '3306';
-    $user = getenv('DB_USER') ?: 'root';
-    $pass = getenv('DB_PASS') ?: 'root';
-    $pdo  = new PDO("mysql:host={$host};port={$port};dbname=intern_report_db;charset=utf8mb4", $user, $pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    require_once $ROOT . '/config/db.php';
+    $db = $mysqli ?? $conn;
 
-    $prog = internship_progress($pdo, 14, '2026-05-05', '2026-07-31');
+    $prog = internship_progress($db, 14, '2026-05-05', '2026-07-31');
     check($prog['total'] === 13, 'live progress: total = 13 for the known 13-week student');
     check($prog['completed'] >= 0 && $prog['completed'] <= $prog['total'],
         'live progress: completed is within [0, total]');
     check($prog['pct'] === min(100, (int) round(($prog['completed'] / $prog['total']) * 100)),
         'live progress: pct matches the documented formula');
 
-    $progEmpty = internship_progress($pdo, 14, '', '2026-07-31');
+    $progEmpty = internship_progress($db, 14, '', '2026-07-31');
     check($progEmpty['total'] === 0 && $progEmpty['pct'] === 0,
         'live progress: empty start string yields total 0 and pct 0 (never divide by zero)');
 
@@ -152,7 +148,7 @@ try {
     // ── internship_attendance() ────────────────────────────────────
     // Shared by supervisor/view-student-dashboard.php and
     // supervisor/supervisor-review.php. Read-only; never modifies data.
-    $att = internship_attendance($pdo, 14);
+    $att = internship_attendance($db, 14);
     check($att['expected'] === $att['present'] + $att['absent'],
         'live attendance: expected = present + absent');
     check($att['rate'] === ($att['expected'] > 0 ? (int) round(($att['present'] / $att['expected']) * 100) : 0),
@@ -160,17 +156,17 @@ try {
     check($att['present'] >= 0 && $att['absent'] >= 0,
         'live attendance: counts are non-negative');
 
-    $attWeek1 = internship_attendance($pdo, 14, '2026-05-05', '2026-05-11');
+    $attWeek1 = internship_attendance($db, 14, '2026-05-05', '2026-05-11');
     check($attWeek1['expected'] === 4,
         'live attendance: Week 1 (05-05..05-11) has 4 logged days');
     check($attWeek1['present'] === 3 && $attWeek1['absent'] === 1 && $attWeek1['rate'] === 75,
         'live attendance: Week 1 = 3 present / 1 absent / 75%');
 
-    $attWeek2 = internship_attendance($pdo, 14, '2026-05-12', '2026-05-18');
+    $attWeek2 = internship_attendance($db, 14, '2026-05-12', '2026-05-18');
     check($attWeek2['expected'] === 0 && $attWeek2['rate'] === 0,
         'live attendance: Week 2 (no logs) = 0 expected / 0% (never divide by zero)');
 
-    $attEmpty = internship_attendance($pdo, 999999);
+    $attEmpty = internship_attendance($db, 999999);
     check($attEmpty['expected'] === 0 && $attEmpty['rate'] === 0,
         'live attendance: unknown internship = 0 expected / 0%');
 

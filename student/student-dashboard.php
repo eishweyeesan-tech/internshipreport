@@ -1,6 +1,8 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $user_id    = $_SESSION['user_id'];
 $username   = $_SESSION['username'];
@@ -11,313 +13,50 @@ if ($role !== 'student') {
     exit;
 }
 
-
 $internship_id = $user_id;
 $message = '';
-$esc_uid = $conn->real_escape_string($user_id);
-$esc_iid = $conn->real_escape_string($internship_id);
+$db = $mysqli ?? $conn;
 
 // ══════════════════════════════════════════════════════════════════════
 // FETCH INTERNSHIP DATE RANGE + PROFILE INFO
 // ══════════════════════════════════════════════════════════════════════
-$profile_r = $conn->query("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date, sup_u.username AS supervisor_name, sp.supervisor_id, u.profile_pic,
+$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date, sup_u.username AS supervisor_name, sp.supervisor_id, u.profile_pic,
            sp.instructor_name, sp.instructor_email, sp.instructor_id
     FROM student_profiles sp
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     LEFT JOIN users u ON u.id = sp.user_id
-    WHERE sp.user_id = {$esc_uid}");
-$profile_row = $profile_r ? $profile_r->fetch_assoc() : null;
+    WHERE sp.user_id = ?");
+$profile_stmt->bind_param("i", $user_id);
+$profile_stmt->execute();
+$profile_res = $profile_stmt->get_result();
+$profile_row = $profile_res ? $profile_res->fetch_assoc() : null;
+
 $intern_start = $profile_row['internship_start_date'] ?? null;
 $intern_end   = $profile_row['internship_end_date'] ?? null;
-$student_name = $profile_row['full_name'] ?: $username;
+$student_name = ($profile_row['full_name'] ?? '') ?: $username;
 $student_roll = $profile_row['student_roll'] ?? '';
 $supervisor_name = $profile_row['supervisor_name'] ?? '—';
 $profile_pic = $profile_row['profile_pic'] ?? '';
-$instructor_name = $profile_row['instructor_name'] ?: '—';
+$instructor_name = ($profile_row['instructor_name'] ?? '') ?: '—';
 $instructor_email = $profile_row['instructor_email'] ?? '';
 
 // ══════════════════════════════════════════════════════════════════════
-// FETCH WARNING STATUS (fresh from database on every page load)
+// FETCH WARNING STATUS
 // ══════════════════════════════════════════════════════════════════════
-$warn_r = $conn->query("SELECT is_warned FROM users WHERE id = {$esc_uid}");
-$is_warned = ($warn_r && $warn_r->num_rows > 0) ? ((int) $warn_r->fetch_row()[0] === 1) : false;
+$warn_stmt = $db->prepare("SELECT is_warned FROM users WHERE id = ?");
+$warn_stmt->bind_param("i", $user_id);
+$warn_stmt->execute();
+$warn_res = $warn_stmt->get_result();
+$warn_row = $warn_res ? $warn_res->fetch_row() : null;
+$is_warned = (bool) ($warn_row[0] ?? 0);
 
-// ── FORM A: Daily Log ────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
-    // Check if logs are locked for this week (student signed and not rejected)
-    $post_week = (int) ($_POST['selected_week'] ?? 0);
-    if ($post_week > 0) {
-        $esc_pw = $conn->real_escape_string($post_week);
-        $lock_r = $conn->query("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_pw}");
-        if ($lock_r && $lock_r->num_rows > 0) {
-            $lock_row = $lock_r->fetch_assoc();
-            if (!empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
-                $message = 'log_locked';
-            }
-        }
-    }
-    if (!$message) {
-    $log_date           = trim($_POST['log_date'] ?? '');
-    $attendance_status  = trim($_POST['attendance_status'] ?? 'present');
-    $reason_for_absence = trim($_POST['reason_for_absence'] ?? '');
-    $intended_task      = trim($_POST['intended_task'] ?? '');
-    $task_detail        = trim($_POST['task_detail'] ?? '');
-    $actual_task        = trim($_POST['actual_task'] ?? '');
-    $tools_used         = trim($_POST['tools_used'] ?? '');
-    $knowledge_gained   = trim($_POST['knowledge_gained'] ?? '');
-    $hours_worked       = trim($_POST['hours_worked'] ?? '00:00');
-
-    if ($log_date) {
-        // Server-side date range validation using helper
-        $date_error = validateLogDate($log_date, $intern_start, $intern_end);
-        if ($date_error) {
-            $message = $date_error;
-        } else {
-            // Server-side week validation: date must fall within the selected week
-            $post_week = (int) ($_POST['selected_week'] ?? $selected_week);
-            if (!empty($weeks[$post_week])) {
-                $ws_start = $weeks[$post_week]['start'];
-                $ws_end   = $weeks[$post_week]['end'];
-                if ($log_date < $ws_start || $log_date > $ws_end) {
-                    $message = 'date_out_of_week';
-                }
-            }
-            // Server-side weekend check
-            if (!$message) {
-                $log_day = (int)(new DateTime($log_date))->format('N');
-                if ($log_day >= 6) {
-                    $message = 'date_is_weekend';
-                }
-            }
-        }
-        if (!$message) {
-            // Auto-set to "leave" for public holidays
-            if (isset($holiday_dates[$log_date])) {
-                $attendance_status = 'leave';
-                $reason_for_absence = 'Public Holiday - ' . $holiday_dates[$log_date];
-            }
-            if ($attendance_status === 'absent') {
-                $intended_task  = $reason_for_absence ?: 'Absent';
-                $task_detail    = 'N/A - Absent';
-                $actual_task    = 'N/A - Absent';
-                $tools_used     = 'N/A - Absent';
-                $knowledge_gained = 'N/A - Absent';
-                $hours_worked   = '00:00';
-            }
-            $esc_att  = $conn->real_escape_string($attendance_status);
-            $esc_rfa  = $conn->real_escape_string($reason_for_absence);
-            $esc_it   = $conn->real_escape_string($intended_task);
-            $esc_td   = $conn->real_escape_string($task_detail);
-            $esc_at   = $conn->real_escape_string($actual_task);
-            $esc_tu   = $conn->real_escape_string($tools_used);
-            $esc_kg   = $conn->real_escape_string($knowledge_gained);
-            $esc_hw   = $conn->real_escape_string($hours_worked);
-            $esc_ld   = $conn->real_escape_string($log_date);
-
-            $query = "INSERT INTO daily_logs
-                (internship_id, log_date, attendance_status, reason_for_absence, task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
-                VALUES ({$esc_iid}, '{$esc_ld}', '{$esc_att}', '{$esc_rfa}', '{$esc_it}', '{$esc_td}', '{$esc_at}', '{$esc_tu}', '{$esc_kg}', '{$esc_hw}')
-                ON DUPLICATE KEY UPDATE
-                attendance_status = VALUES(attendance_status),
-                reason_for_absence = VALUES(reason_for_absence),
-                task_title = VALUES(task_title),
-                task_detail = VALUES(task_detail),
-                tasks_performed = VALUES(tasks_performed),
-                tools_used = VALUES(tools_used),
-                learnt_skills = VALUES(learnt_skills),
-                calculated_duration = VALUES(calculated_duration)";
-            $conn->query($query);
-            $message = 'daily_saved';
-        }
-    }
-    }
-}
-
-// ── EDIT LOG ──────────────────────────────────────────────────────
-$editing_log = null;
-if (isset($_GET['edit'])) {
-    $edit_id = (int) $_GET['edit'];
-    $esc_edit_id = $conn->real_escape_string($edit_id);
-    $edit_r = $conn->query("SELECT * FROM daily_logs WHERE id = {$esc_edit_id} AND internship_id = {$esc_iid}");
-    $editing_log = ($edit_r && $edit_r->num_rows > 0) ? $edit_r->fetch_assoc() : null;
-    if (!$editing_log) {
-        $message = 'log_not_found';
-    }
-    // Check if this log is locked (student signed and not rejected)
-    if ($editing_log) {
-        $edit_lock_week = getInternshipWeekNumber($intern_start, $editing_log['log_date']);
-        $esc_elw = $conn->real_escape_string($edit_lock_week);
-        $edit_lock_r = $conn->query("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_elw}");
-        if ($edit_lock_r && $edit_lock_r->num_rows > 0) {
-            $edit_lock_row = $edit_lock_r->fetch_assoc();
-            if (!empty($edit_lock_row['student_signature_type']) && !empty($edit_lock_row['student_signature_value']) && $edit_lock_row['report_status'] !== 'rejected') {
-                $editing_log = null;
-                $message = 'log_locked';
-            }
-        }
-    }
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
-    // Check if logs are locked for this week (student signed and not rejected)
-    $post_week = (int) ($_POST['selected_week'] ?? 0);
-    if ($post_week > 0) {
-        $esc_pw = $conn->real_escape_string($post_week);
-        $lock_r = $conn->query("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_pw}");
-        if ($lock_r && $lock_r->num_rows > 0) {
-            $lock_row = $lock_r->fetch_assoc();
-            if (!empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
-                $message = 'log_locked';
-            }
-        }
-    }
-    if (!$message) {
-    $edit_id           = (int) ($_POST['log_id'] ?? 0);
-    $log_date          = trim($_POST['log_date'] ?? '');
-    $attendance_status = trim($_POST['attendance_status'] ?? 'present');
-    $reason_for_absence = trim($_POST['reason_for_absence'] ?? '');
-    $intended_task     = trim($_POST['intended_task'] ?? '');
-    $task_detail       = trim($_POST['task_detail'] ?? '');
-    $actual_task       = trim($_POST['actual_task'] ?? '');
-    $tools_used        = trim($_POST['tools_used'] ?? '');
-    $knowledge_gained  = trim($_POST['knowledge_gained'] ?? '');
-    $hours_worked      = trim($_POST['hours_worked'] ?? '00:00');
-
-    if ($edit_id && $log_date) {
-        $date_error = validateLogDate($log_date, $intern_start, $intern_end);
-        if ($date_error) {
-            $message = $date_error;
-        } else {
-            // Server-side week validation: date must fall within the selected week
-            $post_week = (int) ($_POST['selected_week'] ?? $selected_week);
-            if (!empty($weeks[$post_week])) {
-                $ews_start = $weeks[$post_week]['start'];
-                $ews_end   = $weeks[$post_week]['end'];
-                if ($log_date < $ews_start || $log_date > $ews_end) {
-                    $message = 'date_out_of_week';
-                }
-            }
-            // Server-side weekend check
-            if (!$message) {
-                $log_day = (int)(new DateTime($log_date))->format('N');
-                if ($log_day >= 6) {
-                    $message = 'date_is_weekend';
-                }
-            }
-        }
-        if (!$message) {
-            // Auto-set to "leave" for public holidays
-            if (isset($holiday_dates[$log_date])) {
-                $attendance_status = 'leave';
-                $reason_for_absence = 'Public Holiday - ' . $holiday_dates[$log_date];
-            }
-            if ($attendance_status === 'absent') {
-                $intended_task  = $reason_for_absence ?: 'Absent';
-                $task_detail    = 'N/A - Absent';
-                $actual_task    = 'N/A - Absent';
-                $tools_used     = 'N/A - Absent';
-                $knowledge_gained = 'N/A - Absent';
-                $hours_worked   = '00:00';
-            }
-            $esc_att  = $conn->real_escape_string($attendance_status);
-            $esc_rfa  = $conn->real_escape_string($reason_for_absence);
-            $esc_it   = $conn->real_escape_string($intended_task);
-            $esc_td   = $conn->real_escape_string($task_detail);
-            $esc_at   = $conn->real_escape_string($actual_task);
-            $esc_tu   = $conn->real_escape_string($tools_used);
-            $esc_kg   = $conn->real_escape_string($knowledge_gained);
-            $esc_hw   = $conn->real_escape_string($hours_worked);
-            $esc_ld   = $conn->real_escape_string($log_date);
-            $esc_eid  = $conn->real_escape_string($edit_id);
-
-            $conn->query("UPDATE daily_logs SET
-                log_date = '{$esc_ld}', attendance_status = '{$esc_att}', reason_for_absence = '{$esc_rfa}',
-                task_title = '{$esc_it}', task_detail = '{$esc_td}', tasks_performed = '{$esc_at}',
-                tools_used = '{$esc_tu}', learnt_skills = '{$esc_kg}', calculated_duration = '{$esc_hw}'
-                WHERE id = {$esc_eid} AND internship_id = {$esc_iid}");
-            $message = 'log_updated';
-        }
-    }
-    }
-}
-
-// ── DELETE LOG ────────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_log'])) {
-    $del_id = (int) ($_POST['log_id'] ?? 0);
-    if ($del_id) {
-        // Check if this log is locked (student signed and not rejected)
-        $esc_del_check = $conn->real_escape_string($del_id);
-        $del_lock_r = $conn->query("SELECT log_date FROM daily_logs WHERE id = {$esc_del_check} AND internship_id = {$esc_iid}");
-        if ($del_lock_r && $del_lock_r->num_rows > 0) {
-            $del_lock_log = $del_lock_r->fetch_assoc();
-            $del_lock_week = getInternshipWeekNumber($intern_start, $del_lock_log['log_date']);
-            $esc_dlw = $conn->real_escape_string($del_lock_week);
-            $del_lock_eval = $conn->query("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_dlw}");
-            if ($del_lock_eval && $del_lock_eval->num_rows > 0) {
-                $del_lock_row = $del_lock_eval->fetch_assoc();
-                if (!empty($del_lock_row['student_signature_type']) && !empty($del_lock_row['student_signature_value']) && $del_lock_row['report_status'] !== 'rejected') {
-                    $message = 'log_locked';
-                }
-            }
-        }
-        if (!$message) {
-            $esc_del = $conn->real_escape_string($del_id);
-            $conn->query("DELETE FROM daily_logs WHERE id = {$esc_del} AND internship_id = {$esc_iid}");
-            $message = 'log_deleted';
-        }
-    }
-}
-
-// ── FORM B: Weekly Reflection ────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_reflection'])) {
-    $week_number  = (int) ($_POST['week_number'] ?? 0);
-    $what_done    = trim($_POST['what_done'] ?? '');
-    $how_done     = trim($_POST['how_done'] ?? '');
-    $why_done     = trim($_POST['why_done'] ?? '');
-
-    if ($week_number > 0 && $what_done) {
-        $esc_wn  = $conn->real_escape_string($week_number);
-        $esc_wd  = $conn->real_escape_string($what_done);
-        $esc_hd  = $conn->real_escape_string($how_done);
-        $esc_why = $conn->real_escape_string($why_done);
-
-        $conn->query("INSERT INTO weekly_reflections
-            (internship_id, week_number, what_done, how_done, why_done)
-            VALUES ({$esc_iid}, '{$esc_wn}', '{$esc_wd}', '{$esc_hd}', '{$esc_why}')
-            ON DUPLICATE KEY UPDATE
-            what_done = VALUES(what_done),
-            how_done = VALUES(how_done),
-            why_done = VALUES(why_done)");
-        $message = 'reflection_saved';
-    }
-}
-
-// ── MAGIC LINK GENERATION ────────────────────────────────────────
-$magic_link = '';
-
-// ── FETCH EXISTING DATA ──────────────────────────────────────────
-$all_logs_r = $conn->query("SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} ORDER BY log_date DESC");
-$all_logs = [];
-if ($all_logs_r) { while ($row = $all_logs_r->fetch_assoc()) { $all_logs[] = $row; } }
-
-// ── FETCH EXISTING LOG DATES (for duplicate prevention) ─────────
-$log_dates_q = "SELECT log_date FROM daily_logs WHERE internship_id = {$esc_iid}";
-if ($editing_log) {
-    $esc_edid = $conn->real_escape_string($editing_log['id']);
-    $log_dates_q .= " AND id != {$esc_edid}";
-}
-$log_dates_r = $conn->query($log_dates_q);
-$existing_log_dates = [];
-if ($log_dates_r) { while ($row = $log_dates_r->fetch_assoc()) { $existing_log_dates[] = $row['log_date']; } }
-
-// Build week ranges using custom Sun→Sat logic from internship start date
+// Build week ranges
 $weeks = [];
 if ($intern_start) {
     $w = 1;
     while (true) {
         $range = getWeekRange($intern_start, $w);
         if (!$range) break;
-        // Stop if the week starts after the internship end date
         if ($intern_end && $range['start'] > $intern_end) break;
         $weeks[$w] = $range;
         $w++;
@@ -328,6 +67,269 @@ $selected_week = 1;
 if (isset($_GET['week'])) {
     $w = (int)$_GET['week'];
     if (isset($weeks[$w])) $selected_week = $w;
+}
+
+// ── FETCH PUBLIC HOLIDAYS ──
+$hol_stmt = $db->query("SELECT holiday_date, holiday_name FROM holidays ORDER BY holiday_date ASC");
+$all_holidays = $hol_stmt ? $hol_stmt->fetch_all(MYSQLI_ASSOC) : [];
+$holiday_dates = [];
+foreach ($all_holidays as $hl) { $holiday_dates[$hl['holiday_date']] = $hl['holiday_name']; }
+
+// ── FORM A: Add Daily Log ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
+    $post_week = (int) ($_POST['selected_week'] ?? 0);
+    if ($post_week > 0) {
+        $lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $lock_stmt->bind_param("ii", $internship_id, $post_week);
+        $lock_stmt->execute();
+        $lock_res = $lock_stmt->get_result();
+        $lock_row = $lock_res ? $lock_res->fetch_assoc() : null;
+        if ($lock_row && !empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
+            $message = 'log_locked';
+        }
+    }
+    if (!$message) {
+        $log_date           = trim($_POST['log_date'] ?? '');
+        $attendance_status  = trim($_POST['attendance_status'] ?? 'present');
+        $reason_for_absence = trim($_POST['reason_for_absence'] ?? '');
+        $intended_task      = trim($_POST['intended_task'] ?? '');
+        $task_detail        = trim($_POST['task_detail'] ?? '');
+        $actual_task        = trim($_POST['actual_task'] ?? '');
+        $tools_used         = trim($_POST['tools_used'] ?? '');
+        $knowledge_gained   = trim($_POST['knowledge_gained'] ?? '');
+        $hours_worked       = trim($_POST['hours_worked'] ?? '00:00');
+
+        if ($log_date) {
+            $date_error = validateLogDate($log_date, $intern_start, $intern_end);
+            if ($date_error) {
+                $message = $date_error;
+            } else {
+                $post_week = (int) ($_POST['selected_week'] ?? $selected_week);
+                if (!empty($weeks[$post_week])) {
+                    $ws_start = $weeks[$post_week]['start'];
+                    $ws_end   = $weeks[$post_week]['end'];
+                    if ($log_date < $ws_start || $log_date > $ws_end) {
+                        $message = 'date_out_of_week';
+                    }
+                }
+                if (!$message) {
+                    $log_day = (int)(new DateTime($log_date))->format('N');
+                    if ($log_day >= 6) {
+                        $message = 'date_is_weekend';
+                    }
+                }
+            }
+            if (!$message) {
+                if (isset($holiday_dates[$log_date])) {
+                    $attendance_status = 'leave';
+                    $reason_for_absence = 'Public Holiday - ' . $holiday_dates[$log_date];
+                }
+                if ($attendance_status === 'absent') {
+                    $intended_task  = $reason_for_absence ?: 'Absent';
+                    $task_detail    = 'N/A - Absent';
+                    $actual_task    = 'N/A - Absent';
+                    $tools_used     = 'N/A - Absent';
+                    $knowledge_gained = 'N/A - Absent';
+                    $hours_worked   = '00:00';
+                }
+                $ins_log = $db->prepare("INSERT INTO daily_logs
+                    (internship_id, log_date, attendance_status, reason_for_absence, task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    attendance_status = VALUES(attendance_status),
+                    reason_for_absence = VALUES(reason_for_absence),
+                    task_title = VALUES(task_title),
+                    task_detail = VALUES(task_detail),
+                    tasks_performed = VALUES(tasks_performed),
+                    tools_used = VALUES(tools_used),
+                    learnt_skills = VALUES(learnt_skills),
+                    calculated_duration = VALUES(calculated_duration)");
+                $ins_log->bind_param("isssssssss",
+                    $internship_id, $log_date, $attendance_status, $reason_for_absence,
+                    $intended_task, $task_detail, $actual_task, $tools_used, $knowledge_gained, $hours_worked
+                );
+                $ins_log->execute();
+                $message = 'daily_saved';
+            }
+        }
+    }
+}
+
+// ── EDIT LOG ──
+$editing_log = null;
+if (isset($_GET['edit'])) {
+    $edit_id = (int) $_GET['edit'];
+    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND internship_id = ?");
+    $edit_stmt->bind_param("ii", $edit_id, $internship_id);
+    $edit_stmt->execute();
+    $edit_res = $edit_stmt->get_result();
+    $editing_log = $edit_res ? $edit_res->fetch_assoc() : null;
+    if (!$editing_log) {
+        $message = 'log_not_found';
+    } else {
+        $edit_lock_week = getInternshipWeekNumber($intern_start, $editing_log['log_date']);
+        $edit_lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $edit_lock_stmt->bind_param("ii", $internship_id, $edit_lock_week);
+        $edit_lock_stmt->execute();
+        $edit_lock_res = $edit_lock_stmt->get_result();
+        $edit_lock_row = $edit_lock_res ? $edit_lock_res->fetch_assoc() : null;
+        if ($edit_lock_row && !empty($edit_lock_row['student_signature_type']) && !empty($edit_lock_row['student_signature_value']) && $edit_lock_row['report_status'] !== 'rejected') {
+            $editing_log = null;
+            $message = 'log_locked';
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
+    $post_week = (int) ($_POST['selected_week'] ?? 0);
+    if ($post_week > 0) {
+        $lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $lock_stmt->bind_param("ii", $internship_id, $post_week);
+        $lock_stmt->execute();
+        $lock_res = $lock_stmt->get_result();
+        $lock_row = $lock_res ? $lock_res->fetch_assoc() : null;
+        if ($lock_row && !empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
+            $message = 'log_locked';
+        }
+    }
+    if (!$message) {
+        $edit_id           = (int) ($_POST['log_id'] ?? 0);
+        $log_date          = trim($_POST['log_date'] ?? '');
+        $attendance_status = trim($_POST['attendance_status'] ?? 'present');
+        $reason_for_absence = trim($_POST['reason_for_absence'] ?? '');
+        $intended_task     = trim($_POST['intended_task'] ?? '');
+        $task_detail       = trim($_POST['task_detail'] ?? '');
+        $actual_task       = trim($_POST['actual_task'] ?? '');
+        $tools_used        = trim($_POST['tools_used'] ?? '');
+        $knowledge_gained  = trim($_POST['knowledge_gained'] ?? '');
+        $hours_worked      = trim($_POST['hours_worked'] ?? '00:00');
+
+        if ($edit_id && $log_date) {
+            $date_error = validateLogDate($log_date, $intern_start, $intern_end);
+            if ($date_error) {
+                $message = $date_error;
+            } else {
+                $post_week = (int) ($_POST['selected_week'] ?? $selected_week);
+                if (!empty($weeks[$post_week])) {
+                    $ews_start = $weeks[$post_week]['start'];
+                    $ews_end   = $weeks[$post_week]['end'];
+                    if ($log_date < $ews_start || $log_date > $ews_end) {
+                        $message = 'date_out_of_week';
+                    }
+                }
+                if (!$message) {
+                    $log_day = (int)(new DateTime($log_date))->format('N');
+                    if ($log_day >= 6) {
+                        $message = 'date_is_weekend';
+                    }
+                }
+            }
+            if (!$message) {
+                if (isset($holiday_dates[$log_date])) {
+                    $attendance_status = 'leave';
+                    $reason_for_absence = 'Public Holiday - ' . $holiday_dates[$log_date];
+                }
+                if ($attendance_status === 'absent') {
+                    $intended_task  = $reason_for_absence ?: 'Absent';
+                    $task_detail    = 'N/A - Absent';
+                    $actual_task    = 'N/A - Absent';
+                    $tools_used     = 'N/A - Absent';
+                    $knowledge_gained = 'N/A - Absent';
+                    $hours_worked   = '00:00';
+                }
+                $upd_stmt = $db->prepare("UPDATE daily_logs SET
+                    log_date = ?, attendance_status = ?, reason_for_absence = ?,
+                    task_title = ?, task_detail = ?, tasks_performed = ?,
+                    tools_used = ?, learnt_skills = ?, calculated_duration = ?
+                    WHERE id = ? AND internship_id = ?");
+                $upd_stmt->bind_param("sssssssssii",
+                    $log_date, $attendance_status, $reason_for_absence,
+                    $intended_task, $task_detail, $actual_task,
+                    $tools_used, $knowledge_gained, $hours_worked,
+                    $edit_id, $internship_id
+                );
+                $upd_stmt->execute();
+                $message = 'log_updated';
+            }
+        }
+    }
+}
+
+// ── DELETE LOG ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_log'])) {
+    $del_id = (int) ($_POST['log_id'] ?? 0);
+    if ($del_id) {
+        $del_check_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE id = ? AND internship_id = ?");
+        $del_check_stmt->bind_param("ii", $del_id, $internship_id);
+        $del_check_stmt->execute();
+        $del_res = $del_check_stmt->get_result();
+        $del_log = $del_res ? $del_res->fetch_assoc() : null;
+        if ($del_log) {
+            $del_lock_week = getInternshipWeekNumber($intern_start, $del_log['log_date']);
+            $del_eval_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+            $del_eval_stmt->bind_param("ii", $internship_id, $del_lock_week);
+            $del_eval_stmt->execute();
+            $del_eval_res = $del_eval_stmt->get_result();
+            $del_eval_row = $del_eval_res ? $del_eval_res->fetch_assoc() : null;
+            if ($del_eval_row && !empty($del_eval_row['student_signature_type']) && !empty($del_eval_row['student_signature_value']) && $del_eval_row['report_status'] !== 'rejected') {
+                $message = 'log_locked';
+            }
+        }
+        if (!$message) {
+            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND internship_id = ?");
+            $del_stmt->bind_param("ii", $del_id, $internship_id);
+            $del_stmt->execute();
+            $message = 'log_deleted';
+        }
+    }
+}
+
+// ── FORM B: Weekly Reflection ──
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_reflection'])) {
+    $week_number  = (int) ($_POST['week_number'] ?? 0);
+    $what_done    = trim($_POST['what_done'] ?? '');
+    $how_done     = trim($_POST['how_done'] ?? '');
+    $why_done     = trim($_POST['why_done'] ?? '');
+
+    if ($week_number > 0 && $what_done) {
+        $ref_stmt = $db->prepare("INSERT INTO weekly_reflections
+            (internship_id, week_number, what_done, how_done, why_done)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+            what_done = VALUES(what_done),
+            how_done = VALUES(how_done),
+            why_done = VALUES(why_done)");
+        $ref_stmt->bind_param("iisss", $internship_id, $week_number, $what_done, $how_done, $why_done);
+        $ref_stmt->execute();
+        $message = 'reflection_saved';
+    }
+}
+
+$magic_link = '';
+
+// ── FETCH EXISTING DATA ──
+$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC");
+$all_logs_stmt->bind_param("i", $internship_id);
+$all_logs_stmt->execute();
+$all_res = $all_logs_stmt->get_result();
+$all_logs = $all_res ? $all_res->fetch_all(MYSQLI_ASSOC) : [];
+
+// Existing log dates for duplicate prevention
+if ($editing_log) {
+    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND id != ?");
+    $editing_log_id = (int)$editing_log['id'];
+    $dates_stmt->bind_param("ii", $internship_id, $editing_log_id);
+} else {
+    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ?");
+    $dates_stmt->bind_param("i", $internship_id);
+}
+$dates_stmt->execute();
+$dates_res = $dates_stmt->get_result();
+$existing_log_dates = [];
+if ($dates_res) {
+    while ($row = $dates_res->fetch_row()) {
+        $existing_log_dates[] = $row[0];
+    }
 }
 
 // Format date range for the selected week
@@ -342,32 +344,47 @@ if (!empty($weeks[$selected_week])) {
 if (!empty($weeks)) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
-    $esc_ws = $conn->real_escape_string($ws);
-    $esc_we = $conn->real_escape_string($we);
-    $log_sql = "SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_ws}' AND '{$esc_we}' ORDER BY log_date DESC";
-    $logs_r = $conn->query($log_sql);
+    $logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
+    $logs_stmt->bind_param("iss", $internship_id, $ws, $we);
+    $logs_stmt->execute();
+    $logs_res = $logs_stmt->get_result();
+    $recent_logs = $logs_res ? $logs_res->fetch_all(MYSQLI_ASSOC) : [];
 } else {
-    $logs_r = $conn->query("SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} ORDER BY log_date DESC");
+    $recent_logs = $all_logs;
 }
-$recent_logs = [];
-if ($logs_r) { while ($row = $logs_r->fetch_assoc()) { $recent_logs[] = $row; } }
 
-// Attendance counts (SQL-based)
-$present_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND attendance_status = 'present'");
-$present_count = ($present_r && $present_r->num_rows > 0) ? (int) $present_r->fetch_row()[0] : 0;
+// Attendance counts
+$p_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
+$p_count_stmt->bind_param("i", $internship_id);
+$p_count_stmt->execute();
+$p_res = $p_count_stmt->get_result();
+$p_row = $p_res ? $p_res->fetch_row() : null;
+$present_count = (int) ($p_row[0] ?? 0);
 
-$absent_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND attendance_status IN ('absent','leave')");
-$absent_count = ($absent_r && $absent_r->num_rows > 0) ? (int) $absent_r->fetch_row()[0] : 0;
+$a_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
+$a_count_stmt->bind_param("i", $internship_id);
+$a_count_stmt->execute();
+$a_res = $a_count_stmt->get_result();
+$a_row = $a_res ? $a_res->fetch_row() : null;
+$absent_count = (int) ($a_row[0] ?? 0);
 
-// Overall internship attendance details for tooltips (all weeks)
+// Overall internship attendance details for tooltips
+$pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
+$pd_stmt->bind_param("i", $internship_id);
+$pd_stmt->execute();
+$pd_res = $pd_stmt->get_result();
 $present_dates = [];
-$absent_logs = [];
+if ($pd_res) {
+    while ($row = $pd_res->fetch_row()) {
+        $present_dates[] = $row[0];
+    }
+}
 
-$pd_r = $conn->query("SELECT log_date FROM daily_logs WHERE internship_id = {$esc_iid} AND attendance_status = 'present' ORDER BY log_date ASC");
-if ($pd_r) { while ($row = $pd_r->fetch_assoc()) { $present_dates[] = $row['log_date']; } }
-
-$ad_r = $conn->query("SELECT log_date, reason_for_absence FROM daily_logs WHERE internship_id = {$esc_iid} AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
-if ($ad_r) { while ($row = $ad_r->fetch_assoc()) { $absent_logs[] = $row; } }
+$ad_stmt = $db->prepare("SELECT log_date, reason_for_absence FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
+$ad_stmt->bind_param("i", $internship_id);
+$ad_stmt->execute();
+$ad_res = $ad_stmt->get_result();
+$absent_logs = $ad_res ? $ad_res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Weekly Reflection unlock logic
 $weekly_log_count = 0;
@@ -376,11 +393,13 @@ $total_weekdays = 0;
 if (!empty($weeks)) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
-    $esc_ws = $conn->real_escape_string($ws);
-    $esc_we = $conn->real_escape_string($we);
-    $wls_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_ws}' AND '{$esc_we}'");
-    $weekly_log_count = ($wls_r && $wls_r->num_rows > 0) ? (int) $wls_r->fetch_row()[0] : 0;
-    // Count only weekdays (Mon-Fri) in this week
+    $wls_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wls_stmt->bind_param("iss", $internship_id, $ws, $we);
+    $wls_stmt->execute();
+    $wls_res = $wls_stmt->get_result();
+    $wls_row = $wls_res ? $wls_res->fetch_row() : null;
+    $weekly_log_count = (int) ($wls_row[0] ?? 0);
+
     $wd_cursor = new DateTime($ws);
     $wd_end = new DateTime($we);
     while ($wd_cursor <= $wd_end) {
@@ -390,13 +409,19 @@ if (!empty($weeks)) {
 }
 $reflection_unlocked = $total_weekdays > 0 && $weekly_log_count >= $total_weekdays;
 
-$esc_sw = $conn->real_escape_string($selected_week);
-$rc_r = $conn->query("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = {$esc_iid} AND week_number = {$esc_sw}");
-$reflection_submitted = ($rc_r && $rc_r->num_rows > 0) ? ((int) $rc_r->fetch_row()[0] > 0) : false;
+$rc_stmt = $db->prepare("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
+$rc_stmt->bind_param("ii", $internship_id, $selected_week);
+$rc_stmt->execute();
+$rc_res = $rc_stmt->get_result();
+$rc_row = $rc_res ? $rc_res->fetch_row() : null;
+$reflection_submitted = ((int) ($rc_row[0] ?? 0) > 0);
 
-// Check if instructor rejected this week's report + fetch student signature
-$rej_r = $conn->query("SELECT report_status, instructor_comments, student_signature_type, student_signature_value FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_sw}");
-$rejection = ($rej_r && $rej_r->num_rows > 0) ? $rej_r->fetch_assoc() : null;
+// Check if instructor rejected this week's report
+$rej_stmt = $db->prepare("SELECT report_status, instructor_comments, student_signature_type, student_signature_value FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+$rej_stmt->bind_param("ii", $internship_id, $selected_week);
+$rej_stmt->execute();
+$rej_res = $rej_stmt->get_result();
+$rejection = $rej_res ? $rej_res->fetch_assoc() : null;
 $is_rejected = $rejection && $rejection['report_status'] === 'rejected';
 $rejection_reason = $is_rejected ? ($rejection['instructor_comments'] ?? '') : '';
 
@@ -405,57 +430,46 @@ $student_signed = false;
 if ($rejection && !empty($rejection['student_signature_type']) && !empty($rejection['student_signature_value'])) {
     $student_signed = true;
 }
-// When rejected, allow re-signing
 if ($is_rejected) {
     $student_signed = false;
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// FETCH PUBLIC HOLIDAYS (Myanmar Calendar)
-// ══════════════════════════════════════════════════════════════════════
-$all_holidays = [];
-$hol_r = $conn->query("SELECT holiday_date, holiday_name FROM holidays ORDER BY holiday_date ASC");
-if ($hol_r) { while ($row = $hol_r->fetch_assoc()) { $all_holidays[] = $row; } }
-$holiday_dates = [];
-foreach ($all_holidays as $hl) { $holiday_dates[$hl['holiday_date']] = $hl['holiday_name']; }
-
-// ══════════════════════════════════════════════════════════════════════
-// WARNING AUTO-CLEAR: Only clear when student submits a NEW log today
-// (i.e., $message === 'daily_saved' means a log was just saved this request)
-// ══════════════════════════════════════════════════════════════════════
+// WARNING AUTO-CLEAR
 if ($is_warned && $message === 'daily_saved') {
-    $conn->query("UPDATE users SET is_warned = 0 WHERE id = {$esc_uid}");
-    $is_warned = 0;
+    $clr_stmt = $db->prepare("UPDATE users SET is_warned = 0 WHERE id = ?");
+    $clr_stmt->bind_param("i", $user_id);
+    $clr_stmt->execute();
+    $is_warned = false;
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// HANDLE NOTIFICATION MARK-AS-READ (AJAX via api/notifications.php)
-// ══════════════════════════════════════════════════════════════════════
-
-// ══════════════════════════════════════════════════════════════════════
 // FETCH NOTIFICATIONS
-// ══════════════════════════════════════════════════════════════════════
-$unread_notif_r = $conn->query("SELECT COUNT(*) FROM notifications WHERE user_id = {$esc_uid} AND is_read = 0");
-$unread_notif_count = ($unread_notif_r && $unread_notif_r->num_rows > 0) ? (int) $unread_notif_r->fetch_row()[0] : 0;
+$unr_stmt = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unr_stmt->bind_param("i", $user_id);
+$unr_stmt->execute();
+$unr_res = $unr_stmt->get_result();
+$unr_row = $unr_res ? $unr_res->fetch_row() : null;
+$unread_notif_count = (int) ($unr_row[0] ?? 0);
 
-$recent_notifs_r = $conn->query("SELECT * FROM notifications WHERE user_id = {$esc_uid} ORDER BY created_at DESC LIMIT 10");
-$recent_notifications = [];
-if ($recent_notifs_r) { while ($row = $recent_notifs_r->fetch_assoc()) { $recent_notifications[] = $row; } }
+$rec_notif_stmt = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$rec_notif_stmt->bind_param("i", $user_id);
+$rec_notif_stmt->execute();
+$rec_res = $rec_notif_stmt->get_result();
+$recent_notifications = $rec_res ? $rec_res->fetch_all(MYSQLI_ASSOC) : [];
 
-// Fetch latest unread approval notification for banner display
-$approval_notif_r = $conn->query("SELECT * FROM notifications WHERE user_id = {$esc_uid} AND type = 'instructor_approved' AND is_read = 0 ORDER BY created_at DESC LIMIT 1");
-$approval_notif = ($approval_notif_r && $approval_notif_r->num_rows > 0) ? $approval_notif_r->fetch_assoc() : null;
+$app_notif_stmt = $db->prepare("SELECT * FROM notifications WHERE user_id = ? AND type = 'instructor_approved' AND is_read = 0 ORDER BY created_at DESC LIMIT 1");
+$app_notif_stmt->bind_param("i", $user_id);
+$app_notif_stmt->execute();
+$app_res = $app_notif_stmt->get_result();
+$approval_notif = $app_res ? $app_res->fetch_assoc() : null;
 
-// Rejected status overrides lock conditions — student can always edit when rejected
 if ($is_rejected) {
     $reflection_unlocked = true;
     $magic_link_unlocked = true;
 } else {
-    // Normal flow: daily logs + reflection + signature required
     $magic_link_unlocked = $reflection_unlocked && $reflection_submitted && $student_signed;
 }
 
-// Handle student signature POST (separate step before magic link)
+// Handle student signature POST
 if ($reflection_submitted && isset($_POST['save_student_signature'])) {
     $sig_type = $_POST['student_signature_type'] ?? '';
     $sig_val  = null;
@@ -475,32 +489,33 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
     }
 
     if (!empty($sig_val)) {
-        $esc_st = $conn->real_escape_string($sig_type);
-        $esc_sv = $conn->real_escape_string($sig_val);
-        $conn->query("INSERT INTO report_evaluations (student_id, week_number, grade, comment, student_signature_type, student_signature_value, report_status)
-            VALUES ({$esc_iid}, {$esc_sw}, 'needs_improvement', '', '{$esc_st}', '{$esc_sv}', 'pending')
+        $sig_stmt = $db->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, student_signature_type, student_signature_value, report_status)
+            VALUES (?, ?, 'needs_improvement', '', ?, ?, 'pending')
             ON DUPLICATE KEY UPDATE
             student_signature_type = VALUES(student_signature_type),
             student_signature_value = VALUES(student_signature_value),
             report_status = 'pending', evaluated_at = NOW()");
+        $sig_stmt->bind_param("iiss", $internship_id, $selected_week, $sig_type, $sig_val);
+        $sig_stmt->execute();
         $message = 'signature_saved';
 
-        // Notify the assigned supervisor that this report was submitted
         if (!empty($profile_row['supervisor_id'])) {
             require_once __DIR__ . '/../config/notify.php';
             notify_user_once(
-                $pdo,
+                $db,
                 (int) $profile_row['supervisor_id'],
                 'New Report Submitted',
-                $student_name . ' has submitted Week ' . $esc_sw . ' report and it is awaiting review.',
+                $student_name . ' has submitted Week ' . $selected_week . ' report and it is awaiting review.',
                 'new_report_submitted',
-                (int) $esc_sw,
-                (int) $esc_iid
+                (int) $selected_week,
+                (int) $internship_id
             );
         }
 
-        $rej_r = $conn->query("SELECT report_status, instructor_comments, student_signature_type, student_signature_value FROM report_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_sw}");
-        $rejection = ($rej_r && $rej_r->num_rows > 0) ? $rej_r->fetch_assoc() : null;
+        $rej_stmt->bind_param("ii", $internship_id, $selected_week);
+        $rej_stmt->execute();
+        $rej_res = $rej_stmt->get_result();
+        $rejection = $rej_res ? $rej_res->fetch_assoc() : null;
         $is_rejected = $rejection && $rejection['report_status'] === 'rejected';
         $student_signed = false;
         if ($rejection && !empty($rejection['student_signature_type']) && !empty($rejection['student_signature_value'])) {
@@ -508,8 +523,6 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
         }
         if ($is_rejected) {
             $student_signed = false;
-        }
-        if ($is_rejected) {
             $magic_link_unlocked = true;
         } else {
             $magic_link_unlocked = $reflection_unlocked && $reflection_submitted && $student_signed;
@@ -519,44 +532,47 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
     }
 }
 
-// Handle magic link generation POST (requires student signature already saved)
+// Fetch active magic link or generate
+$active_token_stmt = $db->prepare("SELECT token, expires_at FROM magic_links WHERE internship_id = ? AND week_number = ? AND expires_at > NOW() LIMIT 1");
+$active_token_stmt->bind_param("ii", $internship_id, $selected_week);
+$active_token_stmt->execute();
+$act_res = $active_token_stmt->get_result();
+$existing_link = $act_res ? $act_res->fetch_assoc() : null;
+
+if ($existing_link) {
+    $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
+        . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
+        . '/instructor/view-report.php?token=' . $existing_link['token'];
+}
+
 if ($magic_link_unlocked && isset($_POST['generate_magic_link'])) {
     $token = bin2hex(random_bytes(16));
     $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
 
-    $esc_token = $conn->real_escape_string($token);
-    $esc_exp   = $conn->real_escape_string($expires_at);
-
-    $conn->query("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
-        VALUES ({$esc_iid}, {$esc_sw}, '{$esc_token}', '{$esc_exp}')
+    $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
+        VALUES (?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
+    $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
+    $link_stmt->execute();
 
     $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
         . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
         . '/instructor/view-report.php?token=' . $token;
 }
 
-$reflections_r = $conn->query("SELECT * FROM weekly_reflections WHERE internship_id = {$esc_iid} AND week_number = {$esc_sw} ORDER BY week_number DESC");
-$weekly_refs = [];
-if ($reflections_r) { while ($row = $reflections_r->fetch_assoc()) { $weekly_refs[] = $row; } }
+$reflections_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ? ORDER BY week_number DESC");
+$reflections_stmt->bind_param("ii", $internship_id, $selected_week);
+$reflections_stmt->execute();
+$ref_res = $reflections_stmt->get_result();
+$weekly_refs = $ref_res ? $ref_res->fetch_all(MYSQLI_ASSOC) : [];
 
-// ══════════════════════════════════════════════════════════════════════
-// WORKFLOW STATUS CHAIN DATA (for current week)
-// Steps: Logs → Sign → Instructor → Supervisor
-// ══════════════════════════════════════════════════════════════════════
-
-// Step 1: Logs count for current week
+// ── WORKFLOW CHAIN ──
 $wf_step1_done = $total_weekdays > 0 && $weekly_log_count >= $total_weekdays;
-
-// Step 2: Reflection submitted
 $wf_step2_done = $reflection_submitted;
-
-// Step 3: Student signed + magic link generated
 $wf_step3_done = $student_signed;
 $wf_has_link   = !empty($existing_link);
 
-// Step 4: Instructor evaluated
-$wf_step4_status = 'pending'; // pending | approved | rejected
+$wf_step4_status = 'pending';
 if ($rejection) {
     if ($rejection['report_status'] === 'approved_by_instructor' || $rejection['report_status'] === 'approved_by_supervisor') {
         $wf_step4_status = 'approved';
@@ -565,21 +581,24 @@ if ($rejection) {
     }
 }
 
-// Step 5: Supervisor graded
-$wf_step5_done = false;
-$sup_eval_r2 = $conn->query("SELECT weekly_grade FROM supervisor_weekly_evaluations WHERE student_id = {$esc_iid} AND week_number = {$esc_sw} LIMIT 1");
-if ($sup_eval_r2 && $sup_eval_r2->num_rows > 0) {
-    $wf_step5_done = true;
+$sup_eval_stmt = $db->prepare("SELECT weekly_grade FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ? LIMIT 1");
+$sup_eval_stmt->bind_param("ii", $internship_id, $selected_week);
+$sup_eval_stmt->execute();
+$sup_res = $sup_eval_stmt->get_result();
+$wf_step5_done = (bool) ($sup_res ? $sup_res->fetch_assoc() : null);
+
+// ── ANALYTICS DATA ──
+$hours_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ?");
+$hours_stmt->bind_param("i", $internship_id);
+$hours_stmt->execute();
+$hrs_res = $hours_stmt->get_result();
+$all_durations = [];
+if ($hrs_res) {
+    while ($row = $hrs_res->fetch_row()) {
+        $all_durations[] = $row[0];
+    }
 }
 
-// ══════════════════════════════════════════════════════════════════════
-// ANALYTICS DATA FOR DASHBOARD ENHANCEMENTS
-// ══════════════════════════════════════════════════════════════════════
-
-// Total hours logged
-$hours_r = $conn->query("SELECT calculated_duration FROM daily_logs WHERE internship_id = {$esc_iid}");
-$all_durations = [];
-if ($hours_r) { while ($row = $hours_r->fetch_assoc()) { $all_durations[] = $row['calculated_duration']; } }
 $total_minutes = 0;
 foreach ($all_durations as $dur) {
     $parts = explode(':', $dur);
@@ -590,46 +609,45 @@ foreach ($all_durations as $dur) {
 $total_hours = floor($total_minutes / 60);
 $total_mins  = $total_minutes % 60;
 
-// Total logs count
-$total_logs_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid}");
-$total_logs_count = ($total_logs_r && $total_logs_r->num_rows > 0) ? (int) $total_logs_r->fetch_row()[0] : 0;
+$total_logs_count = count($all_logs);
 
-// Total reflections count
-$total_ref_r = $conn->query("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = {$esc_iid}");
-$total_reflections_count = ($total_ref_r && $total_ref_r->num_rows > 0) ? (int) $total_ref_r->fetch_row()[0] : 0;
+$total_ref_stmt = $db->prepare("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = ?");
+$total_ref_stmt->bind_param("i", $internship_id);
+$total_ref_stmt->execute();
+$tr_res = $total_ref_stmt->get_result();
+$tr_row = $tr_res ? $tr_res->fetch_row() : null;
+$total_reflections_count = (int) ($tr_row[0] ?? 0);
 
-// Weeks completed (custom Sun→Sat weeks with at least 1 log)
 $weeks_completed = 0;
 if (!empty($weeks)) {
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
-        $esc_wk_s = $conn->real_escape_string($wr['start']);
-        $esc_wk_e = $conn->real_escape_string($wr['end']);
-        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
-        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+        $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
+        $wc_stmt->execute();
+        $wc_res = $wc_stmt->get_result();
+        $wc_row = $wc_res ? $wc_res->fetch_row() : null;
+        if ((int) ($wc_row[0] ?? 0) > 0) {
             $weeks_completed++;
         }
     }
 }
-
-// Total internship weeks
 $total_weeks = count($weeks);
-
-// Attendance rate
 $attendance_rate = ($present_count + $absent_count) > 0 ? round(($present_count / ($present_count + $absent_count)) * 100) : 0;
 
-// Weekly hours data for chart (last 8 weeks)
+// Chart data
 $weekly_hours_data = [];
 $weekly_hours_labels = [];
 if (!empty($weeks)) {
     $chart_weeks = array_slice($weeks, -8, 8, true);
+    $wh_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($chart_weeks as $cw_num => $cw_range) {
-        $esc_cw_s = $conn->real_escape_string($cw_range['start']);
-        $esc_cw_e = $conn->real_escape_string($cw_range['end']);
-        $wh_r = $conn->query("SELECT calculated_duration FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_cw_s}' AND '{$esc_cw_e}'");
+        $wh_stmt->bind_param("iss", $internship_id, $cw_range['start'], $cw_range['end']);
+        $wh_stmt->execute();
+        $wh_res = $wh_stmt->get_result();
         $week_mins = 0;
-        if ($wh_r) {
-            while ($row = $wh_r->fetch_assoc()) {
-                $p = explode(':', $row['calculated_duration']);
+        if ($wh_res) {
+            while ($row = $wh_res->fetch_row()) {
+                $p = explode(':', $row[0]);
                 if (count($p) === 2) $week_mins += ((int)$p[0] * 60) + (int)$p[1];
             }
         }
@@ -638,46 +656,43 @@ if (!empty($weeks)) {
     }
 }
 
-// Attendance breakdown for donut chart (all weeks)
-$att_all_r = $conn->query("SELECT attendance_status, COUNT(*) as cnt FROM daily_logs WHERE internship_id = {$esc_iid} GROUP BY attendance_status");
+$att_all_stmt = $db->prepare("SELECT attendance_status, COUNT(*) as cnt FROM daily_logs WHERE internship_id = ? GROUP BY attendance_status");
+$att_all_stmt->bind_param("i", $internship_id);
+$att_all_stmt->execute();
+$att_res = $att_all_stmt->get_result();
 $att_breakdown = [];
-if ($att_all_r) { while ($row = $att_all_r->fetch_assoc()) { $att_breakdown[$row['attendance_status']] = (int) $row['cnt']; } }
-
-// Recent activity (last 5 logs)
-$recent_activity_r = $conn->query("SELECT log_date, attendance_status, task_title, calculated_duration FROM daily_logs WHERE internship_id = {$esc_iid} ORDER BY log_date DESC LIMIT 5");
-$recent_activities = [];
-if ($recent_activity_r) { while ($row = $recent_activity_r->fetch_assoc()) { $recent_activities[] = $row; } }
-
-// Notifications
-$notif_r = $conn->query("SELECT * FROM report_evaluations WHERE student_id = {$esc_iid} ORDER BY evaluated_at DESC LIMIT 5");
-$recent_evaluations = [];
-if ($notif_r) { while ($row = $notif_r->fetch_assoc()) { $recent_evaluations[] = $row; } }
-
-// Supervisor weekly evaluations
-$sup_eval_r = $conn->query("SELECT * FROM supervisor_weekly_evaluations WHERE student_id = {$esc_iid} ORDER BY week_number DESC LIMIT 5");
-$sup_evaluations = [];
-if ($sup_eval_r) { while ($row = $sup_eval_r->fetch_assoc()) { $sup_evaluations[] = $row; } }
-
-// Fetch existing valid token for the selected week
-$active_token_r = $conn->query("SELECT token, expires_at FROM magic_links WHERE internship_id = {$esc_iid} AND week_number = {$esc_sw} AND expires_at > NOW() LIMIT 1");
-$existing_link = ($active_token_r && $active_token_r->num_rows > 0) ? $active_token_r->fetch_assoc() : null;
-if ($existing_link && !$magic_link) {
-    $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-        . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
-        . '/instructor/view-report.php?token=' . $existing_link['token'];
+if ($att_res) {
+    while ($row = $att_res->fetch_assoc()) {
+        $att_breakdown[$row['attendance_status']] = (int) $row['cnt'];
+    }
 }
 
-// Auto-generate magic link when all conditions are met and no active link exists
+$recent_act_stmt = $db->prepare("SELECT log_date, attendance_status, task_title, calculated_duration FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC LIMIT 5");
+$recent_act_stmt->bind_param("i", $internship_id);
+$recent_act_stmt->execute();
+$act_res = $recent_act_stmt->get_result();
+$recent_activities = $act_res ? $act_res->fetch_all(MYSQLI_ASSOC) : [];
+
+$notif_eval_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 5");
+$notif_eval_stmt->bind_param("i", $internship_id);
+$notif_eval_stmt->execute();
+$eval_res = $notif_eval_stmt->get_result();
+$recent_evaluations = $eval_res ? $eval_res->fetch_all(MYSQLI_ASSOC) : [];
+
+$sup_eval_list_stmt = $db->prepare("SELECT * FROM supervisor_weekly_evaluations WHERE student_id = ? ORDER BY week_number DESC LIMIT 5");
+$sup_eval_list_stmt->bind_param("i", $internship_id);
+$sup_eval_list_stmt->execute();
+$sup_list_res = $sup_eval_list_stmt->get_result();
+$sup_evaluations = $sup_list_res ? $sup_list_res->fetch_all(MYSQLI_ASSOC) : [];
+
 if ($magic_link_unlocked && empty($magic_link)) {
     $token = bin2hex(random_bytes(16));
     $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
-
-    $esc_token = $conn->real_escape_string($token);
-    $esc_exp   = $conn->real_escape_string($expires_at);
-
-    $conn->query("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
-        VALUES ({$esc_iid}, {$esc_sw}, '{$esc_token}', '{$esc_exp}')
+    $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
+        VALUES (?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
+    $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
+    $link_stmt->execute();
 
     $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
         . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
@@ -1067,6 +1082,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Dancing+Script:wght@400;700&family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
+    html { scrollbar-gutter: stable; overflow-y: scroll; }
     .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
@@ -1094,9 +1110,9 @@ if ($magic_link_unlocked && empty($magic_link)) {
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 glass-sidebar flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">InternReport</span>
+    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
+        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+            <span class="font-black text-white tracking-tight text-lg">InternReport</span>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="#" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="dashboard" onclick="showDashboard()">
@@ -1135,40 +1151,41 @@ if ($magic_link_unlocked && empty($magic_link)) {
         <?php $pageTitle = 'Dashboard'; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-6 md:p-8">
+            <div class="max-w-7xl mx-auto w-full">
 
             <!-- ════ STUDENT INFO BAR ════ -->
             <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6">
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <!-- Supervisor Card -->
                     <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
-                        <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm font-bold shrink-0">
+                        <div class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold shrink-0">
                             <?= strtoupper(substr($supervisor_name, 0, 1)) ?>
                         </div>
                         <div class="min-w-0">
-                            <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Supervisor</p>
-                            <p class="font-bold text-slate-700 truncate"><?= htmlspecialchars($supervisor_name) ?></p>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Supervisor</p>
+                            <p class="text-sm font-semibold text-slate-700 truncate"><?= htmlspecialchars($supervisor_name) ?></p>
                         </div>
                     </div>
                     <!-- Instructor Card -->
                     <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
-                        <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold shrink-0">
+                        <div class="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold shrink-0">
                             <?= strtoupper(substr($instructor_name, 0, 1)) ?>
                         </div>
                         <div class="min-w-0">
-                            <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Instructor</p>
-                            <p class="font-bold text-slate-700 truncate"><?= htmlspecialchars($instructor_name) ?></p>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Instructor</p>
+                            <p class="text-sm font-semibold text-slate-700 truncate"><?= htmlspecialchars($instructor_name) ?></p>
                         </div>
                     </div>
                     <!-- Internship Period Card -->
                     <?php if ($intern_start && $intern_end): ?>
                     <div class="flex items-center gap-3 bg-violet-50 rounded-xl px-4 py-3 border border-violet-200">
-                        <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                         </div>
                         <div class="min-w-0">
-                            <p class="text-label font-bold text-indigo-400 uppercase tracking-wider">Internship Period</p>
-                            <p class="font-bold text-indigo-700"><?= (new DateTime($intern_start))->format('d M Y') ?> – <?= (new DateTime($intern_end))->format('d M Y') ?></p>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-indigo-500">Internship Period</p>
+                            <p class="text-sm font-semibold text-indigo-700"><?= (new DateTime($intern_start))->format('d M Y') ?> – <?= (new DateTime($intern_end))->format('d M Y') ?></p>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -1177,7 +1194,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
             <!-- ════ WORKFLOW STATUS CHAIN (Current Week) ════ -->
             <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6">
-                <h3 class="text-caption font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4 flex items-center gap-2">
                     <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
                     Week <?= $selected_week ?> Workflow Status
                 </h3>
@@ -1191,8 +1208,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z"/></svg>
                             <?php endif; ?>
                         </div>
-                        <p class="text-label font-bold text-slate-600 mt-2 text-center leading-tight">Daily Logs</p>
-                        <p class="text-caption text-slate-400 text-center"><?= $weekly_log_count ?></p>
+                        <p class="text-xs font-semibold text-slate-600 mt-2 text-center leading-tight">Daily Logs</p>
+                        <p class="text-xs text-gray-400 text-center"><?= $weekly_log_count ?></p>
                     </div>
                     <div class="flex-1 h-0.5 <?= $wf_step2_done ? 'bg-emerald-400' : 'bg-slate-200/60 border-dashed border-slate-300/60' ?> rounded-full mx-1 mt-[-22px]"></div>
                     <!-- Step 2: Reflection -->
@@ -1872,6 +1889,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                 </div>
             </section>
 
+        </div>
         </main>
     </div>
 </div>
@@ -1956,9 +1974,11 @@ function exportAsHTML() {
     content += '</tbody></table>';
     content += '<h2>Weekly Reflections</h2>';
     <?php
-    $all_refs_r = $conn->query("SELECT * FROM weekly_reflections WHERE internship_id = {$esc_iid} ORDER BY week_number");
-    $all_refs = [];
-    if ($all_refs_r) { while ($row = $all_refs_r->fetch_assoc()) { $all_refs[] = $row; } }
+    $ref_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? ORDER BY week_number ASC");
+    $ref_stmt->bind_param("i", $user_id);
+    $ref_stmt->execute();
+    $ref_res = $ref_stmt->get_result();
+    $all_refs = $ref_res ? $ref_res->fetch_all(MYSQLI_ASSOC) : [];
     foreach ($all_refs as $rf):
     ?>
     content += '<h3>Week <?= (int)$rf["week_number"] ?></h3>';
@@ -1974,15 +1994,35 @@ function exportAsHTML() {
 }
 
 function exportAsCSV() {
-    document.getElementById('export-modal').classList.add('hidden');
-    var csv = 'Date,Status,Task Title,Task Detail,Actual Task,Tools Used,Knowledge Gained,Duration\n';
-    <?php foreach ($all_logs as $log): ?>
-    csv += '"<?= $log["log_date"] ?>","<?= $log["attendance_status"] ?? "present" ?>","<?= addslashes($log["task_title"] ?? "") ?>","<?= addslashes($log["task_detail"] ?? "") ?>","<?= addslashes($log["tasks_performed"] ?? "") ?>","<?= addslashes($log["tools_used"] ?? "") ?>","<?= addslashes($log["learnt_skills"] ?? "") ?>","<?= $log["calculated_duration"] ?>"\n';
-    <?php endforeach; ?>
-    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var modal = document.getElementById('export-modal');
+    if (modal) modal.classList.add('hidden');
+
+    var rows = document.querySelectorAll('table tbody tr');
+    if (!rows || !rows.length) {
+        alert('No daily log entries available to export.');
+        return;
+    }
+
+    var csvRows = [];
+    var headers = ['Date / Day', 'Attendance Status', 'Task Title / Intended', 'Tasks Performed', 'Tools Used', 'Learnt Skills', 'Duration'];
+    csvRows.push(headers.map(function(h) { return '"' + h.replace(/"/g, '""') + '"'; }).join(','));
+
+    rows.forEach(function(row) {
+        var cols = row.querySelectorAll('td');
+        if (cols.length >= 7) {
+            var rowData = [];
+            cols.forEach(function(col) {
+                var text = col.innerText.trim().replace(/\s+/g, ' ');
+                rowData.push('"' + text.replace(/"/g, '""') + '"');
+            });
+            csvRows.push(rowData.join(','));
+        }
+    });
+
+    var blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     var link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'daily_logs_<?= $user_id ?>_week<?= $selected_week ?>.csv';
+    link.download = 'daily_logs_export.csv';
     link.click();
 }
 </script>

@@ -1,6 +1,8 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $user_id  = $_SESSION['user_id'];
 $username = $_SESSION['username'];
@@ -12,20 +14,23 @@ if ($role !== 'student') {
 }
 
 $internship_id = $user_id;
-$esc_uid = $conn->real_escape_string($user_id);
-$esc_iid = $conn->real_escape_string($internship_id);
+
+$db = $mysqli ?? $conn;
 
 // ── Fetch Student Profile ────────────────────────────────────────
-$profile_r = $conn->query("SELECT sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
+$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
     sp.instructor_name, sp.internship_start_date, sp.internship_end_date, sp.company_id,
     sup_u.username AS supervisor_name, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     LEFT JOIN users u ON u.id = sp.user_id
-    WHERE sp.user_id = {$esc_uid}");
-$profile_row = $profile_r ? $profile_r->fetch_assoc() : null;
+    WHERE sp.user_id = ?");
+$profile_stmt->bind_param("i", $user_id);
+$profile_stmt->execute();
+$res = $profile_stmt->get_result();
+$profile_row = $res ? $res->fetch_assoc() : null;
 
-$student_name     = ($profile_row['full_name'] ?: $username);
+$student_name     = (($profile_row['full_name'] ?? '') ?: $username);
 $student_roll     = $profile_row['student_roll'] ?? '';
 $intern_start     = $profile_row['internship_start_date'] ?? null;
 $intern_end       = $profile_row['internship_end_date'] ?? null;
@@ -50,17 +55,23 @@ if ($intern_start) {
 }
 
 // ── Fetch all data ───────────────────────────────────────────────
-$all_logs_r = $conn->query("SELECT * FROM daily_logs WHERE internship_id = {$esc_iid} ORDER BY log_date ASC");
-$all_logs = [];
-if ($all_logs_r) { while ($row = $all_logs_r->fetch_assoc()) { $all_logs[] = $row; } }
+$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$all_logs_stmt->bind_param("i", $internship_id);
+$all_logs_stmt->execute();
+$res = $all_logs_stmt->get_result();
+$all_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$all_refs_r = $conn->query("SELECT * FROM weekly_reflections WHERE internship_id = {$esc_iid} ORDER BY week_number ASC");
-$all_refs = [];
-if ($all_refs_r) { while ($row = $all_refs_r->fetch_assoc()) { $all_refs[] = $row; } }
+$all_refs_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? ORDER BY week_number ASC");
+$all_refs_stmt->bind_param("i", $internship_id);
+$all_refs_stmt->execute();
+$res = $all_refs_stmt->get_result();
+$all_refs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$all_evals_r = $conn->query("SELECT * FROM report_evaluations WHERE student_id = {$esc_iid} ORDER BY week_number ASC");
-$all_evals = [];
-if ($all_evals_r) { while ($row = $all_evals_r->fetch_assoc()) { $all_evals[] = $row; } }
+$all_evals_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? ORDER BY week_number ASC");
+$all_evals_stmt->bind_param("i", $internship_id);
+$all_evals_stmt->execute();
+$res = $all_evals_stmt->get_result();
+$all_evals = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 $eval_by_week = [];
 foreach ($all_evals as $ev) {
@@ -89,11 +100,19 @@ foreach ($all_refs as $ref) {
 // ── Stats ────────────────────────────────────────────────────────
 $total_logs_count = count($all_logs);
 
-$present_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND attendance_status = 'present'");
-$total_present = ($present_r && $present_r->num_rows > 0) ? (int) $present_r->fetch_row()[0] : 0;
+$present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
+$present_stmt->bind_param("i", $internship_id);
+$present_stmt->execute();
+$res = $present_stmt->get_result();
+$p_row = $res ? $res->fetch_row() : null;
+$total_present = (int) ($p_row[0] ?? 0);
 
-$absent_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND attendance_status IN ('absent','leave')");
-$total_absent = ($absent_r && $absent_r->num_rows > 0) ? (int) $absent_r->fetch_row()[0] : 0;
+$absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
+$absent_stmt->bind_param("i", $internship_id);
+$absent_stmt->execute();
+$res = $absent_stmt->get_result();
+$a_row = $res ? $res->fetch_row() : null;
+$total_absent = (int) ($a_row[0] ?? 0);
 
 $total_weeks = count($weeks);
 $total_reflections = count($all_refs);
@@ -101,11 +120,13 @@ $total_reflections = count($all_refs);
 $progress_weeks_completed = 0;
 $progress_total_weeks = $total_weeks;
 if (!empty($weeks)) {
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
-        $esc_wk_s = $conn->real_escape_string($wr['start']);
-        $esc_wk_e = $conn->real_escape_string($wr['end']);
-        $wc_r = $conn->query("SELECT COUNT(*) FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_wk_s}' AND '{$esc_wk_e}'");
-        if ($wc_r && $wc_r->num_rows > 0 && (int) $wc_r->fetch_row()[0] > 0) {
+        $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
+        $wc_stmt->execute();
+        $res = $wc_stmt->get_result();
+        $wc_row = $res ? $res->fetch_row() : null;
+        if ((int) ($wc_row[0] ?? 0) > 0) {
             $progress_weeks_completed++;
         }
     }
@@ -213,6 +234,7 @@ $back_url = 'student-dashboard.php';
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
+    html { scrollbar-gutter: stable; overflow-y: scroll; }
     .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
     .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
     .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
@@ -228,9 +250,9 @@ $back_url = 'student-dashboard.php';
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-56 glass-sidebar flex flex-col shrink-0">
-        <div class="h-14 flex items-center px-5 border-b border-white/10">
-            <span class="font-black text-white tracking-tight">InternReport</span>
+    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
+        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+            <span class="font-black text-white tracking-tight text-lg">InternReport</span>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
@@ -263,24 +285,25 @@ $back_url = 'student-dashboard.php';
         <?php $pageTitle = 'Log History'; $show_back_link = true; include '../includes/student-topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6">
+        <main class="flex-1 overflow-y-auto p-6 md:p-8">
+            <div class="max-w-7xl mx-auto w-full">
 
             <!-- ════ PAGE HEADER ════ -->
             <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6 no-print">
                 <div class="flex items-start justify-between flex-wrap gap-4">
                     <div class="flex items-center gap-4">
-                        <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold shrink-0">
+                        <div class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-base font-bold shrink-0">
                             <?= strtoupper($student_name[0]) ?>
                         </div>
                         <div>
-                            <h1 class="text-sm font-black text-slate-800"><?= htmlspecialchars($student_name) ?> — Log History</h1>
-                            <p class="text-sm text-slate-400 font-mono mt-0.5">Roll: <?= htmlspecialchars($student_roll ?: '—') ?></p>
+                            <h1 class="text-xl font-bold text-slate-800"><?= htmlspecialchars($student_name) ?> — Log History</h1>
+                            <p class="text-xs text-gray-400 font-mono mt-0.5">Roll: <?= htmlspecialchars($student_roll ?: '—') ?></p>
                             <div class="flex items-center gap-2 mt-1.5 flex-wrap">
                                 <?php if (!empty($profile_row['company_name'])): ?>
-                                    <span class="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"><?= htmlspecialchars($profile_row['company_name']) ?></span>
+                                    <span class="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded"><?= htmlspecialchars($profile_row['company_name']) ?></span>
                                 <?php endif; ?>
                                 <?php if ($supervisor_name && $supervisor_name !== '—'): ?>
-                                    <span class="text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Sup: <?= htmlspecialchars($supervisor_name) ?></span>
+                                    <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded">Sup: <?= htmlspecialchars($supervisor_name) ?></span>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -291,24 +314,24 @@ $back_url = 'student-dashboard.php';
             <!-- ════ STATS CARDS ════ -->
             <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6 no-print">
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-slate-800"><?= $display_logs_count ?></p>
-                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Total Logs</p>
+                    <p class="text-2xl font-bold text-slate-800"><?= $display_logs_count ?></p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">Total Logs</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-emerald-600"><?= $display_present ?></p>
-                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Present Days</p>
+                    <p class="text-2xl font-bold text-emerald-600"><?= $display_present ?></p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">Present Days</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-red-500"><?= $display_absent ?></p>
-                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Absent Days</p>
+                    <p class="text-2xl font-bold text-red-500"><?= $display_absent ?></p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">Absent Days</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-indigo-600"><?= $display_reflections ?></p>
-                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Reflections</p>
+                    <p class="text-2xl font-bold text-indigo-600"><?= $display_reflections ?></p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">Reflections</p>
                 </div>
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 text-center">
-                    <p class="text-2xl font-black text-blue-600"><?= $display_hours ?>h <?= str_pad($display_mins, 2, '0', STR_PAD_LEFT) ?>m</p>
-                    <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Total Hours</p>
+                    <p class="text-2xl font-bold text-blue-600"><?= $display_hours ?>h <?= str_pad($display_mins, 2, '0', STR_PAD_LEFT) ?>m</p>
+                    <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mt-1">Total Hours</p>
                 </div>
             </div>
 
@@ -317,16 +340,16 @@ $back_url = 'student-dashboard.php';
                 <div class="flex items-center justify-between flex-wrap gap-4">
                     <!-- View Mode Toggle -->
                     <div class="flex items-center gap-2">
-                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider">View:</span>
-                        <a href="?mode=weekly<?= $filter_week ? "&week={$filter_week}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Weekly</a>
-                        <a href="?mode=monthly<?= $filter_month ? "&month={$filter_month}" : '' ?>" class="px-3 py-1.5 text-xs font-bold rounded-lg transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Monthly</a>
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">View:</span>
+                        <a href="?mode=weekly<?= $filter_week ? "&week={$filter_week}" : '' ?>" class="px-3 py-1.5 text-xs font-medium rounded-lg transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Weekly</a>
+                        <a href="?mode=monthly<?= $filter_month ? "&month={$filter_month}" : '' ?>" class="px-3 py-1.5 text-xs font-medium rounded-lg transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Monthly</a>
                     </div>
 
                     <!-- Week/Month Filter -->
                     <?php if ($view_mode === 'weekly' && !empty($weeks)): ?>
                     <div class="flex items-center gap-2">
-                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider">Jump to:</span>
-                        <select onchange="if(this.value) window.location.href='?mode=weekly&week='+this.value; else window.location.href='?mode=weekly';" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Jump to:</span>
+                        <select onchange="if(this.value) window.location.href='?mode=weekly&week='+this.value; else window.location.href='?mode=weekly';" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
                             <option value="">All Weeks</option>
                             <?php foreach ($weeks as $wn => $wr): ?>
                             <option value="<?= $wn ?>" <?= $filter_week === $wn ? 'selected' : '' ?>>Week <?= $wn ?> (<?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?>)</option>
@@ -335,8 +358,8 @@ $back_url = 'student-dashboard.php';
                     </div>
                     <?php elseif ($view_mode === 'monthly' && !empty($months)): ?>
                     <div class="flex items-center gap-2">
-                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider">Jump to:</span>
-                        <select onchange="if(this.value) window.location.href='?mode=monthly&month='+this.value; else window.location.href='?mode=monthly';" class="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Jump to:</span>
+                        <select onchange="if(this.value) window.location.href='?mode=monthly&month='+this.value; else window.location.href='?mode=monthly';" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
                             <option value="">All Months</option>
                             <?php foreach ($months as $mk => $mv): ?>
                             <option value="<?= htmlspecialchars($mk) ?>" <?= $filter_month === $mk ? 'selected' : '' ?>><?= htmlspecialchars($mv['label']) ?></option>
@@ -346,7 +369,7 @@ $back_url = 'student-dashboard.php';
                     <?php endif; ?>
 
                     <!-- Print -->
-                    <button onclick="window.print()" class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-sm cursor-pointer">
+                    <button onclick="window.print()" class="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm cursor-pointer">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg>
                         Print
                     </button>
@@ -378,24 +401,24 @@ $back_url = 'student-dashboard.php';
                         }
                         $has_data = !empty($week_logs) || $week_ref || $week_eval;
                     ?>
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6 <?= !$has_data && $filter_week ? '' : '' ?>">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
                         <!-- Week Header -->
                         <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
                             <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center text-sm font-bold">
+                                <div class="w-9 h-9 rounded-xl bg-indigo-500 text-white flex items-center justify-center text-xs font-bold">
                                     W<?= $wn ?>
                                 </div>
                                 <div>
-                                    <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider">Week <?= $wn ?></h2>
-                                    <span class="text-caption text-slate-400">
+                                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-700">Week <?= $wn ?></h2>
+                                    <span class="text-xs text-gray-400">
                                         <?= (new DateTime($wr['start']))->format('d M Y') ?> – <?= (new DateTime($wr['end']))->format('d M Y') ?>
                                     </span>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded"><?= $week_present ?> Present</span>
-                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded"><?= $week_absent ?> Absent</span>
-                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"><?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
+                                <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded"><?= $week_present ?> Present</span>
+                                <span class="text-xs font-medium text-red-600 bg-red-50 px-2.5 py-0.5 rounded"><?= $week_absent ?> Absent</span>
+                                <span class="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded"><?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?>m</span>
                                 <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
                                     <?php
                                     $gmap = [
@@ -406,7 +429,7 @@ $back_url = 'student-dashboard.php';
                                     ];
                                     $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
                                     ?>
-                                    <span class="text-label font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                                    <span class="text-xs font-medium <?= $gs[1] ?> <?= $gs[2] ?> px-2.5 py-0.5 rounded"><?= $gs[0] ?></span>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -415,43 +438,43 @@ $back_url = 'student-dashboard.php';
                             <!-- Daily Logs -->
                             <?php if (!empty($week_logs)): ?>
                             <div>
-                                <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
                                     <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                     </span> Daily Logs
                                 </h3>
                                 <div class="overflow-x-auto">
-                                    <table class="w-full text-xs">
+                                    <table class="w-full text-sm">
                                         <thead>
-                                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-label">
-                                                <th class="px-3 py-2 text-left">ရက်စွဲ / နေ့</th>
-                                                <th class="px-3 py-2 text-left">တက်ရောက်မှုအခြေအနေ</th>
-                                                <th class="px-3 py-2 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
-                                                <th class="px-3 py-2 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
-                                                <th class="px-3 py-2 text-left">အသုံးပြုသောပစ္စည်းများ</th>
-                                                <th class="px-3 py-2 text-left">လေ့လာသိရှိသော အသိပညာ</th>
-                                                <th class="px-3 py-2 text-left">ကြာချိန်</th>
+                                            <tr class="bg-slate-50 text-gray-500 font-medium uppercase text-xs">
+                                                <th class="px-4 py-2.5 text-left">ရက်စွဲ / နေ့</th>
+                                                <th class="px-4 py-2.5 text-left">တက်ရောက်မှုအခြေအနေ</th>
+                                                <th class="px-4 py-2.5 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
+                                                <th class="px-4 py-2.5 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
+                                                <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                                                <th class="px-4 py-2.5 text-left">လေ့လာသိရှိသော အသိပညာ</th>
+                                                <th class="px-4 py-2.5 text-left">ကြာချိန်</th>
                                             </tr>
                                         </thead>
                                         <tbody class="divide-y divide-slate-100">
                                             <?php foreach ($week_logs as $wl): ?>
                                             <tr class="hover:bg-slate-50 transition">
-                                                <td class="px-3 py-2 font-medium text-slate-700 whitespace-nowrap">
+                                                <td class="px-4 py-3 text-sm text-gray-700 leading-normal whitespace-nowrap">
                                                     <?= (new DateTime($wl['log_date']))->format('D, d M Y') ?>
                                                 </td>
-                                                <td class="px-3 py-2 whitespace-nowrap">
+                                                <td class="px-4 py-3 whitespace-nowrap">
                                                     <?php if ($wl['attendance_status'] === 'present'): ?>
-                                                        <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Present</span>
+                                                        <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Present</span>
                                                     <?php else: ?>
-                                                        <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Absent</span>
+                                                        <span class="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded">Absent</span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <?php $is_absent = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
-                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
-                                                <td class="px-3 py-2 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
+                                                <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                                <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
+                                                <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
+                                                <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
+                                                <td class="px-4 py-3 font-mono text-blue-600 text-sm font-semibold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
                                             </tr>
                                             <?php endforeach; ?>
                                         </tbody>
@@ -460,30 +483,30 @@ $back_url = 'student-dashboard.php';
                             </div>
                             <?php else: ?>
                             <div class="text-center py-4">
-                                <p class="text-xs text-slate-400">No daily logs submitted for this week.</p>
+                                <p class="text-xs text-gray-400">No daily logs submitted for this week.</p>
                             </div>
                             <?php endif; ?>
 
                             <!-- Weekly Reflection -->
                             <?php if ($week_ref): ?>
                             <div class="border-t border-slate-100 pt-4">
-                                <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
                                     <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                                     </span> Weekly Reflection
                                 </h3>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div class="bg-slate-50 rounded-xl p-3">
-                                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">What was done?</span>
-                                        <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['what_done'] ?? '')) ?></p>
+                                    <div class="bg-slate-50 rounded-xl p-3.5">
+                                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">What was done?</span>
+                                        <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($week_ref['what_done'] ?? '')) ?></p>
                                     </div>
-                                    <div class="bg-slate-50 rounded-xl p-3">
-                                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">How was it done?</span>
-                                        <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['how_done'] ?? '')) ?></p>
+                                    <div class="bg-slate-50 rounded-xl p-3.5">
+                                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">How was it done?</span>
+                                        <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($week_ref['how_done'] ?? '')) ?></p>
                                     </div>
-                                    <div class="bg-slate-50 rounded-xl p-3">
-                                        <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">Why was it done?</span>
-                                        <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref['why_done'] ?? '')) ?></p>
+                                    <div class="bg-slate-50 rounded-xl p-3.5">
+                                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Why was it done?</span>
+                                        <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($week_ref['why_done'] ?? '')) ?></p>
                                     </div>
                                 </div>
                             </div>
@@ -492,31 +515,31 @@ $back_url = 'student-dashboard.php';
                             <!-- Evaluation -->
                             <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
                             <div class="border-t border-slate-100 pt-4">
-                                <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
                                     <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center">
                                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
                                     </span> Instructor Evaluation
                                 </h3>
-                                <div class="bg-slate-50 rounded-xl p-3 flex items-start gap-4">
+                                <div class="bg-slate-50 rounded-xl p-3.5 flex items-start gap-4">
                                     <div class="flex-1">
                                         <div class="flex items-center gap-2 mb-1">
                                             <?php
                                             $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
                                             ?>
-                                            <span class="text-label font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
-                                            <span class="text-label font-bold <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
+                                            <span class="text-xs font-medium <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                                            <span class="text-xs font-medium <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
                                         </div>
                                         <?php if ($week_eval['comment']): ?>
-                                            <p class="text-xs text-slate-600 leading-relaxed mt-1"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
+                                            <p class="text-sm text-gray-700 leading-normal mt-1"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
                                         <?php endif; ?>
                                         <?php if ($week_eval['instructor_comments']): ?>
-                                            <div class="bg-red-50 border border-red-100 rounded-lg p-2 mt-2">
-                                                <p class="text-label font-bold text-red-500 mb-0.5">Instructor Comments:</p>
-                                                <p class="text-xs text-red-600"><?= nl2br(htmlspecialchars($week_eval['instructor_comments'])) ?></p>
+                                            <div class="bg-red-50 border border-red-100 rounded-lg p-2.5 mt-2">
+                                                <p class="text-xs font-medium text-red-500 mb-0.5">Instructor Comments:</p>
+                                                <p class="text-sm text-red-600 leading-normal"><?= nl2br(htmlspecialchars($week_eval['instructor_comments'])) ?></p>
                                             </div>
                                         <?php endif; ?>
                                     </div>
-                                    <span class="text-label text-slate-300 shrink-0"><?= (new DateTime($week_eval['evaluated_at']))->format('d M Y') ?></span>
+                                    <span class="text-xs text-gray-400 shrink-0"><?= (new DateTime($week_eval['evaluated_at']))->format('d M Y') ?></span>
                                 </div>
                             </div>
                             <?php endif; ?>
@@ -569,20 +592,20 @@ $back_url = 'student-dashboard.php';
                         <!-- Month Header -->
                         <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
                             <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-purple-500 text-white flex items-center justify-center text-sm font-bold">
+                                <div class="w-9 h-9 rounded-xl bg-purple-500 text-white flex items-center justify-center text-xs font-bold">
                                     <?= date('M', strtotime($mk . '-01')) ?>
                                 </div>
                                 <div>
-                                    <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider"><?= htmlspecialchars($mv['label']) ?></h2>
-                                    <span class="text-caption text-slate-400"><?= count($mv['weeks']) ?> week(s) · <?= count($month_logs) ?> log(s)</span>
+                                    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-700"><?= htmlspecialchars($mv['label']) ?></h2>
+                                    <span class="text-xs text-gray-400"><?= count($mv['weeks']) ?> week(s) · <?= count($month_logs) ?> log(s)</span>
                                 </div>
                             </div>
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded"><?= $month_present ?> Present</span>
-                                <span class="text-label font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded"><?= $month_absent ?> Absent</span>
-                                <span class="text-label font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded"><?= floor($month_minutes / 60) ?>h <?= str_pad($month_minutes % 60, 2, '0', STR_PAD_LEFT) ?></span>
-                                <span class="text-label font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded"><?= $month_refs ?> Reflections</span>
-                                <span class="text-label font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded"><?= $month_evals ?> Evaluated</span>
+                                <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded"><?= $month_present ?> Present</span>
+                                <span class="text-xs font-medium text-red-600 bg-red-50 px-2.5 py-0.5 rounded"><?= $month_absent ?> Absent</span>
+                                <span class="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded"><?= floor($month_minutes / 60) ?>h <?= str_pad($month_minutes % 60, 2, '0', STR_PAD_LEFT) ?>m</span>
+                                <span class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded"><?= $month_refs ?> Reflections</span>
+                                <span class="text-xs font-medium text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded"><?= $month_evals ?> Evaluated</span>
                             </div>
                         </div>
 
@@ -598,9 +621,9 @@ $back_url = 'student-dashboard.php';
                             <div class="border border-slate-100 rounded-xl overflow-hidden">
                                 <div class="px-4 py-2.5 bg-slate-50/80 flex items-center justify-between">
                                     <div class="flex items-center gap-2">
-                                        <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-label font-bold"><?= $wn ?></span>
-                                        <span class="text-caption font-bold text-slate-600">Week <?= $wn ?></span>
-                                        <span class="text-label text-slate-400"><?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?></span>
+                                        <span class="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold"><?= $wn ?></span>
+                                        <span class="text-xs font-semibold text-slate-700">Week <?= $wn ?></span>
+                                        <span class="text-xs text-gray-400"><?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?></span>
                                     </div>
                                     <div class="flex items-center gap-1.5">
                                         <?php
@@ -609,59 +632,59 @@ $back_url = 'student-dashboard.php';
                                             if ($wl['attendance_status'] === 'present') $wk_p++; else $wk_a++;
                                         }
                                         ?>
-                                        <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded"><?= $wk_p ?></span>
-                                        <span class="text-caption font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded"><?= $wk_a ?></span>
+                                        <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded"><?= $wk_p ?></span>
+                                        <span class="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded"><?= $wk_a ?></span>
                                         <?php if ($week_ref_m): ?>
-                                            <span class="text-caption font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Ref</span>
+                                            <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Ref</span>
                                         <?php endif; ?>
                                         <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
                                             <?php
                                             $ev_status = $week_eval_m['report_status'];
                                             $ev_cls = $ev_status === 'approved_by_instructor' || $ev_status === 'approved_by_supervisor' ? 'text-emerald-600 bg-emerald-50' : ($ev_status === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50');
                                             ?>
-                                            <span class="text-caption font-bold <?= $ev_cls ?> px-1.5 py-0.5 rounded"><?= $ev_status === 'rejected' ? 'Rejected' : 'Evaluated' ?></span>
+                                            <span class="text-xs font-medium <?= $ev_cls ?> px-2 py-0.5 rounded"><?= $ev_status === 'rejected' ? 'Rejected' : 'Evaluated' ?></span>
                                         <?php endif; ?>
                                     </div>
                                 </div>
                                 <?php if (!empty($week_logs_m)): ?>
                                 <div>
-                                    <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5 px-4 pt-3">
+                                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5 px-4 pt-3">
                                         <span class="w-6 h-6 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                                         </span> Daily Logs
                                     </h3>
                                     <div class="overflow-x-auto">
-                                        <table class="w-full text-xs">
+                                        <table class="w-full text-sm">
                                             <thead>
-                                                <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-label">
-                                                    <th class="px-3 py-2 text-left">ရက်စွဲ / နေ့</th>
-                                                    <th class="px-3 py-2 text-left">တက်ရောက်မှုအခြေအနေ</th>
-                                                    <th class="px-3 py-2 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
-                                                    <th class="px-3 py-2 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
-                                                    <th class="px-3 py-2 text-left">အသုံးပြုသောပစ္စည်းများ</th>
-                                                    <th class="px-3 py-2 text-left">လေ့လာသိရှိသော အသိပညာ</th>
-                                                    <th class="px-3 py-2 text-left">ကြာချိန်</th>
+                                                <tr class="bg-slate-50 text-gray-500 font-medium uppercase text-xs">
+                                                    <th class="px-4 py-2.5 text-left">ရက်စွဲ / နေ့</th>
+                                                    <th class="px-4 py-2.5 text-left">တက်ရောက်မှုအခြေအနေ</th>
+                                                    <th class="px-4 py-2.5 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
+                                                    <th class="px-4 py-2.5 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
+                                                    <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                                                    <th class="px-4 py-2.5 text-left">လေ့လာသိရှိသော အသိပညာ</th>
+                                                    <th class="px-4 py-2.5 text-left">ကြာချိန်</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-slate-100">
                                                 <?php foreach ($week_logs_m as $wl): ?>
                                                 <tr class="hover:bg-slate-50 transition">
-                                                    <td class="px-3 py-2 font-medium text-slate-700 whitespace-nowrap">
+                                                    <td class="px-4 py-3 text-sm text-gray-700 leading-normal whitespace-nowrap">
                                                         <?= (new DateTime($wl['log_date']))->format('D, d M Y') ?>
                                                     </td>
-                                                    <td class="px-3 py-2 whitespace-nowrap">
+                                                    <td class="px-4 py-3 whitespace-nowrap">
                                                         <?php if ($wl['attendance_status'] === 'present'): ?>
-                                                            <span class="text-label font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Present</span>
+                                                            <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Present</span>
                                                         <?php else: ?>
-                                                            <span class="text-label font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">Absent</span>
+                                                            <span class="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded">Absent</span>
                                                         <?php endif; ?>
                                                     </td>
                                                     <?php $is_absent_m = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
-                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 text-slate-600 align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
-                                                    <td class="px-3 py-2 font-mono text-blue-600 font-bold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
+                                                    <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                                    <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
+                                                    <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
+                                                    <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent_m ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
+                                                    <td class="px-4 py-3 font-mono text-blue-600 text-sm font-semibold whitespace-nowrap"><?= htmlspecialchars($wl['calculated_duration']) ?></td>
                                                 </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
@@ -670,30 +693,30 @@ $back_url = 'student-dashboard.php';
                                 </div>
                                 <?php else: ?>
                                 <div class="px-4 py-3 text-center">
-                                    <p class="text-label text-slate-400">No logs for this week.</p>
+                                    <p class="text-xs text-gray-400">No logs for this week.</p>
                                 </div>
                                 <?php endif; ?>
 
                                 <!-- Week Reflection -->
                                 <?php if ($week_ref_m): ?>
                                 <div class="border-t border-slate-100 pt-4 px-4 pb-3">
-                                    <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
                                         <span class="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                                         </span> Weekly Reflection
                                     </h3>
                                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                        <div class="bg-slate-50 rounded-xl p-3">
-                                            <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">What was done?</span>
-                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref_m['what_done'] ?? '')) ?></p>
+                                        <div class="bg-slate-50 rounded-xl p-3.5">
+                                            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">What was done?</span>
+                                            <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($week_ref_m['what_done'] ?? '')) ?></p>
                                         </div>
-                                        <div class="bg-slate-50 rounded-xl p-3">
-                                            <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">How was it done?</span>
-                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref_m['how_done'] ?? '')) ?></p>
+                                        <div class="bg-slate-50 rounded-xl p-3.5">
+                                            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">How was it done?</span>
+                                            <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($week_ref_m['how_done'] ?? '')) ?></p>
                                         </div>
-                                        <div class="bg-slate-50 rounded-xl p-3">
-                                            <span class="text-label font-bold text-slate-400 uppercase tracking-wider block mb-1">Why was it done?</span>
-                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_ref_m['why_done'] ?? '')) ?></p>
+                                        <div class="bg-slate-50 rounded-xl p-3.5">
+                                            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Why was it done?</span>
+                                            <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($week_ref_m['why_done'] ?? '')) ?></p>
                                         </div>
                                     </div>
                                 </div>
@@ -754,6 +777,7 @@ $back_url = 'student-dashboard.php';
             <?php endif; ?>
 
             <div class="text-center text-sm text-slate-300 py-4 no-print">Powered by InternReport</div>
+        </div>
         </main>
     </div>
 </div>
