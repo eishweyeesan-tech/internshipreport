@@ -183,86 +183,8 @@ if (!function_exists('student_notif_url')) {
     </div>
 </header>
 
-<script>
-(function() {
-    // ── Notification Dropdown ──
-    window.toggleNotifDropdown = function(e) {
-        if (e) e.stopPropagation();
-        var dd = document.getElementById('notif-dropdown');
-        var isOpen = !dd.classList.contains('hidden');
-        closeAllDropdowns();
-        if (!isOpen) {
-            dd.classList.remove('hidden');
-            dd.style.opacity = '1';
-            dd.style.transform = 'translateY(0)';
-            dd.style.transition = 'opacity 0.15s ease, transform 0.15s ease';
-        }
-    };
-
-    // ── Profile Dropdown ──
-    window.toggleProfileDropdown = function(e) {
-        if (e) e.stopPropagation();
-        var menu = document.getElementById('profile-dropdown-menu');
-        var isOpen = !menu.classList.contains('hidden');
-        closeAllDropdowns();
-        if (!isOpen) menu.classList.remove('hidden');
-    };
-
-    function closeAllDropdowns() {
-        var dd = document.getElementById('notif-dropdown');
-        var pm = document.getElementById('profile-dropdown-menu');
-        if (dd) { dd.classList.add('hidden'); dd.style.opacity = ''; dd.style.transform = ''; }
-        if (pm) pm.classList.add('hidden');
-    }
-
-    document.addEventListener('click', function(e) {
-        var nw = document.getElementById('notif-bell-wrapper');
-        var pw = document.getElementById('profile-dropdown-wrapper');
-        if (nw && !nw.contains(e.target) && pw && !pw.contains(e.target)) {
-            closeAllDropdowns();
-        }
-    });
-
-    // ── Notification Badge ──
-    window.updateNotifBadge = function(count) {
-        var badge = document.getElementById('notif-badge');
-        var markAllBtn = document.getElementById('notif-mark-all-btn');
-        if (!badge) return;
-        if (count > 0) {
-            badge.textContent = count > 9 ? '9+' : count;
-            badge.classList.remove('hidden');
-            badge.classList.add('flex');
-            if (markAllBtn) markAllBtn.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
-            badge.classList.remove('flex');
-            if (markAllBtn) markAllBtn.classList.add('hidden');
-        }
-    };
-
-    // ── Time Ago ──
-    function timeAgo(dateStr) {
-        var date = new Date(dateStr);
-        var now = new Date();
-        var seconds = Math.floor((now - date) / 1000);
-        if (seconds < 60) return 'Just now';
-        var minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return minutes + 'm ago';
-        var hours = Math.floor(minutes / 60);
-        if (hours < 24) return hours + 'h ago';
-        var days = Math.floor(hours / 24);
-        if (days < 7) return days + 'd ago';
-        return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    }
-    function updateTimestamps() {
-        document.querySelectorAll('[data-notif-time]').forEach(function(el) {
-            el.textContent = timeAgo(el.getAttribute('data-notif-time'));
-        });
-    }
-    updateTimestamps();
-    setInterval(updateTimestamps, 60000);
-})();
-</script>
+<script src="../assets/js/main.js"></script>
+<script src="../assets/js/notifications.js"></script>
 <?php
 // Announcement modal intentionally removed for student view to avoid showing modal.
 // If needed later, set $enable_announcement_modal = true before including this file.

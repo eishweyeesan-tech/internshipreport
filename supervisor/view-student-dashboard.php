@@ -39,6 +39,9 @@ function getWeekRange(string $internship_start_date, int $week_number): ?array
     ];
 }
 
+require_once __DIR__ . '/../includes/ui_helpers.php';
+require_once __DIR__ . '/../includes/notification_actions.php';
+
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
     exit;
@@ -50,50 +53,8 @@ $sup_name = $_SESSION['username'];
 // ── Notification redirect URL helper ────────────────────────────
 require_once __DIR__ . '/../config/notify.php';
 
-// ── Notification POST handlers ──────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
-    $notif_id = (int)($_POST['notification_id'] ?? 0);
-    if ($notif_id > 0) {
-        $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")->execute([$notif_id, $sup_id]);
-    }
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-        $count_q->execute([$sup_id]);
-        echo json_encode(['unread_count' => (int)$count_q->fetchColumn()]);
-        exit;
-    }
-    header('Location: view-student-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-    exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notifications_read'])) {
-    $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0")->execute([$sup_id]);
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        echo json_encode(['unread_count' => 0]);
-        exit;
-    }
-    header('Location: view-student-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-    exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
-    $notif_id = (int) ($_POST['notification_id'] ?? 0);
-    $deleted  = false;
-    if ($notif_id > 0) {
-        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
-        $del->execute([$notif_id, $sup_id]);
-        $deleted = $del->rowCount() > 0;
-    }
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-        $count_q->execute([$sup_id]);
-        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
-        exit;
-    }
-    header('Location: view-student-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-    exit;
-}
+// ── Centralized Notification Action Handler ────────────────────
+handle_notification_ajax_actions($pdo, $sup_id);
 
 // ── Fetch notifications ─────────────────────────────────────────
 $unread_notif_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");

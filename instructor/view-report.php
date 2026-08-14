@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $logged_in_instructor = isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'instructor';
 

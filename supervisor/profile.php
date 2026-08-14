@@ -4,6 +4,8 @@ require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../includes/phone_validation.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
+require_once __DIR__ . '/../includes/notification_actions.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -20,52 +22,8 @@ $err = '';
 // ══════════════════════════════════════════════════════════════════
 require_once __DIR__ . '/../config/notify.php';
 
-// ══════════════════════════════════════════════════════════════════
-// MARK NOTIFICATION AS READ POST HANDLERS
-// ══════════════════════════════════════════════════════════════════
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
-    $notif_id = (int)($_POST['notification_id'] ?? 0);
-    if ($notif_id > 0) {
-        $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")->execute([$notif_id, $sup_id]);
-    }
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-        $count_q->execute([$sup_id]);
-        echo json_encode(['unread_count' => (int)$count_q->fetchColumn()]);
-        exit;
-    }
-    header('Location: profile.php');
-    exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notifications_read'])) {
-    $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0")->execute([$sup_id]);
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        echo json_encode(['unread_count' => 0]);
-        exit;
-    }
-    header('Location: profile.php');
-    exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
-    $notif_id = (int) ($_POST['notification_id'] ?? 0);
-    $deleted  = false;
-    if ($notif_id > 0) {
-        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
-        $del->execute([$notif_id, $sup_id]);
-        $deleted = $del->rowCount() > 0;
-    }
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-        $count_q->execute([$sup_id]);
-        echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
-        exit;
-    }
-    header('Location: profile.php');
-    exit;
-}
+// ── Centralized Notification Action Handler ────────────────────
+handle_notification_ajax_actions($pdo, $sup_id);
 
 // ══════════════════════════════════════════════════════════════════
 // FETCH NOTIFICATIONS
@@ -260,135 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     <div id="top" class="flex-1 flex flex-col min-h-0">
 
         <!-- Top Bar -->
-        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-[1050]">
-            <div class="flex items-center gap-4">
-                <h1 class="text-base font-bold text-slate-800">Supervisor Profile</h1>
-            </div>
-            <div class="flex items-center gap-5">
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="text-xs font-bold text-emerald-700"><?= $total_assigned ?> Assigned</span>
-                    <?php if (!empty($selected_year_label)): ?>
-                    <span class="text-sm font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded font-mono"><?= htmlspecialchars($selected_year_label) ?></span>
-                    <?php endif; ?>
-                </div>
-                <div class="flex items-center gap-3 pl-5 border-l border-slate-200 relative">
-                    <!-- Notification Bell -->
-                    <div class="relative" id="notif-bell-wrapper">
-                        <button onclick="toggleNotifDropdown()" class="relative p-2 hover:bg-white/30 rounded-xl transition cursor-pointer">
-                            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                            <?php if ($unread_notif_count > 0): ?>
-                            <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
-                            <?php endif; ?>
-                        </button>
-                        <!-- Notification Dropdown -->
-                        <div id="notif-dropdown" class="absolute right-0 top-full mt-1 w-[22rem] bg-white border border-slate-200 rounded-xl shadow-xl z-[1060] overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
-                            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-br from-blue-50/80 to-white/60">
-                                <h4 class="text-sm font-black text-slate-700">Notifications</h4>
-                                <?php if ($unread_notif_count > 0): ?>
-                                <button onclick="markAllNotifsRead()" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer">Mark all read</button>
-                                <?php endif; ?>
-                            </div>
-                            <div class="max-h-96 overflow-y-auto">
-                                <?php if (!empty($recent_notifications)): ?>
-                                <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
-                                <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-announcement-id="<?= (int)($notif['announcement_id'] ?? 0) ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
-                                    <?php if ($notif['type'] === 'instructor_approved'): ?>
-                                    <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                    </div>
-                                    <?php elseif ($notif['type'] === 'instructor_rejected'): ?>
-                                    <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                    </div>
-                                    <?php else: ?>
-                                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                                    </div>
-                                    <?php endif; ?>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm <?= !$notif['is_read'] ? 'font-bold text-slate-800' : 'font-medium text-slate-600' ?> leading-snug"><?= htmlspecialchars($notif['title']) ?></p>
-                                        <p class="text-xs text-slate-500 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
-                                        <p class="text-[11px] text-slate-400 mt-1.5" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>" data-notif-id="<?= (int)$notif['id'] ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
-                                    </div>
-                                    <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
-                                        <?php if (!$notif['is_read']): ?>
-                                        <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></span>
-                                        <?php endif; ?>
-                                        <div class="relative">
-                                            <button onclick="event.stopPropagation(); toggleNotifOptions(this)" class="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition opacity-0 group-hover:opacity-100 cursor-pointer" title="More options">
-                                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-                                            </button>
-                                            <div class="hidden absolute right-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1.5 notif-options-menu" onclick="event.stopPropagation();">
-                                                <?php if (!$notif['is_read']): ?>
-                                                <form method="POST" class="inline">
-                                                    <input type="hidden" name="notification_id" value="<?= (int)$notif['id'] ?>">
-                                                    <button type="submit" name="mark_notification_read" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition flex items-center gap-2.5 cursor-pointer">
-                                                        <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                        Mark as read
-                                                    </button>
-                                                </form>
-                                                <?php else: ?>
-                                                <div class="px-4 py-2.5 text-xs font-medium text-slate-400 flex items-center gap-2.5">
-                                                    <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                    Already read
-                                                </div>
-                                                <?php endif; ?>
-                                                <div class="my-1 border-t border-slate-100"></div>
-                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <?php endforeach; ?>
-                                <?php else: ?>
-                                <div class="p-10 text-center">
-                                    <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                                        <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                                    </div>
-                                    <p class="text-sm font-semibold text-slate-400">No notifications yet</p>
-                                    <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                            <div class="border-t border-slate-100">
-                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
-                            </div>
-                        </div>
-                    </div>
-                    <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="relative focus:outline-none">
-                        <?php if (!empty($_SESSION['profile_pic'])): ?>
-                        <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-lg shadow-indigo-500/20">
-                        <?php else: ?>
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-bold shadow-lg shadow-indigo-500/20">
-                            <?= strtoupper(substr($sup_name, 0, 1)) ?>
-                        </div>
-                        <?php endif; ?>
-                    </button>
-                    <div class="text-right">
-                        <p class="text-xs font-bold text-slate-700"><?= htmlspecialchars($sup_name) ?></p>
-                        <p class="text-sm text-slate-400">Supervisor</p>
-                    </div>
-                    <!-- Profile Dropdown Menu -->
-                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-[1050] bg-white border border-slate-200 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.15)] w-48 py-2">
-                        <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-                            <span>👤</span> My Profile
-                        </a>
-                        <a href="profile.php#security-section" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-                            <span>🔑</span> Change Password
-                        </a>
-                        <div class="my-1 border-t border-slate-100"></div>
-                        <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition">
-                            <span>🚪</span> Logout
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </header>
+        <?php $pageTitle = 'Supervisor Profile'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-8">
@@ -607,65 +437,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     </div>
 </div>
 
-<script>
-function toggleProfileDropdown(e) {
-    e.stopPropagation();
-    var menu = document.getElementById('profile-dropdown-menu');
-    menu.classList.toggle('hidden');
-    document.getElementById('notif-dropdown').style.cssText = 'opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);';
-}
-document.addEventListener('click', function(e) {
-    var profileMenu = document.getElementById('profile-dropdown-menu');
-    var profileBtn  = document.getElementById('profile-avatar-btn');
-    if (!profileMenu.classList.contains('hidden') && !profileBtn.contains(e.target) && !profileMenu.contains(e.target)) {
-        profileMenu.classList.add('hidden');
-    }
-});
-function toggleNotifDropdown() {
-    var dd = document.getElementById('notif-dropdown');
-    var isVisible = dd.style.opacity === '1';
-    dd.style.opacity    = isVisible ? '0'    : '1';
-    dd.style.visibility = isVisible ? 'hidden': 'visible';
-    dd.style.transform  = isVisible ? 'translateY(-8px) scale(0.95)' : 'translateY(0) scale(1)';
-    document.getElementById('profile-dropdown-menu').classList.add('hidden');
-}
-function openNotifFromSidebar() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setTimeout(function() { toggleNotifDropdown(); }, 300);
-}
-document.addEventListener('click', function(e) {
-    var bellWrapper = document.getElementById('notif-bell-wrapper');
-    var dd = document.getElementById('notif-dropdown');
-    if (dd.style.opacity === '1' && !bellWrapper.contains(e.target)) {
-        dd.style.opacity    = '0';
-        dd.style.visibility = 'hidden';
-        dd.style.transform  = 'translateY(-8px) scale(0.95)';
-    }
-});
-
-function timeAgo(dateStr) {
-    var date = new Date(dateStr);
-    var now = new Date();
-    var seconds = Math.floor((now - date) / 1000);
-    if (seconds < 0) return 'Just now';
-    if (seconds < 60) return 'Just now';
-    var minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return minutes + 'm ago';
-    var hours = Math.floor(minutes / 60);
-    if (hours < 24) return hours + 'h ago';
-    var days = Math.floor(hours / 24);
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return days + 'd ago';
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
-function updateNotifTimestamps() {
-    document.querySelectorAll('[data-notif-time]').forEach(function(el) {
-        el.textContent = timeAgo(el.getAttribute('data-notif-time'));
-    });
-}
-updateNotifTimestamps();
-setInterval(updateNotifTimestamps, 60000);
-</script>
+<script src="../assets/js/main.js"></script>
+<script src="../assets/js/notifications.js"></script>
 <?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 </html>

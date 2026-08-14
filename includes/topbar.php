@@ -110,55 +110,5 @@
     </div>
 </header>
 
-<script>
-function toggleProfileDropdown(e) {
-    e.stopPropagation();
-    var menu = document.getElementById('profileDropdownMenu');
-    menu.classList.toggle('hidden');
-    var notif = document.getElementById('notif-dropdown');
-    if (notif) { notif.style.opacity = '0'; notif.style.visibility = 'hidden'; notif.style.transform = 'translateY(-8px) scale(0.95)'; }
-}
-function toggleNotifDropdown() {
-    var dd = document.getElementById('notif-dropdown');
-    if (dd.style.visibility === 'visible') {
-        dd.style.opacity = '0';
-        dd.style.visibility = 'hidden';
-        dd.style.transform = 'translateY(-8px) scale(0.95)';
-    } else {
-        dd.style.opacity = '1';
-        dd.style.visibility = 'visible';
-        dd.style.transform = 'translateY(0) scale(1)';
-    }
-    document.getElementById('profileDropdownMenu').classList.add('hidden');
-}
-document.addEventListener('click', function(e) {
-    var profileContainer = document.getElementById('profileDropdownContainer');
-    var profileMenu = document.getElementById('profileDropdownMenu');
-    if (profileContainer && profileMenu && !profileContainer.contains(e.target)) {
-        profileMenu.classList.add('hidden');
-    }
-    var notifWrapper = document.getElementById('notif-bell-wrapper');
-    var notifDd = document.getElementById('notif-dropdown');
-    if (notifWrapper && notifDd && !notifWrapper.contains(e.target)) {
-        notifDd.style.opacity = '0';
-        notifDd.style.visibility = 'hidden';
-        notifDd.style.transform = 'translateY(-8px) scale(0.95)';
-    }
-});
-function timeAgo(dateStr) {
-    var date = new Date(dateStr);
-    var now = new Date();
-    var seconds = Math.floor((now - date) / 1000);
-    if (seconds < 60) return 'Just now';
-    var minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return minutes + 'm ago';
-    var hours = Math.floor(minutes / 60);
-    if (hours < 24) return hours + 'h ago';
-    var days = Math.floor(hours / 24);
-    if (days < 7) return days + 'd ago';
-    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-}
-document.querySelectorAll('[data-notif-time]').forEach(function(el) {
-    el.textContent = timeAgo(el.getAttribute('data-notif-time'));
-});
-</script>
+<script src="../assets/js/main.js"></script>
+<script src="../assets/js/notifications.js"></script>

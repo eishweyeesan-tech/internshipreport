@@ -4,6 +4,7 @@ require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../config/internship_progress.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');

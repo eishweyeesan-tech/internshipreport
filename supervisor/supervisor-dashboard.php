@@ -4,6 +4,8 @@ require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../config/internship_progress.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
+require_once __DIR__ . '/../includes/notification_actions.php';
 
 if ($_SESSION['role'] !== 'supervisor') {
     header('Location: ../dashboard.php');
@@ -35,43 +37,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
 // ── Notification redirect URL helper ────────────────────────────
 require_once __DIR__ . '/../config/notify.php';
 
-// ── Mark notification as read ──────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
-    $notif_id = (int)($_POST['notification_id'] ?? 0);
-    if ($notif_id > 0) {
-        $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?")->execute([$notif_id, $sup_id]);
-    }
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-        $count_q->execute([$sup_id]);
-        echo json_encode(['unread_count' => (int)$count_q->fetchColumn()]);
-        exit;
-    }
-    header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-    exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notifications_read'])) {
-    $pdo->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0")->execute([$sup_id]);
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        echo json_encode(['unread_count' => 0]);
-        exit;
-    }
-    header('Location: supervisor-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
-    exit;
-}
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_notification'])) {
-    $notif_id = (int) ($_POST['notification_id'] ?? 0);
-    $deleted  = false;
-    if ($notif_id > 0) {
-        $del = $pdo->prepare("DELETE FROM notifications WHERE id = ? AND user_id = ?");
-        $del->execute([$notif_id, $sup_id]);
-        $deleted = $del->rowCount() > 0;
-    }
-    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-        header('Content-Type: application/json');
-        $count_q = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+// ── Centralized Notification Action Handler ────────────────────
+handle_notification_ajax_actions($pdo, $sup_id);o->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
         $count_q->execute([$sup_id]);
         echo json_encode(['success' => $deleted, 'unread_count' => (int) $count_q->fetchColumn()]);
         exit;
@@ -730,29 +697,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     fclose($output);
     exit;
 }
-
-// Status label helper for the table
-function progress_status_label($status) {
-    switch ($status) {
-        case 'red':    return ['Behind Schedule', 'text-red-700 bg-red-50 border-red-200'];
-        case 'amber':  return ['In Progress',     'text-amber-700 bg-amber-50 border-amber-200'];
-        case 'green':  return ['Complete',        'text-emerald-700 bg-emerald-50 border-emerald-200'];
-        default:       return ['Not Started',     'text-slate-500 bg-slate-50 border-slate-200'];
-    }
-}
-function progress_status_dot($status) {
-    switch ($status) {
-        case 'red':    return 'bg-red-500 animate-pulse';
-        case 'amber':  return 'bg-amber-500';
-        case 'green':  return 'bg-emerald-500';
-        default:       return 'bg-slate-400';
-    }
-}
-function progress_bar_color($pct) {
-    if ($pct >= 80) return 'from-emerald-500 to-emerald-600';
-    if ($pct >= 40) return 'from-indigo-500 to-purple-600';
-    return 'from-amber-500 to-orange-500';
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -850,102 +794,6 @@ function progress_bar_color($pct) {
         .scroll-margin { scroll-margin-top: 88px; }
         #dashboard-student-search::-webkit-search-cancel-button { -webkit-appearance: none; }
     </style>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        'inter': ['Inter', 'sans-serif'],
-                    },
-                    fontSize: {
-                    'micro': '0.5rem',
-                    'caption': '0.6875rem',
-                    'label': '0.8125rem',
-                    'subtitle': '0.9375rem',
-                    'body': '1rem',
-                },
-                }
-            }
-        }
-    </script>
-    <script>
-    (function() {
-        var theme = localStorage.getItem('theme');
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-    })();
-
-    function toggleProfileDropdown(e) {
-        e.stopPropagation();
-        var dd = document.getElementById('profile-dropdown-menu');
-        dd.classList.toggle('hidden');
-        var nd = document.getElementById('notif-dropdown');
-        if (nd) { nd.style.opacity = '0'; nd.style.visibility = 'hidden'; nd.style.transform = 'translateY(-8px) scale(0.95)'; }
-    }
-    document.addEventListener('click', function(e) {
-        var dd = document.getElementById('profile-dropdown-menu');
-        var btn = document.getElementById('profile-avatar-btn');
-        if (dd && !dd.contains(e.target) && !btn.contains(e.target)) {
-            dd.classList.add('hidden');
-        }
-    });
-
-    function toggleNotifDropdown() {
-        var dd = document.getElementById('notif-dropdown');
-        var visible = dd.style.opacity === '1';
-        dd.style.opacity    = visible ? '0'    : '1';
-        dd.style.visibility = visible ? 'hidden' : 'visible';
-        dd.style.transform  = visible ? 'translateY(-8px) scale(0.95)' : 'translateY(0) scale(1)';
-        var pm = document.getElementById('profile-dropdown-menu');
-        if (pm) pm.classList.add('hidden');
-    }
-    document.addEventListener('click', function(e) {
-        var wrapper = document.getElementById('notif-bell-wrapper');
-        var dd = document.getElementById('notif-dropdown');
-        if (wrapper && dd && !wrapper.contains(e.target)) {
-            dd.style.opacity = '0';
-            dd.style.visibility = 'hidden';
-            dd.style.transform = 'translateY(-8px) scale(0.95)';
-        }
-    });
-
-    function openNotifFromSidebar() {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        setTimeout(function() { toggleNotifDropdown(); }, 300);
-    }
-
-    function timeAgo(dateStr) {
-        var date = new Date(dateStr);
-        var now = new Date();
-        var seconds = Math.floor((now - date) / 1000);
-        if (seconds < 0) return 'Just now';
-        if (seconds < 60) return 'Just now';
-        var minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return minutes + 'm ago';
-        var hours = Math.floor(minutes / 60);
-        if (hours < 24) return hours + 'h ago';
-        var days = Math.floor(hours / 24);
-        if (days === 1) return 'Yesterday';
-        if (days < 7) return days + 'd ago';
-        return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    }
-
-    function updateNotifTimestamps() {
-        document.querySelectorAll('[data-notif-time]').forEach(function(el) {
-            el.textContent = timeAgo(el.getAttribute('data-notif-time'));
-        });
-    }
-    updateNotifTimestamps();
-    setInterval(updateNotifTimestamps, 60000);
-
-    function toggleNotifOptions(btn) {
-        var menu = btn.nextElementSibling;
-        document.querySelectorAll('.notif-options-menu').forEach(function(m) { if (m !== menu) m.classList.add('hidden'); });
-        menu.classList.toggle('hidden');
-    }
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('[onclick*="toggleNotifOptions"]')) {
-            document.querySelectorAll('.notif-options-menu').forEach(function(m) { m.classList.add('hidden'); });
         }
     });
 

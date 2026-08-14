@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/includes/ui_helpers.php';
 
 $uid = (int) ($_GET['uid'] ?? 0);
 if ($uid <= 0) {
@@ -307,10 +308,11 @@ $back_url = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'admin/
                     <div class="flex-1">
                         <div class="flex items-center gap-2 mb-1">
                             <?php
-                            $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
+                            $gs = grade_badge_styles($week_eval['grade'] ?? '');
+                            $sb = report_status_badge($week_eval['report_status'] ?? 'pending');
                             ?>
-                            <span class="text-sm font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
-                            <span class="text-sm font-bold <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
+                            <span class="text-sm font-bold <?= $gs['text'] ?> <?= $gs['bg'] ?> px-2 py-0.5 rounded"><?= $gs['label'] ?></span>
+                            <span class="text-sm font-bold <?= $sb['classes'] ?> px-2 py-0.5 rounded"><?= $sb['label'] ?></span>
                         </div>
                         <?php if ($week_eval['comment']): ?>
                             <p class="text-sm text-slate-600 leading-relaxed mt-1"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
