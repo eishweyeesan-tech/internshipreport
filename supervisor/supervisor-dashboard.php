@@ -1,8 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
-require_once __DIR__ . '/../config/init_year.php';
-require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../config/internship_progress.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
@@ -66,96 +64,9 @@ function sendRedBadgeAlert($db, $supervisor_id, $supervisor_name, $supervisor_em
     $today = date('Y-m-d');
     $today_display = date('l, d M Y');
 
-    // Check if alert already sent today for this student
-    $check = $db->prepare("SELECT id FROM supervisor_alerts WHERE supervisor_id = ? AND student_id = ? AND alert_type = 'red_badge' AND alert_date = ?");
-    $check->bind_param("iis", $supervisor_id, $student_id, $today);
-    $check->execute();
-    $res = $check->get_result();
-    if ($res && $res->fetch_row()) {
-        return false; // Already sent today
-    }
-
-    // Email subject and body
-    $subject = "⚠️ Student Behind Schedule Alert - " . $student_name;
-    $body = "
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; padding: 20px; border-radius: 10px 10px 0 0; }
-            .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-            .alert-box { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 15px; margin: 15px 0; }
-            .footer { background: #1e293b; color: #94a3b8; padding: 15px; border-radius: 0 0 10px 10px; text-align: center; font-size: 0.8125rem; }
-            .btn { display: inline-block; background: #6366f1; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; margin-top: 10px; }
-        </style>
-    </head>
-    <body>
-        <div class='container'>
-            <div class='header'>
-                <h2 style='margin:0;'>⚠️ Student Behind Schedule Alert</h2>
-                <p style='margin:5px 0 0; opacity:0.9;'>InternReport Notification</p>
-            </div>
-            <div class='content'>
-                <p>Dear <strong>" . htmlspecialchars($supervisor_name) . "</strong>,</p>
-
-                <div class='alert-box'>
-                    <p style='margin:0; color:#dc2626; font-weight:bold;'>🔴 RED ALERT: Student Behind Schedule</p>
-                </div>
-
-                <p>The following student has <strong>not submitted any daily logs</strong> this week and requires immediate attention:</p>
-
-                <table style='width:100%; border-collapse:collapse; margin:15px 0;'>
-                    <tr style='background:#e5e7eb;'>
-                        <td style='padding:10px; font-weight:bold; border:1px solid #d1d5db;'>Student Name</td>
-                        <td style='padding:10px; border:1px solid #d1d5db;'>" . htmlspecialchars($student_name) . "</td>
-                    </tr>
-                    <tr>
-                        <td style='padding:10px; font-weight:bold; border:1px solid #d1d5db;'>Roll Number</td>
-                        <td style='padding:10px; border:1px solid #d1d5db;'>" . htmlspecialchars($student_roll ?: 'N/A') . "</td>
-                    </tr>
-                    <tr style='background:#e5e7eb;'>
-                        <td style='padding:10px; font-weight:bold; border:1px solid #d1d5db;'>Company</td>
-                        <td style='padding:10px; border:1px solid #d1d5db;'>" . htmlspecialchars($company_name ?: 'N/A') . "</td>
-                    </tr>
-                    <tr>
-                        <td style='padding:10px; font-weight:bold; border:1px solid #d1d5db;'>Alert Date</td>
-                        <td style='padding:10px; border:1px solid #d1d5db;'>" . $today_display . "</td>
-                    </tr>
-                    <tr style='background:#e5e7eb;'>
-                        <td style='padding:10px; font-weight:bold; border:1px solid #d1d5db;'>Status</td>
-                        <td style='padding:10px; border:1px solid #d1d5db; color:#dc2626; font-weight:bold;'>🔴 Behind Schedule (0/5 Logs)</td>
-                    </tr>
-                </table>
-
-                <p>Please review this student's progress and take appropriate action. You can view the student's details in your supervisor dashboard.</p>
-
-                <p style='text-align:center;'>
-                    <a href='http://localhost/internreport/supervisor/supervisor-dashboard.php' class='btn'>View Dashboard</a>
-                </p>
-            </div>
-            <div class='footer'>
-                <p>This is an automated notification from InternReport.</p>
-                <p>© " . date('Y') . " InternReport. All rights reserved.</p>
-            </div>
-        </div>
-</body>
-    </html>";
-
-    // Send email via PHPMailer SMTP
-    require_once __DIR__ . '/../config/mail.php';
-    $email_sent = sendAlertEmail($supervisor_email, $subject, $body, $supervisor_email);
-
-    // Record alert in database
-    $insert = $db->prepare("INSERT INTO supervisor_alerts (supervisor_id, student_id, alert_type, alert_date, email_sent, sent_at) VALUES (?, ?, 'red_badge', ?, ?, NOW())");
-    $email_flag = $email_sent ? 1 : 0;
-    $insert->bind_param("iisi", $supervisor_id, $student_id, $today, $email_flag);
-    $insert->execute();
-
-    // In-app notification
+    // In-app notification with daily deduplication
     require_once __DIR__ . '/../config/notify.php';
-    notify_user_once(
+    return (bool) notify_user_once(
         $db,
         $supervisor_id,
         'Student Behind Schedule',
@@ -166,8 +77,6 @@ function sendRedBadgeAlert($db, $supervisor_id, $supervisor_name, $supervisor_em
         null,
         true
     );
-
-    return $email_sent;
 }
 
 $filter_year = $_GET['academic_year'] ?? '';
@@ -178,64 +87,6 @@ $per_page = 10;
 $tab = $_GET['tab'] ?? 'dashboard';
 if (!in_array($tab, ['dashboard', 'trainee-archive'])) $tab = 'dashboard';
 
-// Valid academic years for filter dropdown (from dimension table)
-$vy_stmt = $db->prepare("
-    SELECT DISTINCT ay.year_label
-    FROM academic_years ay
-    INNER JOIN users u ON u.academic_year_id = ay.id
-    INNER JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE sp.supervisor_id = ?
-    ORDER BY ay.year_label DESC
-");
-$vy_stmt->bind_param("i", $sup_id);
-$vy_stmt->execute();
-$res = $vy_stmt->get_result();
-$valid_years = [];
-if ($res) {
-    while ($row = $res->fetch_row()) {
-        $valid_years[] = $row[0];
-    }
-}
-
-// Fallback: if no FK matches, also check string column for legacy data
-if (empty($valid_years)) {
-    $vy_stmt2 = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.academic_year IS NOT NULL AND u.academic_year != '' ORDER BY u.academic_year DESC");
-    $vy_stmt2->bind_param("i", $sup_id);
-    $vy_stmt2->execute();
-    $res = $vy_stmt2->get_result();
-    if ($res) {
-        while ($row = $res->fetch_row()) {
-            $valid_years[] = $row[0];
-        }
-    }
-}
-
-// ── Detect Current Active Academic Year ─────────────────────────────
-$current_academic_year = $valid_years[0] ?? '';
-if (!$current_academic_year) {
-    $now = new DateTime();
-    $yr = (int) $now->format('Y');
-    if ((int) $now->format('n') >= 8) {
-        $current_academic_year = $yr . '-' . ($yr + 1);
-    } else {
-        $current_academic_year = ($yr - 1) . '-' . $yr;
-    }
-}
-
-// ── Selected Year (defaults to current academic year) ───────────────
-$selected_year = $filter_year ?: $current_academic_year;
-
-// Resolve selected year to academic_year_id for FK-based filtering
-$selected_year_id = null;
-if ($selected_year && preg_match('/^\d{4}-\d{4}$/', $selected_year)) {
-    $ayid_stmt = $db->prepare("SELECT id FROM academic_years WHERE year_label = ?");
-    $ayid_stmt->bind_param("s", $selected_year);
-    $ayid_stmt->execute();
-    $res = $ayid_stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $selected_year_id = $row[0] ?? null;
-}
-
 // ── Current Week Boundaries ─────────────────────────────────────────
 $today = new DateTime();
 $dayOfWeek = (int) $today->format('N');
@@ -243,56 +94,37 @@ $weekStart = (clone $today)->modify('monday this week')->format('Y-m-d');
 $weekEnd   = (clone $today)->modify('sunday this week')->format('Y-m-d');
 
 // ══════════════════════════════════════════════════════════════════════
-// DYNAMIC CARD COUNTS (Filtered by Selected Academic Year)
+// DYNAMIC CARD COUNTS
 // ══════════════════════════════════════════════════════════════════════
 
-// Build year filter from the dropdown selection (not from session)
-$ay_sql    = $selected_year_id ? ' AND u.academic_year_id = ?' : '';
-$ay_params = $selected_year_id ? [$selected_year_id] : [];
-
-// 1. ALL STUDENTS: Count active assigned students for selected year
-$sc = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_sql);
-if ($selected_year_id) {
-    $sc->bind_param("ii", $sup_id, $selected_year_id);
-} else {
-    $sc->bind_param("i", $sup_id);
-}
+// 1. ALL STUDENTS: Count active assigned students
+$sc = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?");
+$sc->bind_param("i", $sup_id);
 $sc->execute();
 $res = $sc->get_result();
 $row = $res ? $res->fetch_row() : null;
 $total_assigned = (int) ($row[0] ?? 0);
 
-// 2. COMPANIES: Count distinct companies for selected year
-$cc = $db->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''" . $ay_sql);
-if ($selected_year_id) {
-    $cc->bind_param("ii", $sup_id, $selected_year_id);
-} else {
-    $cc->bind_param("i", $sup_id);
-}
+// 2. COMPANIES: Count distinct companies
+$cc = $db->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''");
+$cc->bind_param("i", $sup_id);
 $cc->execute();
 $res = $cc->get_result();
 $row = $res ? $res->fetch_row() : null;
 $company_count = (int) ($row[0] ?? 0);
 
 // 3. TOTAL REPORTS: Count submitted reports (instructor evaluations) from assigned students
-$tr_sql = "
+$tr = $db->prepare("
     SELECT COUNT(*) FROM report_evaluations re
     JOIN users u ON u.id = re.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay_sql;
-$tr = $db->prepare($tr_sql);
-if ($selected_year_id) {
-    $tr->bind_param("ii", $sup_id, $selected_year_id);
-} else {
-    $tr->bind_param("i", $sup_id);
-}
+    WHERE u.role = 'student' AND sp.supervisor_id = ?
+");
+$tr->bind_param("i", $sup_id);
 $tr->execute();
 $res = $tr->get_result();
 $row = $res ? $res->fetch_row() : null;
 $total_reports = (int) ($row[0] ?? 0);
-
-// Build base query for active students in selected year
-$base_where  = "u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_sql;
 
 // ══════════════════════════════════════════════════════════════════════
 // DYNAMIC CURRENT WEEK CALCULATION (per student)
@@ -305,15 +137,11 @@ $stu_detail_sql = "
            sp.instructor_name, sp.instructor_email, sp.instructor_id
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE {$base_where}
+    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
     ORDER BY sp.full_name ASC
 ";
 $stu_detail_stmt = $db->prepare($stu_detail_sql);
-if ($selected_year_id) {
-    $stu_detail_stmt->bind_param("ii", $sup_id, $selected_year_id);
-} else {
-    $stu_detail_stmt->bind_param("i", $sup_id);
-}
+$stu_detail_stmt->bind_param("i", $sup_id);
 $stu_detail_stmt->execute();
 $res = $stu_detail_stmt->get_result();
 $all_students_detail = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
@@ -543,18 +371,14 @@ $pending_reviews_q = $db->prepare("
       AND re.student_id IN (
           SELECT u.id FROM users u
           JOIN student_profiles sp ON sp.user_id = u.id
-          WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay_sql . "
+          WHERE u.role = 'student' AND sp.supervisor_id = ?
       )
       AND NOT EXISTS (
           SELECT 1 FROM supervisor_weekly_evaluations swe
           WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
-if ($selected_year_id) {
-    $pending_reviews_q->bind_param("ii", $sup_id, $selected_year_id);
-} else {
-    $pending_reviews_q->bind_param("i", $sup_id);
-}
+$pending_reviews_q->bind_param("i", $sup_id);
 $pending_reviews_q->execute();
 $res = $pending_reviews_q->get_result();
 $row = $res ? $res->fetch_row() : null;
@@ -1630,14 +1454,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         <!-- ═══ TRAINEE ARCHIVE CONTENT ═══ -->
         <?php
         $ta_year = $_GET['academic_year'] ?? '';
-        $ta_years = $db->prepare("
-            SELECT DISTINCT ay.year_label
-            FROM academic_years ay
-            INNER JOIN users u ON u.academic_year_id = ay.id
-            INNER JOIN student_profiles sp ON sp.user_id = u.id
-            WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived'
-            ORDER BY ay.year_label DESC
-        ");
+        $ta_years = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived' AND u.academic_year IS NOT NULL AND u.academic_year <> '' ORDER BY u.academic_year DESC");
         $ta_years->bind_param("i", $sup_id);
         $ta_years->execute();
         $res = $ta_years->get_result();
@@ -1647,30 +1464,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                 $ta_valid_years[] = $row[0];
             }
         }
-
-        // Fallback: also check string column for legacy data
-        if (empty($ta_valid_years)) {
-            $ta_years2 = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived' AND u.academic_year IS NOT NULL ORDER BY u.academic_year DESC");
-            $ta_years2->bind_param("i", $sup_id);
-            $ta_years2->execute();
-            $res = $ta_years2->get_result();
-            if ($res) {
-                while ($row = $res->fetch_row()) {
-                    $ta_valid_years[] = $row[0];
-                }
-            }
-        }
-
-        // Resolve selected archive year to FK
-        $ta_year_id = null;
-        if ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
-            $ta_ayid = $db->prepare("SELECT id FROM academic_years WHERE year_label = ?");
-            $ta_ayid->bind_param("s", $ta_year);
-            $ta_ayid->execute();
-            $res = $ta_ayid->get_result();
-            $row = $res ? $res->fetch_row() : null;
-            $ta_year_id = $row[0] ?? null;
-        }
+        $ta_years->close();
 
         $ta_sql = "
             SELECT u.id AS uid, u.username, u.email, u.academic_year, u.created_at,
@@ -1680,11 +1474,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             JOIN student_profiles sp ON sp.user_id = u.id
             WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived'
         ";
-        if ($ta_year_id) {
-            $ta_sql .= " AND u.academic_year_id = ? ORDER BY sp.full_name ASC";
-            $ta_stmt = $db->prepare($ta_sql);
-            $ta_stmt->bind_param("ii", $sup_id, $ta_year_id);
-        } elseif ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
+        if ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
             $ta_sql .= " AND u.academic_year = ? ORDER BY sp.full_name ASC";
             $ta_stmt = $db->prepare($ta_sql);
             $ta_stmt->bind_param("is", $sup_id, $ta_year);

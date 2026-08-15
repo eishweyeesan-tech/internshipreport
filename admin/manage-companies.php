@@ -145,8 +145,8 @@ if (isset($_GET['edit'])) {
         <?php $pageTitle = 'Companies'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
-            <div class="max-w-6xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
+            <div class="w-full space-y-6">
 
                 <?php if ($msg): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
@@ -163,7 +163,7 @@ if (isset($_GET['edit'])) {
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                         <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-blue-50 text-blue-600 rounded">🏢</span>
+                            <span class="p-1 bg-teal-50 text-teal-700 rounded">🏢</span>
                             <?= $edit_company ? 'Edit Company' : 'Register New Partner Company' ?>
                         </h2>
                         <?php if ($edit_company): ?>
@@ -181,32 +181,32 @@ if (isset($_GET['edit'])) {
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Company Name <span class="text-red-400">*</span></label>
-                                <input type="text" name="company_name" required value="<?= htmlspecialchars($edit_company['company_name'] ?? '') ?>" placeholder="e.g. Tech Corp Myanmar" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="text" name="company_name" required value="<?= htmlspecialchars($edit_company['company_name'] ?? '') ?>" placeholder="e.g. Tech Corp Myanmar" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Website</label>
-                                <input type="url" name="website" value="<?= htmlspecialchars($edit_company['website'] ?? '') ?>" placeholder="https://example.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="url" name="website" value="<?= htmlspecialchars($edit_company['website'] ?? '') ?>" placeholder="https://example.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Contact Person</label>
-                                <input type="text" name="contact_person" value="<?= htmlspecialchars($edit_company['contact_person'] ?? '') ?>" placeholder="Full name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="text" name="contact_person" value="<?= htmlspecialchars($edit_company['contact_person'] ?? '') ?>" placeholder="Full name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Contact Email</label>
-                                <input type="email" name="contact_email" value="<?= htmlspecialchars($edit_company['contact_email'] ?? '') ?>" placeholder="contact@company.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="email" name="contact_email" value="<?= htmlspecialchars($edit_company['contact_email'] ?? '') ?>" placeholder="contact@company.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Contact Phone</label>
-                                <input type="text" name="contact_phone" value="<?= htmlspecialchars($edit_company['contact_phone'] ?? '') ?>" placeholder="+959 123 456 789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="text" name="contact_phone" value="<?= htmlspecialchars($edit_company['contact_phone'] ?? '') ?>" placeholder="+959 123 456 789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div class="md:col-span-2 lg:col-span-3">
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Address</label>
-                                <textarea name="address" rows="2" placeholder="Street, city, region" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition"><?= htmlspecialchars($edit_company['address'] ?? '') ?></textarea>
+                                <textarea name="address" rows="2" placeholder="Street, city, region" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition"><?= htmlspecialchars($edit_company['address'] ?? '') ?></textarea>
                             </div>
                         </div>
 
                         <div class="mt-5 flex items-center gap-3">
-                            <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-sm transition cursor-pointer">
+                            <button type="submit" class="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 text-white font-bold text-sm rounded-xl shadow-lg shadow-teal-600/30 transition-all duration-200 cursor-pointer">
                                 <?= $edit_company ? '💾 Update Company' : '➕ Add Partner Company' ?>
                             </button>
                             <?php if ($edit_company): ?>

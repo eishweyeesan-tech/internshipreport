@@ -1,8 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
-require_once __DIR__ . '/../config/init_year.php';
-require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
 
@@ -178,10 +176,7 @@ $reports_stmt->execute();
 $res = $reports_stmt->get_result();
 $reports = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-// ── Status badge helper ────────────────────────────────────────
-function report_status_badge($status) {
-    switch ($status) {
-        function build_query_url($overrides = []) {
+function build_query_url($overrides = []) {
     $q = array_merge($_GET, $overrides);
     foreach ($overrides as $k => $v) {
         if ($v === '' || $v === null) unset($q[$k]);

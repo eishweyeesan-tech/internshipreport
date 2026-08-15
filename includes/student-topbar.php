@@ -45,18 +45,15 @@ if (!isset($unread_notif_count) || !isset($recent_notifications)) {
 
 $student_academic_year = '';
 if ($student_user_id > 0 && $db) {
-    $student_year_stmt = $db->prepare("SELECT u.academic_year, ay.year_label FROM users u LEFT JOIN academic_years ay ON ay.id = u.academic_year_id WHERE u.id = ? LIMIT 1");
+    $student_year_stmt = $db->prepare("SELECT u.academic_year FROM users u WHERE u.id = ? LIMIT 1");
     $student_year_stmt->bind_param("i", $student_user_id);
     $student_year_stmt->execute();
     $_res = $student_year_stmt->get_result();
     $student_year_row = $_res ? $_res->fetch_assoc() : null;
     if ($student_year_row) {
-        $student_academic_year = trim((string) ($student_year_row['year_label'] ?? $student_year_row['academic_year'] ?? ''));
+        $student_academic_year = trim((string) ($student_year_row['academic_year'] ?? ''));
     }
-}
-
-if ($student_academic_year === '') {
-    $student_academic_year = trim((string) ($_SESSION['selected_academic_year_label'] ?? ''));
+    $student_year_stmt->close();
 }
 
 if (!function_exists('student_notif_url')) {
@@ -72,11 +69,11 @@ if (!function_exists('student_notif_url')) {
     }
 }
 ?>
-<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 relative z-50">
+<header class="h-16 bg-white border-b border-teal-100 flex items-center justify-between px-6 shrink-0 relative z-50">
     <div class="flex items-center gap-3">
-        <span class="text-lg font-semibold text-slate-600"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></span>
+        <span class="text-lg font-bold text-slate-800"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></span>
         <?php if (!empty($student_academic_year)): ?>
-        <span class="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">
+        <span class="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
             Academic Year <?= htmlspecialchars($student_academic_year) ?>
         </span>
         <?php endif; ?>
@@ -85,8 +82,8 @@ if (!function_exists('student_notif_url')) {
 
         <!-- Notification Bell – Facebook Style -->
         <div class="relative" id="notif-bell-wrapper">
-            <button onclick="toggleNotifDropdown(event)" class="relative p-2 hover:bg-white/30 rounded-full transition cursor-pointer" id="notif-bell-btn">
-                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            <button onclick="toggleNotifDropdown(event)" class="relative p-2 hover:bg-teal-50 rounded-full transition cursor-pointer" id="notif-bell-btn">
+                <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                 <?php if ($unread_notif_count > 0): ?>
                 <span id="notif-badge" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
                 <?php else: ?>
@@ -94,9 +91,9 @@ if (!function_exists('student_notif_url')) {
                 <?php endif; ?>
             </button>
             <div id="notif-dropdown" class="hidden absolute right-0 top-full mt-2 w-[360px] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
-                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gradient-to-br from-teal-50/80 to-white/60">
                     <h3 class="text-[17px] font-bold text-gray-900">Notifications</h3>
-                    <button onclick="markAllNotificationsRead()" id="notif-mark-all-btn" class="text-[13px] font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2 py-1 rounded-lg transition cursor-pointer <?= $unread_notif_count === 0 ? 'hidden' : '' ?>">Mark all as read</button>
+                    <button onclick="markAllNotificationsRead()" id="notif-mark-all-btn" class="text-[13px] font-semibold text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-2 py-1 rounded-lg transition cursor-pointer <?= $unread_notif_count === 0 ? 'hidden' : '' ?>">Mark all as read</button>
                 </div>
                 <div class="max-h-[420px] overflow-y-auto" id="notif-list">
                     <?php if (!empty($recent_notifications)): ?>
@@ -117,13 +114,13 @@ if (!function_exists('student_notif_url')) {
                             $_ann_id = (int)($_notif['announcement_id'] ?? 0);
                             $_notif_href = student_notif_url($_notif['type'], $_notif['related_week'] ?? null, $_ann_id ?: null);
                         ?>
-                        <a href="<?= htmlspecialchars($_notif_href) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_notif['is_read'] ? 'bg-blue-50/40' : '' ?>" onclick="return onNotificationItemClick(event, this)" data-notif-id="<?= (int)$_notif['id'] ?>" data-announcement-id="<?= $_ann_id ?>" data-fallback-href="<?= htmlspecialchars($_notif_href) ?>">
+                        <a href="<?= htmlspecialchars($_notif_href) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_notif['is_read'] ? 'bg-teal-50/40' : '' ?>" onclick="return onNotificationItemClick(event, this)" data-notif-id="<?= (int)$_notif['id'] ?>" data-announcement-id="<?= $_ann_id ?>" data-fallback-href="<?= htmlspecialchars($_notif_href) ?>">
                             <?php if (!$_notif['is_read']): ?>
-                            <span class="w-2.5 h-2.5 bg-blue-500 rounded-full flex-shrink-0 mt-2 shadow-sm"></span>
+                            <span class="w-2.5 h-2.5 bg-teal-500 rounded-full flex-shrink-0 mt-2 shadow-sm"></span>
                             <?php else: ?>
                             <span class="w-2.5 flex-shrink-0 mt-2"></span>
                             <?php endif; ?>
-                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0 shadow-sm <?= ($_notif['type'] ?? '') === 'instructor_approved' ? 'bg-green-100 text-green-600' : (($_notif['type'] ?? '') === 'instructor_rejected' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600') ?>">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0 shadow-sm <?= ($_notif['type'] ?? '') === 'instructor_approved' ? 'bg-emerald-100 text-emerald-600' : (($_notif['type'] ?? '') === 'instructor_rejected' ? 'bg-red-100 text-red-600' : 'bg-teal-100 text-teal-600') ?>">
                                 <?php if (($_notif['type'] ?? '') === 'instructor_approved'): ?>
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
                                 <?php elseif (($_notif['type'] ?? '') === 'instructor_rejected'): ?>
@@ -135,7 +132,7 @@ if (!function_exists('student_notif_url')) {
                             <div class="min-w-0 flex-1">
                                 <p class="text-[13px] leading-snug <?= !$_notif['is_read'] ? 'font-semibold text-gray-900' : 'text-gray-600' ?>"><?= htmlspecialchars($_notif['title']) ?></p>
                                 <p class="text-[12px] text-gray-400 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($_notif['message']) ?></p>
-                                <p class="text-[11px] mt-1 <?= !$_notif['is_read'] ? 'text-blue-500 font-medium' : 'text-gray-400' ?>" data-notif-time="<?= htmlspecialchars($_notif['created_at']) ?>"><?= (new DateTime($_notif['created_at']))->format('d M Y, h:i A') ?></p>
+                                <p class="text-[11px] mt-1 <?= !$_notif['is_read'] ? 'text-teal-600 font-medium' : 'text-gray-400' ?>" data-notif-time="<?= htmlspecialchars($_notif['created_at']) ?>"><?= (new DateTime($_notif['created_at']))->format('d M Y, h:i A') ?></p>
                             </div>
                         </a>
                         <?php endforeach; ?>
@@ -150,23 +147,23 @@ if (!function_exists('student_notif_url')) {
                     <?php endif; ?>
                 </div>
                 <div class="border-t border-gray-100">
-                    <a href="log-history.php" class="block text-center py-3 text-[13px] font-semibold text-blue-600 hover:bg-blue-50 transition-colors">See all</a>
+                    <a href="log-history.php" class="block text-center py-3 text-[13px] font-semibold text-teal-600 hover:bg-teal-50 transition-colors">See all</a>
                 </div>
             </div>
         </div>
 
         <!-- Profile Dropdown -->
         <div class="relative" id="profile-dropdown-wrapper">
-            <button onclick="toggleProfileDropdown(event)" class="flex items-center gap-2.5 hover:bg-white/30 rounded-full px-2 py-1.5 transition cursor-pointer">
+            <button onclick="toggleProfileDropdown(event)" class="flex items-center gap-2.5 hover:bg-teal-50 rounded-full px-2 py-1.5 transition cursor-pointer">
                 <?php if (!empty($profile_pic)): ?>
                 <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-8 h-8 rounded-full object-cover border-2 border-white/60 shadow-sm shrink-0">
                 <?php else: ?>
-                <span class="w-8 h-8 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-bold shrink-0"><?= strtoupper(substr($student_name ?? 'S', 0, 1)) ?></span>
+                <span class="w-8 h-8 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-bold shrink-0"><?= strtoupper(substr($student_name ?? 'S', 0, 1)) ?></span>
                 <?php endif; ?>
                 <div class="text-left hidden sm:block">
                     <p class="text-xs font-bold text-slate-700 leading-tight"><?= htmlspecialchars($student_name ?? '') ?></p>
                     <?php if (!empty($student_roll)): ?>
-                    <p class="text-[10px] font-mono font-bold text-violet-500 leading-tight"><?= htmlspecialchars($student_roll) ?></p>
+                    <p class="text-[10px] font-mono font-bold text-teal-600 leading-tight"><?= htmlspecialchars($student_roll) ?></p>
                     <?php endif; ?>
                 </div>
                 <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>

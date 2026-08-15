@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
-require_once __DIR__ . '/../config/init_year.php';
 require_once __DIR__ . '/../auth.php';
 
 if (($_SESSION['role'] ?? '') !== 'admin') {
@@ -26,60 +25,35 @@ $recent_notifs_q->execute();
 $res = $recent_notifs_q->get_result();
 $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-// Fetch all academic years with student counts
+// Fetch all academic years with student counts from users table
 $res = $db->query("
-    SELECT ay.*,
-           (SELECT COUNT(*) FROM users u WHERE u.academic_year_id = ay.id AND u.role = 'student') AS student_count,
-           (SELECT COUNT(*) FROM users u WHERE u.academic_year_id = ay.id AND u.role = 'supervisor') AS supervisor_count
-    FROM academic_years ay
-    ORDER BY ay.start_date DESC
+    SELECT u.academic_year AS year_label,
+           COUNT(CASE WHEN u.role = 'student' THEN 1 END) AS student_count,
+           COUNT(CASE WHEN u.role = 'supervisor' THEN 1 END) AS supervisor_count
+    FROM users u
+    WHERE u.academic_year IS NOT NULL AND u.academic_year <> ''
+    GROUP BY u.academic_year
+    ORDER BY u.academic_year DESC
 ");
-$years = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-
-$current_active = null;
-foreach ($years as $y) {
-    if ($y['status'] === 'ACTIVE') { $current_active = $y; break; }
+$years_raw = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+$years = [];
+foreach ($years_raw as $idx => $y) {
+    $years[] = [
+        'id' => $idx + 1,
+        'year_label' => $y['year_label'],
+        'start_date' => date('Y-09-01'),
+        'end_date'   => date('Y-08-31'),
+        'status'     => $idx === 0 ? 'ACTIVE' : 'ARCHIVED',
+        'is_current' => $idx === 0 ? 1 : 0,
+        'student_count' => (int) $y['student_count'],
+        'supervisor_count' => (int) $y['supervisor_count'],
+        'created_at' => date('Y-m-d H:i:s'),
+    ];
 }
 
-$selected_year = $current_academic_year ?? null;
+$current_active = $years[0] ?? null;
+$selected_year = null;
 $selected_year_history = [];
-if (!empty($selected_year['id'])) {
-    $selected_year_id = (int) $selected_year['id'];
-
-    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ?");
-    $stmt->bind_param("i", $selected_year_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $selected_year_history['students'] = (int) ($row[0] ?? 0);
-
-    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ?");
-    $stmt->bind_param("i", $selected_year_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $selected_year_history['supervisors'] = (int) ($row[0] ?? 0);
-
-    $stmt = $db->prepare("SELECT COUNT(DISTINCT sp.company_name) FROM student_profiles sp JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ? AND sp.company_name IS NOT NULL AND sp.company_name != ''");
-    $stmt->bind_param("i", $selected_year_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $selected_year_history['companies'] = (int) ($row[0] ?? 0);
-
-    $stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs dl JOIN student_profiles sp ON sp.id = dl.internship_id JOIN users u ON u.id = sp.user_id WHERE u.role = 'student' AND u.academic_year_id = ?");
-    $stmt->bind_param("i", $selected_year_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $selected_year_history['logs'] = (int) ($row[0] ?? 0);
-
-    $stmt = $db->prepare("SELECT u.id, u.username, sp.full_name, sp.student_roll, sp.company_name FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.academic_year_id = ? ORDER BY sp.full_name ASC LIMIT 8");
-    $stmt->bind_param("i", $selected_year_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $selected_year_history['students_list'] = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -121,12 +95,12 @@ if (!empty($selected_year['id'])) {
 
         <?php $pageTitle = 'Academic Year Management'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
-        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
 
             <!-- Success/Error Toast -->
             <div id="toast" class="hidden fixed top-6 right-6 z-[100] max-w-sm"></div>
 
-            <div class="max-w-6xl mx-auto space-y-6">
+            <div class="w-full space-y-6">
 
                 <!-- Header Row -->
                 <div class="flex items-center justify-between">
@@ -300,15 +274,7 @@ if (!empty($selected_year['id'])) {
                                     </td>
                                     <td class="px-5 py-4 text-right">
                                         <div class="flex items-center justify-end gap-1.5">
-                                            <?php if ($y['status'] === 'UPCOMING'): ?>
-                                            <button
-                                                onclick="confirmTransition(<?= (int) $y['id'] ?>, '<?= htmlspecialchars($y['year_label'], ENT_QUOTES) ?>')"
-                                                class="px-3 py-1.5 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-lg hover:bg-emerald-100 transition cursor-pointer flex items-center gap-1"
-                                                title="Activate this year"
-                                            >
-                                                🚀 Activate
-                                            </button>
-                                            <?php endif; ?>
+
                                             <?php if ($y['status'] === 'ACTIVE'): ?>
                                             <span class="px-3 py-1.5 bg-emerald-50 text-emerald-400 text-xs font-bold rounded-lg cursor-default flex items-center gap-1">
                                                 ✓ Active
@@ -400,39 +366,7 @@ if (!empty($selected_year['id'])) {
     </div>
 </div>
 
-<!-- ══════ TRANSITION CONFIRMATION MODAL ══════ -->
-<div id="transitionModal" class="hidden fixed inset-0 z-[999] flex items-center justify-center p-4">
-    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="document.getElementById('transitionModal').classList.add('hidden')"></div>
-    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                <span class="p-1 bg-amber-50 text-amber-600 rounded">⚡</span> Transition Year
-            </h3>
-            <button onclick="document.getElementById('transitionModal').classList.add('hidden')" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition cursor-pointer">✕</button>
-        </div>
-        <div class="p-6">
-            <div class="text-center mb-6">
-                <div class="w-16 h-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center text-3xl mx-auto mb-4">⚡</div>
-                <p class="text-sm text-slate-600 leading-relaxed">
-                    This will <strong class="text-slate-800">archive the current active year</strong>
-                    <?php if ($current_active): ?>
-                        (<strong class="text-slate-800"><?= htmlspecialchars($current_active['year_label']) ?></strong>)
-                    <?php endif; ?>
-                    and <strong class="text-emerald-600">activate</strong>
-                    <strong class="text-slate-800" id="transitionTargetLabel"></strong>.
-                </p>
-                <p class="text-xs text-slate-400 mt-2">Active students from the current year will be archived. This action can be reversed by the database administrator.</p>
-            </div>
-            <div id="transitionError" class="hidden bg-red-50 border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl mb-4"></div>
-            <div class="flex justify-end gap-2">
-                <button onclick="document.getElementById('transitionModal').classList.add('hidden')" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition cursor-pointer">Cancel</button>
-                <button id="transitionBtn" onclick="executeTransition()" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-2">
-                    ⚡ Confirm Transition
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 <script>
 // ── Create Year ──────────────────────────────────────────────────
@@ -476,49 +410,7 @@ document.getElementById('create_year_label').addEventListener('input', function(
     }
 });
 
-// ── Transition ───────────────────────────────────────────────────
-var pendingTransitionId = null;
 
-function confirmTransition(id, label) {
-    pendingTransitionId = id;
-    document.getElementById('transitionTargetLabel').textContent = label;
-    document.getElementById('transitionError').classList.add('hidden');
-    document.getElementById('transitionModal').classList.remove('hidden');
-}
-
-function executeTransition() {
-    if (!pendingTransitionId) return;
-    var btn = document.getElementById('transitionBtn');
-    var errDiv = document.getElementById('transitionError');
-    btn.disabled = true;
-    btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Transitioning...';
-    errDiv.classList.add('hidden');
-
-    var fd = new FormData();
-    fd.append('upcoming_year_id', pendingTransitionId);
-
-    fetch('transition_year.php', { method: 'POST', body: fd })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) {
-                document.getElementById('transitionModal').classList.add('hidden');
-                showToast('success', data.message || 'Year transitioned successfully.');
-                setTimeout(function() { location.reload(); }, 800);
-            } else {
-                errDiv.textContent = data.error || 'Transition failed.';
-                errDiv.classList.remove('hidden');
-            }
-        })
-        .catch(function(err) {
-            errDiv.textContent = 'Network error. Please try again.';
-            errDiv.classList.remove('hidden');
-        })
-        .finally(function() {
-            btn.disabled = false;
-            btn.innerHTML = '⚡ Confirm Transition';
-            pendingTransitionId = null;
-        });
-}
 
 // ── Toast ────────────────────────────────────────────────────────
 function showToast(type, message) {

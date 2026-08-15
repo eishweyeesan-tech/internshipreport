@@ -27,12 +27,9 @@ $def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
 $def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
 
 // ── Academic Years (for dynamic dropdowns) ──────────────────────
-$res_ay = $db->query("SELECT id, year_label, status, is_current FROM academic_years ORDER BY start_date DESC");
+$res_ay = $db->query("SELECT DISTINCT academic_year AS year_label FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
 $all_academic_years = $res_ay ? $res_ay->fetch_all(MYSQLI_ASSOC) : [];
 $ay_label_to_id = [];
-foreach ($all_academic_years as $ay) {
-    $ay_label_to_id[$ay['year_label']] = (int) $ay['id'];
-}
 
 // ══════════════════════════════════════════════════════════════════
 // HANDLERS
@@ -241,10 +238,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_batch'])) {
             $up1 = $db->prepare("UPDATE users SET status = 'Active' WHERE academic_year_id = ? AND role = 'student' AND status = 'Archived'");
             $up1->bind_param("i", $restore_year_id);
             $up1->execute();
-
-            $up2 = $db->prepare("UPDATE academic_years SET status = 'UPCOMING', is_current = 0 WHERE id = ? AND status = 'ARCHIVED'");
-            $up2->bind_param("i", $restore_year_id);
-            $up2->execute();
         } else {
             $cnt = $db->prepare("SELECT COUNT(*) FROM users WHERE academic_year = ? AND role = 'student' AND status = 'Archived'");
             $cnt->bind_param("s", $restore_year);
@@ -261,40 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_batch'])) {
     }
 }
 
-// ── Add Holiday ────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_holiday'])) {
-    $h_date      = trim($_POST['h_date'] ?? '');
-    $h_name_mm   = trim($_POST['h_name_mm'] ?? '');
-    $h_note      = trim($_POST['h_note'] ?? '');
-    if (empty($h_date)) {
-        $err = 'Holiday date is required.';
-    } else {
-        $dup = $db->prepare("SELECT id FROM holidays WHERE holiday_date = ?");
-        $dup->bind_param("s", $h_date);
-        $dup->execute();
-        $res = $dup->get_result();
-        if ($res && $res->fetch_row()) {
-            $err = 'A holiday already exists for this date.';
-        } else {
-            $displayName = $h_name_mm ?: $h_date;
-            $ins = $db->prepare("INSERT INTO holidays (holiday_date, holiday_name, holiday_name_mm, note) VALUES (?, ?, ?, ?)");
-            $ins->bind_param("ssss", $h_date, $displayName, $h_name_mm, $h_note);
-            $ins->execute();
-            $msg = "Holiday \"{$displayName}\" added for {$h_date}.";
-        }
-    }
-}
 
-// ── Delete Holiday ─────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_holiday'])) {
-    $hid = (int) ($_POST['holiday_id'] ?? 0);
-    if ($hid > 0) {
-        $del = $db->prepare("DELETE FROM holidays WHERE id = ?");
-        $del->bind_param("i", $hid);
-        $del->execute();
-        $msg = 'Holiday deleted.';
-    }
-}
 
 // ── Mark notification as read ────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_notification_read'])) {
@@ -319,55 +279,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
 // DATA QUERIES
 // ══════════════════════════════════════════════════════════════════
 
-// Analytics counts – filtered by current academic year where applicable
-$ay_id = (int) ($_SESSION['selected_academic_year_id'] ?? 0);
+// Analytics counts
+// 1. Active students
+$res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'Active'");
+$row = $res ? $res->fetch_row() : null;
+$student_count = (int) ($row[0] ?? 0);
 
-// 1. Active students for the current academic year
-if ($ay_id > 0) {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'student' AND academic_year_id = ? AND status = 'Active'");
-    $stmt->bind_param("i", $ay_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $student_count = (int) ($row[0] ?? 0);
-} else {
-    $res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'Active'");
-    $row = $res ? $res->fetch_row() : null;
-    $student_count = (int) ($row[0] ?? 0);
-}
+// 2. Active supervisors
+$res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND status = 'Active'");
+$row = $res ? $res->fetch_row() : null;
+$supervisor_count = (int) ($row[0] ?? 0);
 
-// 2. Active supervisors for the current academic year
-if ($ay_id > 0) {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND academic_year_id = ? AND status = 'Active'");
-    $stmt->bind_param("i", $ay_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $supervisor_count = (int) ($row[0] ?? 0);
-} else {
-    $res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor'");
-    $row = $res ? $res->fetch_row() : null;
-    $supervisor_count = (int) ($row[0] ?? 0);
-}
-
-// 3. Registered partner companies (global – no year filter)
+// 3. Registered partner companies
 $res = $db->query("SELECT COUNT(*) FROM companies");
 $row = $res ? $res->fetch_row() : null;
 $company_count = (int) ($row[0] ?? 0);
 
-// 4. Pending user approvals / password reset requests
-if ($ay_id > 0) {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin' AND academic_year_id = ?");
-    $stmt->bind_param("i", $ay_id);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    $row = $res ? $res->fetch_row() : null;
-    $pending_count = (int) ($row[0] ?? 0);
-} else {
-    $res = $db->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'");
-    $row = $res ? $res->fetch_row() : null;
-    $pending_count = (int) ($row[0] ?? 0);
-}
+// 4. Pending first login requests
+$res = $db->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'");
+$row = $res ? $res->fetch_row() : null;
+$pending_count = (int) ($row[0] ?? 0);
 
 // Companies list
 $res_c = $db->query("SELECT * FROM companies ORDER BY company_name ASC");
@@ -411,9 +342,7 @@ if (in_array($filter_role, ['admin', 'supervisor', 'student'])) {
     $all_users = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 }
 
-// Holidays
-$res_h = $db->query("SELECT * FROM holidays ORDER BY holiday_date ASC");
-$holidays = $res_h ? $res_h->fetch_all(MYSQLI_ASSOC) : [];
+
 
 // Notifications
 $unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
@@ -480,44 +409,8 @@ foreach ($recent_company_activity as $item) {
     ];
 }
 
-$res = $db->query(
-    "SELECT 'holiday' AS type, 'Holiday added' AS title, holiday_name AS detail, created_at
-     FROM holidays
-     ORDER BY created_at DESC LIMIT 5"
-);
-$recent_holiday_activity = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-foreach ($recent_holiday_activity as $item) {
-    $recent_activity_items[] = [
-        'type' => 'holiday',
-        'title' => 'Holiday added',
-        'detail' => $item['detail'] ?? 'Holiday record created',
-        'created_at' => $item['created_at'],
-    ];
-}
 
-$res = $db->query(
-    "SELECT 'announcement' AS type, 'Announcement published' AS title, title AS detail, created_at
-     FROM announcements
-     WHERE is_active = 1
-     ORDER BY created_at DESC LIMIT 5"
-);
-$recent_announcement_activity = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-foreach ($recent_announcement_activity as $item) {
-    $recent_activity_items[] = [
-        'type' => 'announcement',
-        'title' => 'Announcement published',
-        'detail' => $item['detail'] ?? 'Announcement published',
-        'created_at' => $item['created_at'],
-    ];
-}
-foreach ($recent_announcement_activity as $item) {
-    $recent_activity_items[] = [
-        'type' => 'announcement',
-        'title' => 'Announcement published',
-        'detail' => $item['detail'] ?? 'Announcement published',
-        'created_at' => $item['created_at'],
-    ];
-}
+
 
 usort($recent_activity_items, function ($a, $b) {
     return strtotime($b['created_at'] ?? 'now') <=> strtotime($a['created_at'] ?? 'now');
@@ -528,7 +421,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
 // ACTIVE TAB
 // ══════════════════════════════════════════════════════════════════
 $tab = $_GET['tab'] ?? 'overview';
-if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive', 'history', 'holidays'])) $tab = 'overview';
+if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive', 'history'])) $tab = 'overview';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -574,7 +467,6 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
         'manage'       => 'manage',
         'archive'      => 'archive',
         'history'      => 'history',
-        'holidays'     => 'holidays',
     ];
     $activePage = $activePageMap[$tab] ?? 'dashboard';
     ?>
@@ -587,7 +479,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
         <?php $pageTitle = 'Dashboard'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
 
             <?php if ($msg): ?>
             <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center gap-2 mb-6">
@@ -600,14 +492,14 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             </div>
             <?php endif; ?>
 
-            <div class="max-w-6xl mx-auto space-y-6">
+            <div class="w-full space-y-6">
 
             <!-- ════ ANALYTICS SUMMARY CARDS (always visible) ════ -->
             <div class="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- Students Card -->
-                <a href="?tab=manage&role=student" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200 hover:bg-indigo-50/60 cursor-pointer">
+                <a href="?tab=manage&role=student" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-teal-200 hover:bg-teal-50/60 cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <div class="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl transition group-hover:bg-indigo-100">🎓</div>
+                        <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl transition group-hover:bg-teal-100">🎓</div>
                         <div>
                             <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Students</p>
                             <p class="text-2xl font-black text-slate-800"><?= $student_count ?></p>
@@ -618,7 +510,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 <!-- Supervisors Card -->
                 <a href="?tab=supervisors" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-200 hover:bg-emerald-50/60 cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl transition group-hover:bg-emerald-100">👨‍🏫</div>
+                        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-xl transition group-hover:bg-emerald-100">👨‍🏫</div>
                         <div>
                             <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Supervisors</p>
                             <p class="text-2xl font-black text-slate-800"><?= $supervisor_count ?></p>
@@ -627,9 +519,9 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 </a>
 
                 <!-- Companies Card -->
-                <a href="manage-companies.php" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-blue-200 hover:bg-blue-50/60 cursor-pointer">
+                <a href="manage-companies.php" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-teal-200 hover:bg-teal-50/60 cursor-pointer">
                     <div class="flex items-center gap-3">
-                        <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl transition group-hover:bg-blue-100">🏢</div>
+                        <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl transition group-hover:bg-teal-100">🏢</div>
                         <div>
                             <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Companies</p>
                             <p class="text-2xl font-black text-slate-800"><?= $company_count ?></p>
@@ -737,7 +629,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                     <div class="flex flex-col items-center justify-center py-10 text-center">
                         <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-4">📋</div>
                         <p class="text-sm font-semibold text-slate-500">No recent activity yet</p>
-                        <p class="text-xs text-slate-400 mt-1 max-w-[240px]">New students, supervisors, companies, and holidays will appear here.</p>
+                        <p class="text-xs text-slate-400 mt-1 max-w-[240px]">New students, supervisors, and companies will appear here.</p>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -993,12 +885,11 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             <!-- Archived Students Summary -->
             <?php
             $res_arch = $db->query("
-                SELECT COALESCE(ay.year_label, u.academic_year, 'Unknown') AS year_label, COUNT(*) AS cnt
+                SELECT u.academic_year AS year_label, COUNT(*) AS cnt
                 FROM users u
-                LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
-                WHERE u.role = 'student' AND u.status = 'Archived'
-                GROUP BY year_label
-                ORDER BY year_label DESC
+                WHERE u.role = 'student' AND u.status = 'Archived' AND u.academic_year IS NOT NULL AND u.academic_year <> ''
+                GROUP BY u.academic_year
+                ORDER BY u.academic_year DESC
             ");
             $archived = $res_arch ? $res_arch->fetch_all(MYSQLI_ASSOC) : [];
             ?>
@@ -1084,7 +975,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             <!-- ════ TAB: STUDENT HISTORY ════ -->
             <?php
             $hist_year = $_GET['academic_year'] ?? '';
-            $res_hy = $db->query("SELECT year_label FROM academic_years ORDER BY start_date DESC");
+            $res_hy = $db->query("SELECT DISTINCT academic_year AS year_label FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
             $hist_years = [];
             if ($res_hy) {
                 while ($row = $res_hy->fetch_row()) {
@@ -1226,97 +1117,9 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 </div>
                 <?php endif; ?>
             </div>
-
-            <?php elseif ($tab === 'holidays'): ?>
-            <!-- ════ TAB: MYANMAR HOLIDAYS ════ -->
-
-            <!-- Add Holiday Form -->
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="px-5 py-3 border-b border-slate-100">
-                    <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                        <span class="p-1 bg-red-50 text-red-600 rounded">🇲🇲</span> Add Public Holiday
-                    </h2>
-                </div>
-                <form method="POST" class="p-5 space-y-4">
-                    <input type="hidden" name="add_holiday" value="1">
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-1">Holiday Date *</label>
-                            <input type="date" name="h_date" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-1">Holiday Name (Myanmar)</label>
-                            <input type="text" name="h_name_mm" placeholder="e.g. အာဇာနည်နေ့" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-1">Note</label>
-                            <input type="text" name="h_note" placeholder="Optional note" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                        </div>
-                    </div>
-                    <div class="flex justify-end">
-                        <button type="submit" class="px-5 py-2 bg-red-500 hover:bg-red-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">🇲🇲 Add Holiday</button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Existing Holidays -->
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                    <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                        <span class="p-1 bg-red-50 text-red-600 rounded">🇲🇲</span> Myanmar Public Holidays
-                    </h2>
-                    <span class="text-sm text-slate-400"><?= count($holidays) ?> total</span>
-                </div>
-                <?php if (!empty($holidays)): ?>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-sm">
-                                <th class="px-3 py-2.5 text-left">Date</th>
-                                <th class="px-3 py-2.5 text-left">Day</th>
-                                <th class="px-3 py-2.5 text-left">Myanmar Name</th>
-                                <th class="px-3 py-2.5 text-left">Note</th>
-                                <th class="px-3 py-2.5 text-left">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <?php foreach ($holidays as $h): ?>
-                            <tr class="hover:bg-slate-50 transition">
-                                <td class="px-3 py-2.5 font-mono font-semibold text-slate-700"><?= htmlspecialchars((new DateTime($h['holiday_date']))->format('d M Y')) ?></td>
-                                <td class="px-3 py-2.5 text-slate-500"><?= htmlspecialchars((new DateTime($h['holiday_date']))->format('l')) ?></td>
-                                <td class="px-3 py-2.5 text-slate-500"><?= htmlspecialchars($h['holiday_name_mm'] ?: '—') ?></td>
-                                <td class="px-3 py-2.5 text-slate-400 text-xs"><?= htmlspecialchars($h['note'] ?: '—') ?></td>
-                                <td class="px-3 py-2.5">
-                                    <form method="POST" onsubmit="return confirm('Delete holiday: <?= htmlspecialchars($h['holiday_name']) ?> on <?= htmlspecialchars($h['holiday_date']) ?>?')" class="inline">
-                                        <input type="hidden" name="delete_holiday" value="1">
-                                        <input type="hidden" name="holiday_id" value="<?= $h['id'] ?>">
-                                        <button type="submit" class="px-2 py-1 bg-red-50 text-red-600 text-sm font-bold rounded-lg hover:bg-red-100 transition cursor-pointer">🗑️</button>
-                                    </form>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <?php else: ?>
-                <div class="p-8 text-center text-sm text-slate-400">
-                    No holidays configured yet. Add Myanmar public holidays above.
-                </div>
-                <?php endif; ?>
-            </div>
-
-            <!-- Info Note -->
-            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
-                <h3 class="text-sm font-bold text-slate-700 mb-2">ℹ️ Notes</h3>
-                <ul class="text-sm text-slate-500 space-y-1">
-                    <li>• Holidays set here will be visible to all students during their intern period.</li>
-                    <li>• Holiday dates will be marked as <strong>"leave"</strong> (Public Holiday) in student daily logs.</li>
-                    <li>• Students will see these holidays highlighted in their calendar and log form.</li>
-                    <li>• Holiday dates based on the official Myanmar calendar for 2026.</li>
-                </ul>
-            </div>
-
             <?php endif; ?>
+
+
             </div>
         </main>
     </div>

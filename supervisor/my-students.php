@@ -1,8 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
-require_once __DIR__ . '/../config/init_year.php';
-require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../config/internship_progress.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
@@ -34,9 +32,6 @@ $recent_notifs_q->execute();
 $res = $recent_notifs_q->get_result();
 $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-// ── Academic year filter (from session, same as dashboard) ──────
-$ay_filter = get_ay_filter($db, 'u');
-
 // ── Filters ─────────────────────────────────────────────────────
 $filter_status = $_GET['status'] ?? '';
 if (!in_array($filter_status, ['red', 'amber', 'green', 'none'], true)) $filter_status = '';
@@ -49,22 +44,21 @@ $pending_reviews_q = $db->prepare("
       AND re.student_id IN (
           SELECT u.id FROM users u
           JOIN student_profiles sp ON sp.user_id = u.id
-          WHERE u.role = 'student' AND sp.supervisor_id = ?" . $ay_filter['sql'] . "
+          WHERE u.role = 'student' AND sp.supervisor_id = ?
       )
       AND NOT EXISTS (
           SELECT 1 FROM supervisor_weekly_evaluations swe
           WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
-$p_types = "i" . str_repeat("i", count($ay_filter['params']));
-$pending_reviews_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$pending_reviews_q->bind_param("i", $sup_id);
 $pending_reviews_q->execute();
 $res = $pending_reviews_q->get_result();
 $row = $res ? $res->fetch_row() : null;
 $pending_reviews = (int) ($row[0] ?? 0);
 
-$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
-$total_assigned_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?");
+$total_assigned_q->bind_param("i", $sup_id);
 $total_assigned_q->execute();
 $res = $total_assigned_q->get_result();
 $row = $res ? $res->fetch_row() : null;
@@ -79,10 +73,10 @@ $sql = "
            sp.internship_start_date, sp.internship_end_date
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql'] . "
+    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
 ";
-$types = "i" . str_repeat("i", count($ay_filter['params']));
-$params = array_merge([$sup_id], $ay_filter['params']);
+$types = "i";
+$params = [$sup_id];
 
 if ($search) {
     $sql .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ? OR sp.job_role LIKE ? OR u.email LIKE ?)";

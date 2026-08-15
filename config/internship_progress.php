@@ -19,7 +19,7 @@
  * week — the unit of progress is weeks, not log entries.
  *
  * Pure functions — no DB connection, no session, safe to require from any
- * page. PDO instances are passed in where a query is required.
+ * page. MySQLi instances are passed in where a query is required.
  */
 
 if (!function_exists('internship_total_weeks')) {
@@ -29,8 +29,7 @@ if (!function_exists('internship_total_weeks')) {
      *
      * @param string|null $start student_profiles.internship_start_date (Y-m-d)
      * @param string|null $end   student_profiles.internship_end_date (Y-m-d)
-     * @return int  Total weeks. 0 = no start date. Falls back to the existing
-     *              default duration (12 weeks) when the end date is missing.
+     * @return int  Total weeks. 0 = no start date. Falls back to default duration (12 weeks) when end date is missing.
      */
     function internship_total_weeks(?string $start, ?string $end): int
     {
@@ -38,7 +37,7 @@ if (!function_exists('internship_total_weeks')) {
             return 0;
         }
         try {
-            $startDt = new DateTime($start);
+            $startDate = new DateTime($start);
         } catch (Exception $e) {
             return 0;
         }
@@ -46,25 +45,16 @@ if (!function_exists('internship_total_weeks')) {
             return 12;
         }
         try {
-            $endDt = new DateTime($end);
+            $endDate = new DateTime($end);
         } catch (Exception $e) {
             return 12;
         }
-        if ($endDt < $startDt) {
+        if ($endDate < $startDate) {
             return 1;
         }
 
-        // Week 1 ends on the next Saturday on/after the start date.
-        $dayOfWeek   = (int) $startDt->format('N'); // 1=Mon … 6=Sat, 7=Sun
-        $daysToSat   = $dayOfWeek === 6 ? 0 : (6 - $dayOfWeek + 7) % 7;
-        $endOfWeek1  = (clone $startDt)->modify("+{$daysToSat} days");
-
-        if ($endDt <= $endOfWeek1) {
-            return 1;
-        }
-
-        $diff = (int) $endDt->diff($endOfWeek1)->days;
-        return 1 + (int) ceil($diff / 7);
+        $days = (int) $startDate->diff($endDate)->days;
+        return max(1, (int) ceil($days / 7));
     }
 
     /**
@@ -115,8 +105,8 @@ if (!function_exists('internship_total_weeks')) {
      * report_evaluations (student_id = users.id) and is not 'rejected'.
      * Distinct weeks only — daily-log volume inside a week never inflates it.
      *
-     * @param mysqli|mixed  $db
-     * @param int           $student_user_id users.id of the student
+     * @param mysqli  $db
+     * @param int     $student_user_id users.id of the student
      * @return int
      */
     function internship_completed_weeks($db, int $student_user_id): int
@@ -129,18 +119,21 @@ if (!function_exists('internship_total_weeks')) {
         $stmt->execute();
         $res = $stmt->get_result();
         $row = $res ? $res->fetch_row() : null;
-        return (int) ($row[0] ?? 0);
+        $count = (int) ($row[0] ?? 0);
+        $stmt->close();
+
+        return $count;
     }
 
     /**
      * Full progress summary for one student.
      *
-     * @param mysqli|mixed  $db
-     * @param int           $student_user_id users.id of the student
-     * @param string|null   $start internship_start_date
-     * @param string|null   $end   internship_end_date
+     * @param mysqli       $db
+     * @param int          $student_user_id users.id of the student
+     * @param string|null  $start           internship_start_date
+     * @param string|null  $end             internship_end_date
      * @return array{total:int, completed:int, pct:int}
-     *   pct = round(completed / total * 100), 0 when the duration is unknown.
+     *   pct = round(completed / total * 100), 0 when duration is unknown.
      */
     function internship_progress($db, int $student_user_id, ?string $start, ?string $end): array
     {
@@ -161,11 +154,10 @@ if (!function_exists('internship_total_weeks')) {
      * that have an attendance record; days with no record are not counted and
      * 'leave' counts as absent.
      *
-     * @param mysqli|mixed $db
-     * @param int          $internship_id daily_logs.internship_id (= the student's users.id)
-     * @param string|null  $start Optional Y-m-d lower bound (inclusive).
-     *                            Passed together with $end to scope to one week.
-     * @param string|null  $end   Optional Y-m-d upper bound (inclusive).
+     * @param mysqli       $db
+     * @param int          $internship_id daily_logs.internship_id (= student's users.id)
+     * @param string|null  $start         Optional Y-m-d lower bound (inclusive).
+     * @param string|null  $end           Optional Y-m-d upper bound (inclusive).
      * @return array{present:int, absent:int, expected:int, rate:int}
      *   rate = round(present / expected * 100), 0 when there are no records.
      */
@@ -194,6 +186,7 @@ if (!function_exists('internship_total_weeks')) {
         $stmt->execute();
         $res = $stmt->get_result();
         $row = $res ? $res->fetch_assoc() : [];
+        $stmt->close();
 
         $present  = (int) ($row['present_cnt'] ?? 0);
         $absent   = (int) ($row['absent_cnt'] ?? 0);

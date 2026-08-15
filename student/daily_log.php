@@ -25,12 +25,7 @@ $intern_end   = $profile_row['internship_end_date'] ?? null;
 $student_name = ($profile_row['full_name'] ?? '') ?: $username;
 $profile_pic  = $profile_row['profile_pic'] ?? null;
 
-// FETCH PUBLIC HOLIDAYS
-$hol_stmt = $db->query("SELECT holiday_date, holiday_name FROM holidays ORDER BY holiday_date ASC");
-$all_holidays = $hol_stmt ? $hol_stmt->fetch_all(MYSQLI_ASSOC) : [];
-$holiday_dates = [];
-foreach ($all_holidays as $hl) { $holiday_dates[$hl['holiday_date']] = $hl['holiday_name']; }
-$holiday_date_list = array_keys($holiday_dates);
+
 
 // FETCH EXISTING LOG DATES
 $log_dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ?");
@@ -125,10 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
                 $attendance_status  = trim($_POST['attendance_status'] ?? 'present');
                 $reason_for_absence = trim($_POST['reason_for_absence'] ?? '');
 
-                if (isset($holiday_dates[$log_date])) {
-                    $attendance_status = 'leave';
-                    $reason_for_absence = 'Public Holiday - ' . $holiday_dates[$log_date];
-                }
+
 
                 $intended_task      = trim($_POST['intended_task'] ?? '');
                 $task_detail        = trim($_POST['task_detail'] ?? '');
@@ -184,10 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
     }
 
     if ($edit_id && $log_date && !$error) {
-        if (isset($holiday_dates[$log_date])) {
-            $attendance_status = 'leave';
-            $reason_for_absence = 'Public Holiday - ' . $holiday_dates[$log_date];
-        }
+
         if ($attendance_status === 'absent') {
             $intended_task    = $reason_for_absence ?: 'Absent';
             $task_detail      = 'N/A - Absent';
@@ -372,7 +361,7 @@ if (!empty($weeks[$selected_week])) {
                     <h1 class="text-xl font-bold text-slate-800 mb-1">Daily Log Sheet</h1>
                     <p class="text-xs text-gray-400 leading-relaxed">
                         Select a <strong class="text-slate-600">Week</strong> first, then pick a valid <strong class="text-slate-600">Date</strong>.
-                        Weekends, public holidays, and previously submitted dates are greyed out.
+                        Weekends and previously submitted dates are greyed out.
                     </p>
                 </div>
 
@@ -693,21 +682,8 @@ if (!empty($weeks[$selected_week])) {
 <script>
 (function () {
     var weekRanges   = <?= json_encode($weeks, JSON_HEX_TAG) ?>;
-    var existingLogs = <?= json_encode($existing_logs, JSON_HEX_TAG) ?>;
-    var holidayDates = <?= json_encode($holiday_date_list, JSON_HEX_TAG) ?>;
-    var holidayNames = <?= json_encode($holiday_dates, JSON_HEX_TAG) ?>;
-    var existingSet  = {};
-    existingLogs.forEach(function (d) { existingSet[d] = true; });
-    var holidaySet = {};
-    holidayDates.forEach(function (d) { holidaySet[d] = true; });
-
-    var weekSelect = document.getElementById('weekSelect');
-    var dateInput  = document.getElementById('logDate');
-    var weekHint   = document.getElementById('weekHint');
-    var dateHint   = document.getElementById('dateHint');
-
     function buildDisableList() {
-        return existingLogs.concat(holidayDates);
+        return existingLogs;
     }
 
     var fp = flatpickr(dateInput, {
@@ -724,13 +700,7 @@ if (!empty($weeks[$selected_week])) {
             if (existingSet[dateStr]) {
                 dayElem.classList.add('fp-log-exists');
                 dayElem.setAttribute('title', 'Already submitted — cannot select');
-            } else if (holidaySet[dateStr]) {
-                dayElem.style.background = '#fef2f2';
-                dayElem.style.borderColor = '#fecaca';
-                dayElem.style.color = '#dc2626';
-                dayElem.style.fontWeight = '700';
-                dayElem.setAttribute('title', 'Public Holiday - ' + holidayNames[dateStr]);
-            }
+
         },
         onChange: function (selectedDates, dateStr) {
             if (!dateStr) return;
@@ -741,17 +711,7 @@ if (!empty($weeks[$selected_week])) {
                 showToast('A log for ' + dateStr + ' already exists.', 'error');
                 return;
             }
-            if (holidaySet[dateStr]) {
-                var leaveRadio = document.querySelector('input[name="attendance_status"][value="absent"]');
-                if (leaveRadio) { leaveRadio.checked = true; toggleAttendance(); }
-                var reasonField = document.querySelector('textarea[name="reason_for_absence"]');
-                if (reasonField) { reasonField.value = 'Public Holiday - ' + holidayNames[dateStr]; }
-                dateHint.textContent = day + ', ' +
-                    d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) +
-                    ' — Public Holiday (' + holidayNames[dateStr] + '). Marked as Leave.';
-                dateHint.className = 'text-sm text-amber-600 font-semibold mt-1';
-                return;
-            }
+
             dateHint.textContent = day + ', ' +
                 d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) +
                 ' — ready to submit.';

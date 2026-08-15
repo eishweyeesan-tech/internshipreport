@@ -199,16 +199,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
                 $week_number,
                 $student_id
             );
-
-            if (!empty($profile['supervisor_email'])) {
-                require_once __DIR__ . '/../config/mail.php';
-                $subject = 'Student Report Approved by Instructor';
-                $htmlBody = '<p>Dear ' . htmlspecialchars(($profile['supervisor_name'] ?? '') ?: 'Supervisor') . ',</p>' .
-                    '<p>The report for <strong>' . htmlspecialchars($student_name) . '</strong> (Week ' . $week_number . ') has been approved by the instructor and is now ready for your review.</p>' .
-                    '<p>Please log in to your supervisor dashboard to provide the final review.</p>' .
-                    '<p>Thank you.</p>';
-                sendAlertEmail($profile['supervisor_email'], $subject, $htmlBody);
-            }
         }
 
         $eval_stmt->bind_param("ii", $student_id, $week_number);
@@ -346,14 +336,14 @@ function render_error($title, $msg, $icon) {
 
     <!-- ════ HEADER ════ -->
     <?php if ($logged_in_instructor): ?>
-    <a href="instructor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition mb-2">
-        <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">←</span> Back to Dashboard
+    <a href="instructor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-teal-600 hover:text-teal-800 transition mb-2">
+        <span class="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center text-sm">←</span> Back to Dashboard
     </a>
     <?php endif; ?>
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div class="flex items-start justify-between flex-wrap gap-4">
             <div class="flex items-center gap-4">
-                <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold shrink-0">
+                <div class="w-14 h-14 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-lg font-bold shrink-0">
                     <?= strtoupper(($student_name)[0]) ?>
                 </div>
                 <div>

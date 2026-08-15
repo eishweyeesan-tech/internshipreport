@@ -206,6 +206,74 @@ function buildInternshipWeeks(string $internship_start_date, int $num_weeks = 12
 
 // Only output HTML when accessed directly (not when included by other files)
 if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'week_helper.php'):
+    require_once __DIR__ . '/db.php';
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    $db = $mysqli ?? $conn ?? null;
+    $student_user_id = (int)($_SESSION['user_id'] ?? 0);
+
+    $internship_start = null;
+    $internship_end   = null;
+    if ($student_user_id > 0 && $db) {
+        $sp_stmt = $db->prepare("SELECT internship_start_date, internship_end_date FROM student_profiles WHERE user_id = ?");
+        $sp_stmt->bind_param("i", $student_user_id);
+        $sp_stmt->execute();
+        $sp_res = $sp_stmt->get_result();
+        $sp_row = $sp_res ? $sp_res->fetch_assoc() : null;
+        if ($sp_row) {
+            $internship_start = $sp_row['internship_start_date'] ?: null;
+            $internship_end   = $sp_row['internship_end_date'] ?: null;
+        }
+    }
+
+    $current_week = 0;
+    $weeks = [];
+    if ($internship_start) {
+        $today_str    = (new DateTime())->format('Y-m-d');
+        $current_week = getInternshipWeekNumber($internship_start, $today_str);
+        $weeks        = buildInternshipWeeks($internship_start, 12, $internship_end);
+    }
+
+    $action_error  = null;
+    $action_result = null;
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+        $action = $_POST['action'];
+        if ($action === 'week_number' && !empty($_POST['test_date'])) {
+            $test_date = $_POST['test_date'];
+            if (!$internship_start) {
+                $action_error = 'No internship start date defined.';
+            } else {
+                $wn = getInternshipWeekNumber($internship_start, $test_date);
+                if ($wn === 0) {
+                    $action_error = 'The selected date is before the internship start date.';
+                } else {
+                    $action_result = ['type' => 'week_number', 'date' => $test_date, 'week' => $wn];
+                }
+            }
+        } elseif ($action === 'validate_date' && !empty($_POST['test_date'])) {
+            $test_date = $_POST['test_date'];
+            $err = validateLogDate($test_date, $internship_start, $internship_end);
+            if ($err) {
+                $action_error = 'Date is outside the allowed internship date range.';
+            } else {
+                $action_result = ['type' => 'validate_date', 'date' => $test_date];
+            }
+        } elseif ($action === 'week_range' && isset($_POST['test_week'])) {
+            $test_week = (int)$_POST['test_week'];
+            if (!$internship_start) {
+                $action_error = 'No internship start date defined.';
+            } else {
+                $range = getWeekRange($internship_start, $test_week);
+                if (!$range) {
+                    $action_error = 'Invalid week number.';
+                } else {
+                    $action_result = ['type' => 'week_range', 'week' => $test_week, 'start' => $range['start'], 'end' => $range['end']];
+                }
+            }
+        }
+    }
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -251,8 +319,8 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'week_helper.php'):
         <?php endif; ?>
     </div>
 
-    <?php if (!$internship_start): ?>
-    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+    <?php if (!$internship_start): ?> 
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
         <div class="w-8 h-8 rounded-full bg-amber-100 text-amber-500 flex items-center justify-center text-sm shrink-0">!</div>
         <div>
             <h3 class="text-xs font-bold text-amber-700">No Internship Dates Found</h3>

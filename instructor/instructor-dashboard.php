@@ -222,32 +222,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
     }
     </script>
 </head>
-<body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
+<body class="bg-gradient-to-br from-slate-50 via-teal-50/20 to-slate-100 font-inter antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 bg-white/80 backdrop-blur-xl border-r border-slate-200/60 flex flex-col shrink-0 shadow-xl shadow-slate-200/20">
-        <div class="h-16 flex items-center px-6 border-b border-slate-100/80 bg-gradient-to-r from-amber-500/5 to-orange-500/5">
+    <aside class="w-64 bg-white/90 backdrop-blur-xl border-r border-teal-100 flex flex-col shrink-0 shadow-xl shadow-teal-900/5">
+        <div class="h-16 flex items-center px-6 border-b border-teal-50 bg-gradient-to-r from-teal-50/50 to-emerald-50/30">
             <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-teal-600/30">
                     <span class="text-white text-sm">📋</span>
                 </div>
                 <div>
                     <span class="text-sm font-extrabold text-slate-800 tracking-tight">InternReport</span>
-                    <span class="block text-sm font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded mt-0.5">INSTRUCTOR</span>
+                    <span class="block text-caption font-bold text-teal-700 bg-teal-100/60 px-1.5 py-0.5 rounded mt-0.5">INSTRUCTOR</span>
                 </div>
             </div>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
-            <a href="instructor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-purple-600 to-purple-700 text-white font-semibold shadow-lg shadow-purple-500/30">
+            <a href="instructor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-teal-600 to-teal-700 text-white font-semibold shadow-lg shadow-teal-600/25">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
             </a>
-            <a href="../supervisor/supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-slate-800 hover:text-slate-200">
+            <a href="../supervisor/supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-teal-50 hover:text-teal-900">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">👩‍🏫</span> Supervisor View
             </a>
         </nav>
-        <div class="p-3 border-t border-slate-100/80">
+        <div class="p-3 border-t border-slate-100">
             <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
             </a>
@@ -258,14 +258,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm">
+        <header class="h-16 bg-white/90 backdrop-blur-xl border-b border-teal-100 flex items-center justify-between px-8 shrink-0 shadow-sm">
             <div class="flex items-center gap-4">
                 <h1 class="text-base font-bold text-slate-800">Instructor Dashboard</h1>
             </div>
             <div class="flex items-center gap-5">
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full">
-                    <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                    <span class="text-xs font-bold text-amber-700"><?= $total_students ?> Student<?= $total_students !== 1 ? 's' : '' ?></span>
+                <div class="flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-200 rounded-full">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="text-xs font-bold text-teal-700"><?= $total_students ?> Student<?= $total_students !== 1 ? 's' : '' ?></span>
                 </div>
                 <div class="flex items-center gap-3 pl-5 border-l border-slate-200 relative">
                     <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="relative focus:outline-none">

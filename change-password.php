@@ -86,14 +86,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body class="bg-slate-50 font-inter min-h-screen flex items-center justify-center px-4">
     <div class="w-full max-w-md">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div class="bg-gradient-to-br from-indigo-600 to-purple-600 px-6 py-5 text-center">
+            <div class="bg-gradient-to-br from-teal-700 to-emerald-800 px-6 py-5 text-center">
                 <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mx-auto mb-3">
                     <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
                     </svg>
                 </div>
                 <h2 class="text-lg font-bold text-white">Change Your Password</h2>
-                <p class="text-indigo-100 text-xs mt-1">You must change your password before continuing.</p>
+                <p class="text-teal-100 text-xs mt-1">You must change your password before continuing.</p>
             </div>
 
             <div class="px-6 py-5">
@@ -112,24 +112,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="mb-3">
                         <label class="block text-sm font-bold text-slate-500 mb-1">Current Password</label>
                         <input type="password" name="current_password" required
-                               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition"
+                               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-600 transition"
                                placeholder="Enter current password">
                     </div>
                     <div class="mb-3">
                         <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
                         <input type="password" name="new_password" required minlength="6"
-                               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition"
+                               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-600 transition"
                                placeholder="Enter new password">
                         <p class="text-sm text-slate-400 mt-1">At least 6 characters.</p>
                     </div>
                     <div class="mb-5">
                         <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>
                         <input type="password" name="confirm_password" required
-                               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 transition"
+                               class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-teal-600 transition"
                                placeholder="Re-enter new password">
                     </div>
                     <button type="submit"
-                            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer py-2.5">
+                            class="w-full bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 text-white font-bold text-xs rounded-xl shadow-lg shadow-teal-600/30 transition-all duration-200 cursor-pointer py-2.5">
                         Update Password
                     </button>
                 </form>

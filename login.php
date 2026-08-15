@@ -140,19 +140,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </script>
     <style>
         .gradient-text {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
     </style>
 </head>
-<body class="bg-gradient-to-br from-slate-50 via-indigo-50/50 to-purple-50/50 font-inter antialiased min-h-screen">
+<body class="bg-gradient-to-br from-slate-50 via-teal-50/40 to-emerald-50/40 font-inter antialiased min-h-screen">
 
     <!-- Background Elements -->
     <div class="fixed inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-20 left-10 w-72 h-72 bg-indigo-300/20 rounded-full blur-3xl"></div>
-        <div class="absolute bottom-20 right-10 w-96 h-96 bg-purple-300/20 rounded-full blur-3xl"></div>
+        <div class="absolute top-20 left-10 w-72 h-72 bg-teal-300/20 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-20 right-10 w-96 h-96 bg-emerald-300/20 rounded-full blur-3xl"></div>
     </div>
 
     <div class="relative min-h-screen flex items-center justify-center p-6">
@@ -162,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <!-- Left Side - Branding -->
                 <div class="hidden lg:block space-y-8">
                     <a href="index.php" class="inline-flex items-center gap-3">
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-teal-600/30">
                             <span class="text-white text-xl">📋</span>
                         </div>
                         <span class="text-2xl font-extrabold text-slate-800 tracking-tight">InternReport</span>
@@ -180,21 +180,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <!-- Features List -->
                     <div class="space-y-4">
                         <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 text-xl">📝</div>
+                            <div class="w-12 h-12 rounded-xl bg-teal-100/80 flex items-center justify-center text-teal-700 text-xl">📝</div>
                             <div>
                                 <p class="font-bold text-slate-800">Daily Log Tracking</p>
                                 <p class="text-sm text-slate-500">Submit and review daily activities</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 text-xl">📊</div>
+                            <div class="w-12 h-12 rounded-xl bg-emerald-100/80 flex items-center justify-center text-emerald-700 text-xl">📊</div>
                             <div>
                                 <p class="font-bold text-slate-800">Weekly Grading</p>
                                 <p class="text-sm text-slate-500">Track your weekly performance</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 text-xl">📈</div>
+                            <div class="w-12 h-12 rounded-xl bg-teal-100/80 flex items-center justify-center text-teal-700 text-xl">📈</div>
                             <div>
                                 <p class="font-bold text-slate-800">Real-time Analytics</p>
                                 <p class="text-sm text-slate-500">Monitor your progress</p>
@@ -204,10 +204,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
 
                 <!-- Right Side - Login Form -->
-                <div class="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl shadow-slate-200/50 border border-slate-200/60 p-8 lg:p-10">
+                <div class="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl shadow-teal-900/10 border border-teal-100 p-8 lg:p-10">
                     <!-- Mobile Logo -->
                     <div class="lg:hidden flex items-center justify-center gap-3 mb-8">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-teal-600/30">
                             <span class="text-white text-lg">📋</span>
                         </div>
                         <span class="text-xl font-extrabold text-slate-800 tracking-tight">InternReport</span>
@@ -229,24 +229,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <div>
                             <label class="block text-sm font-bold text-slate-700 mb-2">Email</label>
                             <input type="email" name="username" required placeholder="Enter your email address"
-                                   class="w-full px-4 py-3 bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm placeholder:text-slate-400">
+                                   class="w-full px-4 py-3 bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all duration-200 shadow-sm placeholder:text-slate-400">
                             <p class="text-xs text-slate-400 mt-1">Use your email to log in (roll numbers may repeat across years).</p>
                         </div>
 
                         <div>
                             <label class="block text-sm font-bold text-slate-700 mb-2">Password</label>
                             <input type="password" name="password" required placeholder="Enter your password"
-                                   class="w-full px-4 py-3 bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all duration-200 shadow-sm placeholder:text-slate-400">
+                                   class="w-full px-4 py-3 bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-xl text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 transition-all duration-200 shadow-sm placeholder:text-slate-400">
                         </div>
 
                         <button type="submit"
-                                class="w-full px-6 py-3.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-indigo-500/30 transition-all duration-200 hover:scale-[1.02]">
+                                class="w-full px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 text-white font-bold text-sm rounded-xl shadow-lg shadow-teal-600/30 transition-all duration-200 hover:scale-[1.02] cursor-pointer">
                             Sign In →
                         </button>
                     </form>
 
                     <div class="mt-6 text-center">
-                        <a href="index.php" class="text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors">
+                        <a href="index.php" class="text-sm font-medium text-slate-500 hover:text-teal-700 transition-colors">
                             ← Back to Home
                         </a>
                     </div>

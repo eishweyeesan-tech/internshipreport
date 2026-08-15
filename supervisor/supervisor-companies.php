@@ -1,8 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
-require_once __DIR__ . '/../config/init_year.php';
-require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
 

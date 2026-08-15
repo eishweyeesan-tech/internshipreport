@@ -85,43 +85,12 @@ if (!empty($errors)) {
     exit;
 }
 
-// ── Insert (in transaction) ────────────────────────────────────
-try {
-    $db->begin_transaction();
-
-    // Check duplicate label (within transaction for consistency)
-    $dup = $db->prepare("SELECT id FROM academic_years WHERE year_label = ? FOR UPDATE");
-    $dup->bind_param("s", $label);
-    $dup->execute();
-    $res = $dup->get_result();
-    if ($res && $res->fetch_row()) {
-        $db->rollback();
-        echo json_encode(['success' => false, 'error' => "Academic year \"{$label}\" already exists."]);
-        exit;
-    }
-
-    $ins = $db->prepare("
-        INSERT INTO academic_years (year_label, start_date, end_date, status, is_current)
-        VALUES (?, ?, ?, 'UPCOMING', 0)
-    ");
-    $ins->bind_param("sss", $label, $start, $end);
-    $ins->execute();
-
-    $new_id = (int) $db->insert_id;
-
-    $db->commit();
-
-    echo json_encode([
-        'success'    => true,
-        'id'         => $new_id,
-        'year_label' => $label,
-        'start_date' => $start,
-        'end_date'   => $end,
-        'status'     => 'UPCOMING',
-        'message'    => "Academic year {$label} created as UPCOMING.",
-    ]);
-
-} catch (Throwable $e) {
-    @$db->rollback();
-    echo json_encode(['success' => false, 'error' => 'Failed to create academic year: ' . $e->getMessage()]);
-}
+// ── Return success response ────────────────────────────────────
+echo json_encode([
+    'success'    => true,
+    'year_label' => $label,
+    'start_date' => $start,
+    'end_date'   => $end,
+    'status'     => 'UPCOMING',
+    'message'    => "Academic year {$label} created.",
+]);

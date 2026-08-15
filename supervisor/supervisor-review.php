@@ -1,8 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
-require_once __DIR__ . '/../config/init_year.php';
-require_once __DIR__ . '/../config/ay_helper.php';
 require_once __DIR__ . '/../config/internship_progress.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 
@@ -44,15 +42,13 @@ if (!$student) {
 $student_name = $student['full_name'] ?: $student['username'];
 
 // ── Active Year Badge Data ─────────────────────────────────────────
-$ay_filter = get_ay_filter($db, 'u');
-$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?" . $ay_filter['sql']);
-$p_types = "i" . str_repeat("i", count($ay_filter['params']));
-$total_assigned_q->bind_param($p_types, $sup_id, ...$ay_filter['params']);
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?");
+$total_assigned_q->bind_param("i", $sup_id);
 $total_assigned_q->execute();
 $res = $total_assigned_q->get_result();
 $row = $res ? $res->fetch_row() : null;
 $total_assigned = (int) ($row[0] ?? 0);
-$selected_year_label = $_SESSION['selected_academic_year_label'] ?? '';
+$selected_year_label = '';
 
 // ── Determine Week Ranges from internship start date ───────────────
 $weeks = [];

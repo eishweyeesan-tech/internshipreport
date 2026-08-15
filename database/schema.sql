@@ -1,5 +1,5 @@
 -- ============================================================
--- InternReport Management System — Normalized Database Schema
+-- InternReport Management System — Clean Core Database Schema
 -- File: database/schema.sql
 -- ============================================================
 
@@ -12,20 +12,6 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ============================================================
 -- 1. INDEPENDENT TABLES
 -- ============================================================
-
--- Academic years dimension table
-CREATE TABLE IF NOT EXISTS academic_years (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    year_label VARCHAR(15) NOT NULL COMMENT 'e.g. 2025-2026',
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    status ENUM('UPCOMING', 'ACTIVE', 'ARCHIVED') NOT NULL DEFAULT 'UPCOMING',
-    is_current TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Only one row should have 1',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_year_label (year_label),
-    INDEX idx_status (status),
-    INDEX idx_is_current (is_current)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Unified Users table (admins, students, supervisors, instructors)
 CREATE TABLE IF NOT EXISTS users (
@@ -48,8 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at DATETIME DEFAULT NULL,
     is_warned TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_username_year (username, academic_year),
-    CONSTRAINT fk_users_academic_year FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE SET NULL ON UPDATE CASCADE
+    UNIQUE KEY unique_username_year (username, academic_year)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Companies table
@@ -73,29 +58,8 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Public holidays (Myanmar calendar)
-CREATE TABLE IF NOT EXISTS holidays (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    holiday_date DATE NOT NULL,
-    holiday_name VARCHAR(200) NOT NULL,
-    holiday_name_mm VARCHAR(200) DEFAULT NULL,
-    note TEXT DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_holiday_date (holiday_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- System Announcements
-CREATE TABLE IF NOT EXISTS announcements (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    body TEXT NOT NULL,
-    sender_name VARCHAR(100) DEFAULT NULL,
-    is_active TINYINT(1) NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 -- ============================================================
--- 2. STUDENT & SUPERVISOR PROFILE & ASSIGNMENT TABLES
+-- 2. STUDENT & SUPERVISOR PROFILE TABLES
 -- ============================================================
 
 -- Student profiles table
@@ -122,21 +86,6 @@ CREATE TABLE IF NOT EXISTS student_profiles (
     FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Supervisor assignments (maps supervisors to students per academic year)
-CREATE TABLE IF NOT EXISTS supervisor_assignments (
-    assignment_id INT PRIMARY KEY AUTO_INCREMENT,
-    supervisor_id INT NOT NULL,
-    student_id INT DEFAULT NULL,
-    academic_year VARCHAR(15) NOT NULL,
-    academic_year_id INT DEFAULT NULL,
-    department VARCHAR(100) DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_sup_year_student (supervisor_id, academic_year, student_id),
-    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE SET NULL,
-    CONSTRAINT fk_supassign_academic_year FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -227,24 +176,8 @@ CREATE TABLE IF NOT EXISTS supervisor_weekly_evaluations (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
--- 5. NOTIFICATION & SYSTEM ALERT TABLES
+-- 5. NOTIFICATION TABLES
 -- ============================================================
-
--- Supervisor email alerts
-CREATE TABLE IF NOT EXISTS supervisor_alerts (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    supervisor_id INT NOT NULL,
-    student_id INT NOT NULL,
-    alert_type ENUM('red_badge', 'amber_warning', 'weekly_summary') NOT NULL DEFAULT 'red_badge',
-    alert_date DATE NOT NULL,
-    week_number INT DEFAULT NULL,
-    email_sent TINYINT(1) NOT NULL DEFAULT 0,
-    sent_at TIMESTAMP NULL DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_alert (supervisor_id, student_id, alert_type, alert_date),
-    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Notifications table
 CREATE TABLE IF NOT EXISTS notifications (
@@ -266,41 +199,16 @@ CREATE TABLE IF NOT EXISTS notifications (
     related_week INT DEFAULT NULL,
     student_id INT DEFAULT NULL,
     report_id INT DEFAULT NULL,
-    announcement_id INT DEFAULT NULL,
     is_read TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_notif_user_read (user_id, is_read),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (announcement_id) REFERENCES announcements(id) ON DELETE SET NULL
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ============================================================
--- TRIGGERS
--- ============================================================
-
--- Guard trigger enforcing single current academic year
-DROP TRIGGER IF EXISTS trg_enforce_single_current_year;
-DELIMITER //
-CREATE TRIGGER trg_enforce_single_current_year
-BEFORE UPDATE ON academic_years
-FOR EACH ROW
-BEGIN
-    IF NEW.is_current = 1 THEN
-        IF (SELECT COUNT(*) FROM academic_years WHERE is_current = 1 AND id <> NEW.id) > 0 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Only one academic year can be marked as current';
-        END IF;
-    END IF;
-END //
-DELIMITER ;
 
 -- ============================================================
 -- SEED DATA
 -- ============================================================
-
--- Default academic year (active)
-INSERT IGNORE INTO academic_years (year_label, start_date, end_date, status, is_current) VALUES
-('2025-2026', '2025-09-01', '2026-08-31', 'ACTIVE', 1);
 
 -- Default system settings
 INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES

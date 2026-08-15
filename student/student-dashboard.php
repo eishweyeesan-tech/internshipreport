@@ -69,12 +69,6 @@ if (isset($_GET['week'])) {
     if (isset($weeks[$w])) $selected_week = $w;
 }
 
-// ── FETCH PUBLIC HOLIDAYS ──
-$hol_stmt = $db->query("SELECT holiday_date, holiday_name FROM holidays ORDER BY holiday_date ASC");
-$all_holidays = $hol_stmt ? $hol_stmt->fetch_all(MYSQLI_ASSOC) : [];
-$holiday_dates = [];
-foreach ($all_holidays as $hl) { $holiday_dates[$hl['holiday_date']] = $hl['holiday_name']; }
-
 // ── FORM A: Add Daily Log ──
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
     $post_week = (int) ($_POST['selected_week'] ?? 0);
@@ -838,10 +832,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
     var existingSet  = {};
     existingLogs.forEach(function (d) { existingSet[d] = true; });
 
-    // Public holidays (Myanmar Calendar)
-    var holidays = <?= json_encode($holiday_dates, JSON_HEX_TAG) ?>;
-    function isHoliday(d) { return holidays.hasOwnProperty(d); }
-    function holidayName(d) { return holidays[d] || ''; }
+
 
     // ── Date format helpers (DD.MM.YYYY ↔ YYYY-MM-DD) ──
     function parseDisplayDate(str) {
@@ -901,13 +892,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
             e.preventDefault();
             return false;
         }
-        // Auto-set leave for public holidays
-        if (isHoliday(iso)) {
-            var leaveRadio = document.querySelector('input[name="attendance_status"][value="absent"]');
-            if (leaveRadio) { leaveRadio.checked = true; toggleAttendance(); }
-            var reasonField = document.querySelector('textarea[name="reason_for_absence"]');
-            if (reasonField && !reasonField.value) { reasonField.value = 'Public Holiday - ' + holidayName(iso); }
-        }
+
         return true;
     }
 
@@ -1044,14 +1029,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     updateWeekBadge();
                     return;
                 }
-                // Auto-set to "leave" for public holidays
-                if (iso && isHoliday(iso)) {
-                    var leaveRadio = document.querySelector('input[name="attendance_status"][value="absent"]');
-                    if (leaveRadio) { leaveRadio.checked = true; toggleAttendance(); }
-                    var reasonField = document.querySelector('textarea[name="reason_for_absence"]');
-                    if (reasonField) { reasonField.value = 'Public Holiday - ' + holidayName(iso); }
-                    showToast('This date is a public holiday (' + holidayName(iso) + '). Attendance will be marked as Leave.', 'warning');
-                }
+
             });
             updateWeekBadge();
         }

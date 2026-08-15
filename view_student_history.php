@@ -22,8 +22,7 @@ $stu = $db->prepare("
            sup_u.username AS supervisor_name
     FROM users u
     LEFT JOIN student_profiles sp ON sp.user_id = u.id
-    LEFT JOIN student_profiles sp2 ON sp2.user_id = u.id
-    LEFT JOIN users sup_u ON sup_u.id = sp2.supervisor_id
+    LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     WHERE u.id = ? AND u.role = 'student'
 ");
 $stu->bind_param("i", $uid);

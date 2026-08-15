@@ -248,8 +248,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
         <?php $pageTitle = 'Admin Profile Settings'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-6" style="scrollbar-gutter: stable;">
-            <div class="max-w-3xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
+            <div class="w-full max-w-4xl space-y-6">
 
                 <?php if ($msg): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
@@ -388,7 +388,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h3 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-blue-50 text-blue-600 rounded">👤</span> Account Information
+                            <span class="p-1 bg-teal-50 text-teal-700 rounded">👤</span> Account Information
                         </h3>
                     </div>
                     <form method="POST" class="p-5 space-y-4">
@@ -396,11 +396,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Admin Name</label>
-                                <input type="text" name="new_name" value="<?= htmlspecialchars($admin['username']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="text" name="new_name" value="<?= htmlspecialchars($admin['username']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Email Address</label>
-                                <input type="email" name="new_email" value="<?= htmlspecialchars($admin['email']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <input type="email" name="new_email" value="<?= htmlspecialchars($admin['email']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Role</label>
@@ -410,7 +410,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             </div>
                         </div>
                         <div class="flex justify-end pt-1">
-                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow-sm transition cursor-pointer">💾 Save Profile</button>
+                            <button type="submit" class="px-5 py-2 bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 text-white font-bold text-sm rounded-xl shadow-lg shadow-teal-600/30 transition-all duration-200 cursor-pointer">💾 Save Profile</button>
                         </div>
                     </form>
                 </div>

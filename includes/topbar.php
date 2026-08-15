@@ -3,8 +3,11 @@
 // Requires: $pageTitle (string), $admin_name (string), $admin_id (int),
 //           $unread_notif_count (int), $recent_notifications (array)
 ?>
-<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 shrink-0">
     <div class="flex items-center gap-3">
+        <button type="button" onclick="toggleAdminSidebar()" class="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-xl transition cursor-pointer" aria-label="Toggle sidebar">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
         <h1 class="text-base font-bold text-slate-800"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></h1>
     </div>
     <div class="flex items-center gap-4 shrink-0 h-full justify-end">
