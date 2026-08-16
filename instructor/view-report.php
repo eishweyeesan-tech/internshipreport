@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $logged_in_instructor = isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'instructor';
@@ -255,24 +255,20 @@ function render_error($title, $msg, $icon) {
         .sig-type-dancing { font-family: 'Dancing Script', cursive; }
         .sig-type-alex   { font-family: 'Alex Brush', cursive; }
         .student-sig-preview { font-family: 'Great Vibes', cursive; font-size: 24px; color: #1e293b; min-height: 36px; line-height: 1.4; }
+
+        @media print {
+            @page { size: A4 portrait; margin: 12mm 15mm; }
+            body { background: #ffffff !important; color: #0f172a !important; }
+            .print\:hidden, button, form { display: none !important; }
+            .print-card-avoid { break-inside: avoid !important; }
+            .bg-white { background: #ffffff !important; }
+            .border { border-color: #cbd5e1 !important; }
+            .shadow-sm { box-shadow: none !important; }
+        }
     </style>
     <script>
         tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        'inter': ['Inter', 'sans-serif'],
-                    },
-                    fontSize: {
-                    'micro': '0.5rem',
-                    'caption': '0.6875rem',
-                    'label': '0.8125rem',
-                    'subtitle': '0.9375rem',
-                    'body': '1rem',
-                },
-                }
-            }
+            theme: { extend: { fontFamily: { 'inter': ['Inter', 'sans-serif'] } } }
         }
     </script>
     <script>
@@ -309,36 +305,22 @@ function render_error($title, $msg, $icon) {
 
 <div class="max-w-6xl mx-auto space-y-6">
 
+    <div class="flex items-center justify-between print:hidden">
+        <?php if ($logged_in_instructor): ?>
+        <a href="instructor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-teal-600 hover:text-teal-800 transition">
+            <span class="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center text-sm">←</span> Back to Dashboard
+        </a>
+        <?php endif; ?>
+        <button type="button" onclick="window.print()" class="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-xl">Print Report</button>
+    </div>
+
     <?php if ($eval_msg === 'saved'): ?>
-    <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-        <span>✅</span> Feedback submitted and report approved. Status: <strong class="ml-1">Approved by Instructor</strong>
+    <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl print:hidden">
+        ✅ Feedback submitted and report approved.
     </div>
     <?php endif; ?>
 
     <?php if ($eval_msg === 'rejected'): ?>
-    <div class="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-        <span>❌</span> Report rejected. Student will be notified to revise and resubmit.
-    </div>
-    <?php endif; ?>
-
-    <?php if (str_starts_with($eval_msg, 'error_missing:') || $eval_msg === 'error' || $eval_msg === 'reject_empty'): ?>
-    <div class="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-        <span>❌</span>
-        <?php if ($eval_msg === 'reject_empty'): ?>
-            Please provide a reason for rejection.
-        <?php elseif (str_starts_with($eval_msg, 'error_missing:')): ?>
-            Missing fields: <?= htmlspecialchars(substr($eval_msg, 14)) ?>
-        <?php else: ?>
-            Please fill all fields and provide a signature before submitting.
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
-
-    <!-- ════ HEADER ════ -->
-    <?php if ($logged_in_instructor): ?>
-    <a href="instructor-dashboard.php" class="inline-flex items-center gap-2 text-xs font-bold text-teal-600 hover:text-teal-800 transition mb-2">
-        <span class="w-7 h-7 rounded-lg bg-teal-50 flex items-center justify-center text-sm">←</span> Back to Dashboard
-    </a>
     <?php endif; ?>
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div class="flex items-start justify-between flex-wrap gap-4">

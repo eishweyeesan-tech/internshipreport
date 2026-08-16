@@ -12,14 +12,14 @@ $db            = $mysqli ?? $conn;
 $role          = $_SESSION['role'] ?? 'student';
 $holiday_dates = [];
 
-$is_ajax = isset($_GET['ajax']) && $_GET['ajax'] === '1';
-if ($is_ajax) { ob_start(); }
-
 // Active dashboard tab (overview | daily-log | weekly-report)
 $tab = $_GET['tab'] ?? 'overview';
 if (!in_array($tab, ['overview', 'daily-log', 'weekly-report'], true)) {
     $tab = 'overview';
 }
+?>
+<!--DEBUG-TAB:<?= $tab ?>-->
+<?php 
 
 // ══════════════════════════════════════════════════════════════════════
 // FETCH INTERNSHIP DATE RANGE + PROFILE INFO
@@ -43,12 +43,6 @@ $supervisor_name = $profile_row['supervisor_name'] ?? '—';
 $profile_pic = $profile_row['profile_pic'] ?? '';
 $instructor_name = ($profile_row['instructor_name'] ?? '') ?: '—';
 $instructor_email = $profile_row['instructor_email'] ?? '';
-
-$sup_initial = mb_substr($supervisor_name, 0, 1, 'UTF-8');
-$sup_initial_display = ($sup_initial === '—' || empty($sup_initial)) ? 'S' : mb_strtoupper($sup_initial, 'UTF-8');
-
-$inst_initial = mb_substr($instructor_name, 0, 1, 'UTF-8');
-$inst_initial_display = ($inst_initial === '—' || empty($inst_initial)) ? 'I' : mb_strtoupper($inst_initial, 'UTF-8');
 
 // ══════════════════════════════════════════════════════════════════════
 // FETCH WARNING STATUS
@@ -345,7 +339,7 @@ if (!empty($weeks[$selected_week])) {
 }
 
 // Fetch logs for the selected week
-if (!empty($weeks[$selected_week])) {
+if (!empty($weeks)) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
     $logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
@@ -355,62 +349,6 @@ if (!empty($weeks[$selected_week])) {
     $recent_logs = $logs_res ? $logs_res->fetch_all(MYSQLI_ASSOC) : [];
 } else {
     $recent_logs = $all_logs;
-}
-
-// ── DAILY-LOG VIEW STATE (weekday pills, selected date, active log, lock status) ──
-$log_by_date = [];
-if (!empty($recent_logs)) {
-    foreach ($recent_logs as $log) {
-        $log_by_date[$log['log_date']] = $log;
-    }
-}
-
-$week_dates = [];
-if (!empty($weeks[$selected_week])) {
-    $ws_obj = new DateTime($weeks[$selected_week]['start']);
-    $we_obj = new DateTime($weeks[$selected_week]['end']);
-    $ws_obj->setTime(0, 0);
-    $we_obj->setTime(0, 0);
-    $cursor = clone $ws_obj;
-    while ($cursor <= $we_obj) {
-        if ((int)$cursor->format('N') < 6) {
-            $week_dates[] = $cursor->format('Y-m-d');
-        }
-        $cursor->modify('+1 day');
-    }
-}
-
-$selected_date = trim($_GET['date'] ?? $_POST['log_date'] ?? '');
-if ($editing_log && !empty($editing_log['log_date'])) {
-    $selected_date = $editing_log['log_date'];
-} elseif (empty($selected_date) || (!empty($week_dates) && !in_array($selected_date, $week_dates, true))) {
-    $today_iso = date('Y-m-d');
-    if (!empty($week_dates) && in_array($today_iso, $week_dates, true)) {
-        $selected_date = $today_iso;
-    } elseif (!empty($week_dates)) {
-        $selected_date = $week_dates[0];
-    } else {
-        $selected_date = '';
-    }
-}
-
-$active_day_log = null;
-if (!empty($selected_date)) {
-    $adl_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
-    $adl_stmt->bind_param("is", $internship_id, $selected_date);
-    $adl_stmt->execute();
-    $adl_res = $adl_stmt->get_result();
-    $active_day_log = $adl_res ? $adl_res->fetch_assoc() : null;
-}
-
-$log_locked = false;
-$log_lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$log_lock_stmt->bind_param("ii", $internship_id, $selected_week);
-$log_lock_stmt->execute();
-$log_lock_res = $log_lock_stmt->get_result();
-$log_lock_row = $log_lock_res ? $log_lock_res->fetch_assoc() : null;
-if ($log_lock_row && !empty($log_lock_row['student_signature_type']) && !empty($log_lock_row['student_signature_value']) && $log_lock_row['report_status'] !== 'rejected') {
-    $log_locked = true;
 }
 
 // Attendance counts
@@ -450,7 +388,7 @@ $absent_logs = $ad_res ? $ad_res->fetch_all(MYSQLI_ASSOC) : [];
 $weekly_log_count = 0;
 $reflection_submitted = false;
 $total_weekdays = 0;
-if (!empty($weeks[$selected_week])) {
+if (!empty($weeks)) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
     $wls_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
@@ -646,64 +584,6 @@ $sup_eval_stmt->bind_param("ii", $internship_id, $selected_week);
 $sup_eval_stmt->execute();
 $sup_res = $sup_eval_stmt->get_result();
 $wf_step5_done = (bool) ($sup_res ? $sup_res->fetch_assoc() : null);
-
-// ── FEEDBACK & GRADES (CU Instructor + Company Supervisor) ──
-$instructor_eval_stmt = $db->prepare("SELECT grade, comment, instructor_comments, signature_type, signature_value, report_status, evaluated_at FROM report_evaluations WHERE student_id = ? AND week_number = ? LIMIT 1");
-$instructor_eval_stmt->bind_param("ii", $internship_id, $selected_week);
-$instructor_eval_stmt->execute();
-$instructor_eval_res = $instructor_eval_stmt->get_result();
-$instructor_eval = $instructor_eval_res ? $instructor_eval_res->fetch_assoc() : null;
-
-$supervisor_eval_stmt = $db->prepare("SELECT weekly_grade, supervisor_comments, supervisor_id, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ? LIMIT 1");
-$supervisor_eval_stmt->bind_param("ii", $internship_id, $selected_week);
-$supervisor_eval_stmt->execute();
-$supervisor_eval_res = $supervisor_eval_stmt->get_result();
-$supervisor_eval = $supervisor_eval_res ? $supervisor_eval_res->fetch_assoc() : null;
-
-// Reviewer display names
-$supervisor_reviewer = $supervisor_name !== '' && $supervisor_name !== '—' ? $supervisor_name : 'Company Supervisor';
-$instructor_reviewer = $instructor_name !== '' && $instructor_name !== '—' ? $instructor_name : 'CU Instructor';
-
-// CU Instructor grade labels
-$instructor_grade_map = [
-    'excellent'         => ['Excellent',         'bg-emerald-100 text-emerald-700'],
-    'good'              => ['Good',              'bg-blue-100 text-blue-700'],
-    'average'           => ['Average',           'bg-amber-100 text-amber-700'],
-    'needs_improvement' => ['Needs Improvement', 'bg-red-100 text-red-700'],
-];
-
-// Company Supervisor grade labels
-$supervisor_grade_map = [
-    'A' => ['A', 'bg-emerald-100 text-emerald-700'],
-    'B' => ['B', 'bg-blue-100 text-blue-700'],
-    'C' => ['C', 'bg-amber-100 text-amber-700'],
-    'D' => ['D', 'bg-orange-100 text-orange-700'],
-    'F' => ['F', 'bg-red-100 text-red-700'],
-];
-
-// Report status badge
-$weekly_report_submitted = $reflection_submitted && !$is_rejected;
-$report_status_label = ($weekly_report_submitted || $student_signed) ? 'Under Review' : 'Pending Review';
-$report_status_color = 'text-amber-700 bg-amber-50 border-amber-200';
-$report_status_dot   = 'bg-amber-500';
-$instructor_evaluated = !empty($instructor_eval)
-    && in_array($instructor_eval['report_status'] ?? '', ['approved_by_instructor', 'approved_by_supervisor', 'rejected'], true);
-if ($instructor_evaluated) {
-    $rs = $instructor_eval['report_status'] ?? '';
-    if ($rs === 'rejected') {
-        $report_status_label = 'Rejected';
-        $report_status_color = 'text-red-700 bg-red-50 border-red-200';
-        $report_status_dot   = 'bg-red-500';
-    } elseif ($rs === 'approved_by_supervisor') {
-        $report_status_label = 'Approved by Supervisor';
-        $report_status_color = 'text-emerald-700 bg-emerald-50 border-emerald-200';
-        $report_status_dot   = 'bg-emerald-500';
-    } elseif ($rs === 'approved_by_instructor') {
-        $report_status_label = 'Graded';
-        $report_status_color = 'text-teal-700 bg-teal-50 border-teal-200';
-        $report_status_dot   = 'bg-teal-500';
-    }
-}
 
 // ── ANALYTICS DATA ──
 $hours_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ?");
@@ -940,110 +820,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
     var existingSet  = {};
     existingLogs.forEach(function (d) { existingSet[d] = true; });
 
-    // ── Refresh week-state globals from #tab-content data attributes ──
-    function refreshWeekState() {
-        var tc = document.getElementById('tab-content');
-        if (!tc) return;
-        if (tc.getAttribute('data-intern-start')) internStart = tc.getAttribute('data-intern-start');
-        if (tc.getAttribute('data-intern-end'))   internEnd   = tc.getAttribute('data-intern-end');
-        if (tc.getAttribute('data-week-start'))   weekStart   = tc.getAttribute('data-week-start');
-        if (tc.getAttribute('data-week-end'))     weekEnd     = tc.getAttribute('data-week-end');
-        if (tc.getAttribute('data-week'))         selectedWeek = parseInt(tc.getAttribute('data-week'), 10);
-        if (tc.getAttribute('data-existing')) {
-            try {
-                existingLogs = JSON.parse(tc.getAttribute('data-existing'));
-                existingSet = {};
-                existingLogs.forEach(function (d) { existingSet[d] = true; });
-            } catch (e) { /* keep previous state */ }
-        }
-    }
-
-    // ── AJAX tab/week switching (no page reloads) ──
-    function ajaxLoad(url) {
-        var tc = document.getElementById('tab-content');
-        if (!tc) return;
-        var sep = url.indexOf('?') !== -1 ? '&' : '?';
-        fetch(url + sep + 'ajax=1')
-            .then(function (r) { return r.text(); })
-            .then(function (html) {
-                var tmp = document.createElement('div');
-                tmp.innerHTML = html;
-                var frag = tmp.querySelector('#tab-content');
-                if (!frag) { window.location.href = url; return; }
-                var newTc = frag;
-                tc.innerHTML = newTc.innerHTML;
-                ['data-week', 'data-week-start', 'data-week-end', 'data-intern-start', 'data-intern-end', 'data-existing'].forEach(function (k) {
-                    tc.setAttribute(k, newTc.getAttribute(k) || '');
-                });
-                refreshWeekState();
-                bindLogDateInput();
-                history.pushState({ url: url }, '', url);
-                var wm = document.getElementById('week-menu');
-                if (wm) wm.classList.add('hidden');
-            })
-            .catch(function () { window.location.href = url; });
-    }
-
-    // Bind the log-date change handler (re-run after AJAX swaps)
-    function bindLogDateInput() {
-        var logDateInput = document.getElementById('log_date');
-        if (!logDateInput || logDateInput.dataset.bound) return;
-        logDateInput.dataset.bound = '1';
-        logDateInput.addEventListener('change', function () {
-            updateWeekBadge();
-            var iso = this.value;
-            if (iso && existingSet[iso]) {
-                showToast('A daily log for ' + formatDisplayDate(this.value) + ' already exists. Please choose a different date.', 'error');
-                this.value = '';
-                updateWeekBadge();
-                return;
-            }
-            if (iso && weekStart && iso < weekStart) {
-                showToast('You cannot choose this date. Please select a date within Week ' + selectedWeek + ' (' + formatDisplayDate(weekStart) + ' – ' + formatDisplayDate(weekEnd) + ').', 'error');
-                this.value = '';
-                updateWeekBadge();
-                return;
-            }
-            if (iso && weekEnd && iso > weekEnd) {
-                showToast('You cannot choose this date. Please select a date within Week ' + selectedWeek + ' (' + formatDisplayDate(weekStart) + ' – ' + formatDisplayDate(weekEnd) + ').', 'error');
-                this.value = '';
-                updateWeekBadge();
-                return;
-            }
-        });
-        updateWeekBadge();
-    }
-
-    // Delegated handler: intercept tab/week links inside #tab-content
-    document.addEventListener('click', function (e) {
-        var a = e.target.closest ? e.target.closest('#tab-content a[href]') : null;
-        if (!a) return;
-        var href = a.getAttribute('href') || '';
-        if (href.indexOf('student-dashboard.php?tab=') === 0 || href.indexOf('?tab=') === 0) {
-            e.preventDefault();
-            ajaxLoad(new URL(a.href, window.location.href).href);
-        }
-    });
-
-    window.addEventListener('popstate', function () {
-        var tc = document.getElementById('tab-content');
-        if (!tc) return;
-        fetch(window.location.href + (window.location.href.indexOf('?') !== -1 ? '&' : '?') + 'ajax=1')
-            .then(function (r) { return r.text(); })
-            .then(function (html) {
-                var tmp = document.createElement('div');
-                tmp.innerHTML = html;
-                var frag = tmp.querySelector('#tab-content');
-                if (!frag) { window.location.reload(); return; }
-                tc.innerHTML = frag.innerHTML;
-                ['data-week', 'data-week-start', 'data-week-end', 'data-intern-start', 'data-intern-end', 'data-existing'].forEach(function (k) {
-                    tc.setAttribute(k, frag.getAttribute(k) || '');
-                });
-                refreshWeekState();
-                bindLogDateInput();
-            });
-    });
-
 
 
     // ── Date format helpers (DD.MM.YYYY ↔ YYYY-MM-DD) ──
@@ -1218,7 +994,33 @@ if ($magic_link_unlocked && empty($magic_link)) {
             }
         });
         // Update week badge when date changes
-        bindLogDateInput();
+        var logDateInput = document.getElementById('log_date');
+        if (logDateInput) {
+            logDateInput.addEventListener('change', function () {
+                updateWeekBadge();
+                var iso = this.value;
+                if (iso && existingSet[iso]) {
+                    showToast('A daily log for ' + formatDisplayDate(this.value) + ' already exists. Please choose a different date.', 'error');
+                    this.value = '';
+                    updateWeekBadge();
+                    return;
+                }
+                if (iso && weekStart && iso < weekStart) {
+                    showToast('You cannot choose this date. Please select a date within Week ' + selectedWeek + ' (' + formatDisplayDate(weekStart) + ' – ' + formatDisplayDate(weekEnd) + ').', 'error');
+                    this.value = '';
+                    updateWeekBadge();
+                    return;
+                }
+                if (iso && weekEnd && iso > weekEnd) {
+                    showToast('You cannot choose this date. Please select a date within Week ' + selectedWeek + ' (' + formatDisplayDate(weekStart) + ' – ' + formatDisplayDate(weekEnd) + ').', 'error');
+                    this.value = '';
+                    updateWeekBadge();
+                    return;
+                }
+
+            });
+            updateWeekBadge();
+        }
         <?php if ($message === 'daily_saved'): ?>
         showToast('Daily log saved successfully.', 'success');
         <?php elseif ($message === 'log_updated'): ?>
@@ -1324,9 +1126,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
             <?php $tab_week_qs = !empty($weeks[$selected_week]) ? '&week=' . (int) $selected_week : ''; ?>
 
-            <!-- AJAX-CONTENT:START -->
-            <div id="tab-content" data-week="<?= (int) $selected_week ?>" data-week-start="<?= htmlspecialchars($weeks[$selected_week]['start'] ?? '') ?>" data-week-end="<?= htmlspecialchars($weeks[$selected_week]['end'] ?? '') ?>" data-intern-start="<?= htmlspecialchars($intern_start ?? '') ?>" data-intern-end="<?= htmlspecialchars($intern_end ?? '') ?>" data-existing="<?= htmlspecialchars(json_encode($existing_log_dates, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT)) ?>">
-
             <!-- ════ TAB NAVIGATION ════ -->
             <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-2 mb-6 flex items-center gap-1.5 overflow-x-auto">
                 <a href="student-dashboard.php?tab=overview<?= $tab_week_qs ?>" class="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition <?= $tab === 'overview' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100' ?>">
@@ -1345,34 +1144,13 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
             <?php if ($tab === 'overview'): ?>
 
-            <?php if (!$intern_start || !$profile_row): ?>
-            <!-- ════ NEW STUDENT SETUP NOTICE ════ -->
-            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl p-5 mb-6 shadow-xs">
-                <div class="flex items-start gap-4">
-                    <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <h3 class="text-sm font-bold text-slate-800 mb-1">Welcome to InternReport, <?= htmlspecialchars($student_name) ?>!</h3>
-                        <p class="text-xs text-slate-600 leading-relaxed mb-3">Your student profile or internship dates have not been fully configured yet. You can fill in your student profile details or ask your administrator/supervisor to assign your internship dates to unlock weekly reports.</p>
-                        <div class="flex items-center gap-3">
-                            <a href="profile.php" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition shadow-xs">
-                                Complete Profile
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <?php endif; ?>
-
             <!-- ════ STUDENT INFO BAR ════ -->
             <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 mb-6">
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <!-- Supervisor Card -->
                     <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
                         <div class="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold shrink-0">
-                            <?= htmlspecialchars($sup_initial_display) ?>
+                            <?= strtoupper(substr($supervisor_name, 0, 1)) ?>
                         </div>
                         <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Supervisor</p>
@@ -1382,7 +1160,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                     <!-- Instructor Card -->
                     <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
                         <div class="w-9 h-9 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold shrink-0">
-                            <?= htmlspecialchars($inst_initial_display) ?>
+                            <?= strtoupper(substr($instructor_name, 0, 1)) ?>
                         </div>
                         <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Instructor</p>
@@ -1398,16 +1176,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <div class="min-w-0">
                             <p class="text-xs font-semibold uppercase tracking-wider text-indigo-500">Internship Period</p>
                             <p class="text-sm font-semibold text-indigo-700"><?= (new DateTime($intern_start))->format('d M Y') ?> – <?= (new DateTime($intern_end))->format('d M Y') ?></p>
-                        </div>
-                    </div>
-                    <?php else: ?>
-                    <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
-                        <div class="w-9 h-9 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                        </div>
-                        <div class="min-w-0">
-                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Internship Period</p>
-                            <p class="text-sm font-semibold text-slate-400">Not Configured Yet</p>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -1465,8 +1233,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 $report_overview_class = 'text-slate-600 bg-slate-100 border-slate-200';
                                 if (!empty($weeks)) {
                                     if ($is_rejected) { $report_overview_status = 'Rejected'; $report_overview_class = 'text-red-600 bg-red-50 border-red-200'; }
-                                    elseif ($instructor_evaluated && $instructor_eval['report_status'] === 'approved_by_supervisor') { $report_overview_status = 'Approved by Supervisor'; $report_overview_class = 'text-emerald-600 bg-emerald-50 border-emerald-200'; }
-                                    elseif ($instructor_evaluated && $instructor_eval['report_status'] === 'approved_by_instructor') { $report_overview_status = 'Graded'; $report_overview_class = 'text-teal-600 bg-teal-50 border-teal-200'; }
                                     elseif ($magic_link_unlocked) { $report_overview_status = 'Ready to Submit'; $report_overview_class = 'text-emerald-600 bg-emerald-50 border-emerald-200'; }
                                     elseif ($student_signed) { $report_overview_status = 'Awaiting Review'; $report_overview_class = 'text-amber-600 bg-amber-50 border-amber-200'; }
                                 }
@@ -1731,177 +1497,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                         <?php if ($tab === 'daily-log'): ?>
 
-                        <?php if ($weekly_report_submitted): ?>
-
-                        <!-- ════ SUBMITTED WEEKLY REPORT — READ-ONLY LOCKED NOTICE ════ -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6 flex items-center justify-between flex-wrap gap-3">
-                            <div class="flex items-center gap-3">
-                                <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 shadow-2xs">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h.01M5 21h14a2 2 0 001.71-3L13.71 4.86a2 2 0 00-3.42 0L3.29 18a2 2 0 001.71 3z"/></svg>
-                                </div>
-                                <div>
-                                    <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
-                                        Week <?= $selected_week ?> Daily Logs — Read-Only Mode
-                                    </h3>
-                                    <p class="text-caption text-slate-500 font-semibold">Weekly Report for Week <?= $selected_week ?> has been submitted. Daily log entries for this week are locked and read-only.</p>
-                                </div>
-                            </div>
-                            <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-full border bg-amber-50 text-amber-700 border-amber-200 shadow-2xs">
-                                <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                Locked - Weekly Report Submitted
-                            </span>
-                        </div>
-
-                        <!-- Read-Only Daily Log History Table -->
-                        <?php include 'daily_logs_table.php'; ?>
-
-                        <?php else: ?>
-
-                        <!-- ══════ WEEKDAY TIMELINE PILLS ══════ -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 mb-6">
-                            <div class="flex items-center justify-between mb-2">
-                                <span class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                                    <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                                    Week <?= $selected_week ?> Daily Logs Timeline
-                                </span>
-                                <span class="text-caption font-bold text-slate-400">Click a day pill to view or log entry</span>
-                            </div>
-                            <div class="flex items-center gap-2 overflow-x-auto pb-1">
-                                <?php foreach ($week_dates as $d_iso): ?>
-                                    <?php
-                                    $d_obj = new DateTime($d_iso);
-                                    $d_label = $d_obj->format('D, d M');
-                                    $has_log = isset($log_by_date[$d_iso]);
-                                    $is_active = ($d_iso === $selected_date);
-                                    ?>
-                                    <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&date=<?= $d_iso ?>" class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 <?= $is_active ? 'bg-teal-700 text-white border-teal-700 shadow-sm' : ($has_log ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100') ?>">
-                                        <span><?= $d_label ?></span>
-                                        <?php if ($has_log): ?>
-                                        <span class="w-4 h-4 rounded-full <?= $is_active ? 'bg-white text-teal-700' : 'bg-emerald-500 text-white' ?> flex items-center justify-center text-micro">✓</span>
-                                        <?php else: ?>
-                                        <span class="w-4 h-4 rounded-full <?= $is_active ? 'bg-teal-600 text-white' : 'bg-slate-200 text-slate-500' ?> flex items-center justify-center text-micro">+</span>
-                                        <?php endif; ?>
-                                    </a>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <?php if ($active_day_log && !$editing_log): ?>
-
-                        <!-- ════ SUBMITTED DAILY LOG — DATA CARD VIEW ════ -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-                            <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50/60 to-slate-50 flex items-center justify-between flex-wrap gap-3">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                                        <?= (new DateTime($active_day_log['log_date']))->format('D') ?>
-                                    </div>
-                                    <div>
-                                        <h2 class="text-sm font-black text-slate-800 flex items-center gap-2">
-                                            Daily Log — <?= (new DateTime($active_day_log['log_date']))->format('d M Y') ?>
-                                        </h2>
-                                        <p class="text-caption text-slate-400 font-semibold">
-                                            Week <?= $selected_week ?> • <?= (new DateTime($active_day_log['log_date']))->format('l') ?>
-                                        </p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-3 flex-wrap">
-                                    <?php if (!empty($active_day_log['created_at'])): ?>
-                                    <span class="inline-flex items-center gap-1.5 text-label font-bold text-slate-600 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-2xs">
-                                        <svg class="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        Submitted <?= htmlspecialchars((new DateTime($active_day_log['created_at']))->format('d M Y, h:i A')) ?>
-                                    </span>
-                                    <?php endif; ?>
-                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border <?= $report_status_color ?>">
-                                        <span class="w-1.5 h-1.5 rounded-full <?= $report_status_dot ?>"></span>
-                                        <?= $student_signed ? $report_status_label : 'Submitted' ?>
-                                    </span>
-                                    <?php if (!$student_signed && !$log_locked): ?>
-                                    <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&date=<?= $selected_date ?>&edit=<?= $active_day_log['id'] ?>" class="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200 transition">
-                                        ✏️ Edit Log
-                                    </a>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-
-                            <div class="p-6 space-y-5">
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                        <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Attendance Status</span>
-                                        <?php
-                                        $att = $active_day_log['attendance_status'] ?? 'present';
-                                        $reason = $active_day_log['reason_for_absence'] ?? '';
-                                        $is_holiday = ($att === 'leave' || $att === 'absent') && stripos($reason, 'Public Holiday') === 0;
-                                        ?>
-                                        <?php if ($is_holiday): ?>
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200">Public Holiday</span>
-                                        <?php elseif ($att === 'present'): ?>
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">Present</span>
-                                        <?php else: ?>
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-lg border border-red-200">Absent</span>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                        <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Working Duration</span>
-                                        <p class="text-sm font-mono font-bold text-teal-700 flex items-center gap-2">
-                                            <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                            <?= htmlspecialchars($active_day_log['calculated_duration'] ?? '08:00') ?> hrs
-                                        </p>
-                                    </div>
-                                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                        <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Log Date</span>
-                                        <p class="text-sm font-bold text-slate-700"><?= (new DateTime($active_day_log['log_date']))->format('d M Y (D)') ?></p>
-                                    </div>
-                                </div>
-
-                                <?php if ($att === 'absent' || $is_holiday): ?>
-                                <div class="bg-red-50/60 rounded-xl p-4 border border-red-100">
-                                    <span class="text-caption font-bold text-red-500 uppercase tracking-wider block mb-1">Reason for Absence / Leave</span>
-                                    <p class="text-sm text-red-700 font-medium"><?= htmlspecialchars($reason ?: 'No reason provided.') ?></p>
-                                </div>
-                                <?php else: ?>
-
-                                <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                    <span class="text-caption font-bold text-teal-700 uppercase tracking-wider block mb-1">Intended Task / Summary</span>
-                                    <p class="text-sm font-semibold text-slate-800 leading-relaxed"><?= htmlspecialchars($active_day_log['task_title'] ?: '—') ?></p>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                        <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Task Detail Breakdown</span>
-                                        <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['task_detail'] ?: '—')) ?></p>
-                                    </div>
-                                    <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                        <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Actual Tasks Accomplished</span>
-                                        <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['tasks_performed'] ?: '—')) ?></p>
-                                    </div>
-                                </div>
-
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                        <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-2">Tools & Tech Used</span>
-                                        <?php if (!empty($active_day_log['tools_used'])): ?>
-                                            <div class="flex items-center gap-1.5 flex-wrap">
-                                                <?php foreach (explode(',', $active_day_log['tools_used']) as $tool): ?>
-                                                    <span class="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-teal-700 shadow-2xs"><?= htmlspecialchars(trim($tool)) ?></span>
-                                                <?php endforeach; ?>
-                                            </div>
-                                        <?php else: ?>
-                                            <p class="text-sm text-slate-400 italic">None specified</p>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                        <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Knowledge Gained & Skills</span>
-                                        <p class="text-sm text-slate-700 leading-relaxed"><?= htmlspecialchars($active_day_log['learnt_skills'] ?: '—') ?></p>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-
-                        <?php else: ?>
-
                         <!-- Daily Log Sheet Form -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= $student_signed ? 'hidden' : '' ?>">
                             <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center justify-between gap-2">
                                 <span class="flex items-center gap-2">
                                     <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z"/></svg>
@@ -1924,7 +1521,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 <div>
                                     <label class="block text-caption font-bold text-slate-500 mb-1">Date / Day</label>
                                     <input type="date" name="log_date" id="log_date" required
-                                        value="<?= htmlspecialchars($editing_log['log_date'] ?? $selected_date ?? '') ?>"
+                                        value="<?= htmlspecialchars($editing_log['log_date'] ?? '') ?>"
                                         min="<?= htmlspecialchars($intern_start ?? '') ?>"
                                         max="<?= htmlspecialchars($intern_end ?? '') ?>"
                                         class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition cursor-pointer">
@@ -2012,17 +1609,13 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             </form>
                         </div>
 
-                        <?php endif; ?>
-
                         <!-- Daily Log History -->
                         <?php include 'daily_logs_table.php'; ?>
 
-                        <?php endif; ?>
-
-                        <?php if (!$weekly_report_submitted): ?>
+                        <?php else: ?>
 
                         <!-- Weekly Reflection Form -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= !$reflection_unlocked ? 'hidden' : '' ?>">
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= $student_signed ? 'hidden' : (!$reflection_unlocked ? 'hidden' : '') ?>">
                             <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
                                 <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6m6 6V9m-6 10a9 9 0 118-5.3M5 21h14"/></svg>
                                 Weekly Reflection
@@ -2060,51 +1653,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                         <!-- Weekly Reflections History -->
                         <?php include 'weekly_reflections_table.php'; ?>
-
-                        <?php else: ?>
-
-                        <!-- ════ SUBMITTED WEEKLY REPORT — VIEW MODE ════ -->
-                        <?php $submitted_ref = $weekly_refs[0] ?? null; ?>
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
-                                <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
-                                    <span class="flex items-center gap-2">
-                                        <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        Week <?= $selected_week ?> Weekly Report — Submitted
-                                    </span>
-                                </h2>
-                                <div class="flex items-center gap-3 flex-wrap">
-                                    <?php if ($submitted_ref && !empty($submitted_ref['created_at'])): ?>
-                                    <span class="inline-flex items-center gap-1.5 text-label font-bold text-slate-500 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-full">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        Submitted <?= htmlspecialchars((new DateTime($submitted_ref['created_at']))->format('d M Y, h:i A')) ?>
-                                    </span>
-                                    <?php endif; ?>
-                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border <?= $report_status_color ?>">
-                                        <span class="w-1.5 h-1.5 rounded-full <?= $report_status_dot ?>"></span>
-                                        <?= $report_status_label ?>
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="p-6">
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                        <p class="text-label font-bold text-teal-700 uppercase tracking-wider mb-2">What was done?</p>
-                                        <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['what_done'] ?? '—')) ?></p>
-                                    </div>
-                                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                        <p class="text-label font-bold text-teal-700 uppercase tracking-wider mb-2">How was it done?</p>
-                                        <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['how_done'] ?? '—')) ?></p>
-                                    </div>
-                                    <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                        <p class="text-label font-bold text-teal-700 uppercase tracking-wider mb-2">Why was it done?</p>
-                                        <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['why_done'] ?? '—')) ?></p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <?php endif; ?>
 
                         <!-- Student Signature Section -->
                         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= !$reflection_submitted ? 'opacity-50 pointer-events-none select-none' : '' ?>">
@@ -2332,122 +1880,11 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                     </div>
 
-                    <!-- ════ FEEDBACK & GRADES ════ -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-                        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
-                            <h3 class="text-caption font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                                <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
-                                Feedback &amp; Grades — Week <?= $selected_week ?>
-                            </h3>
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border <?= $report_status_color ?>">
-                                <span class="w-1.5 h-1.5 rounded-full <?= $report_status_dot ?>"></span>
-                                <?= $report_status_label ?>
-                            </span>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 p-6">
-
-                            <!-- ── Company Supervisor Feedback ── -->
-                            <div class="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-5 flex flex-col">
-                                <div class="flex items-start gap-3 mb-3">
-                                    <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-16 0H3m14-4h-2m2-4h-2m-4 8v-4m-4 0H7m2 4H7"/></svg>
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-black text-slate-800">Company Supervisor Feedback</p>
-                                        <p class="text-xs text-slate-400 font-medium"><?= htmlspecialchars($supervisor_reviewer) ?></p>
-                                    </div>
-                                    <?php if (!empty($supervisor_eval)): ?>
-                                    <?php $sg = $supervisor_eval['weekly_grade'] ?? ''; $sgd = $supervisor_grade_map[$sg] ?? [$sg ?: '—', 'bg-slate-100 text-slate-600']; ?>
-                                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl text-sm font-black border border-slate-200 <?= $sgd[1] ?> shrink-0"><?= htmlspecialchars($sgd[0]) ?></span>
-                                    <?php endif; ?>
-                                </div>
-
-                                <?php if (!empty($supervisor_eval)): ?>
-                                <div class="flex-1">
-                                    <?php $sup_comments = trim($supervisor_eval['supervisor_comments'] ?? ''); ?>
-                                    <?php if ($sup_comments !== ''): ?>
-                                    <p class="text-sm text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($sup_comments)) ?></p>
-                                    <?php else: ?>
-                                    <p class="text-sm italic text-slate-400">No written comments provided.</p>
-                                    <?php endif; ?>
-                                </div>
-                                <p class="text-caption text-slate-400 mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    Evaluated <?= htmlspecialchars((new DateTime($supervisor_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
-                                </p>
-                                <?php else: ?>
-                                <div class="flex-1 flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 py-8 text-center">
-                                    <div>
-                                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-lg mx-auto mb-2">
-                                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        </div>
-                                        <p class="text-sm font-semibold text-slate-500">Awaiting supervisor evaluation…</p>
-                                        <p class="text-xs text-slate-400 mt-1">Your company supervisor has not reviewed this week yet.</p>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-
-                            <!-- ── CU Instructor Feedback ── -->
-                            <div class="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-5 flex flex-col">
-                                <div class="flex items-start gap-3 mb-3">
-                                    <div class="w-10 h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-black text-slate-800">CU Instructor Feedback</p>
-                                        <p class="text-xs text-slate-400 font-medium"><?= htmlspecialchars($instructor_reviewer) ?></p>
-                                    </div>
-                                    <?php if ($instructor_evaluated && !empty($instructor_eval['grade'])): ?>
-                                    <?php $ig = $instructor_eval['grade']; $igd = $instructor_grade_map[$ig] ?? [ucwords(str_replace('_', ' ', $ig)), 'bg-slate-100 text-slate-600']; ?>
-                                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-black <?= $igd[1] ?> shrink-0"><?= htmlspecialchars($igd[0]) ?></span>
-                                    <?php endif; ?>
-                                </div>
-
-                                <?php if ($instructor_evaluated): ?>
-                                <div class="flex-1 space-y-3">
-                                    <?php $inst_comment = trim($instructor_eval['comment'] ?? ''); ?>
-                                    <?php if ($inst_comment !== ''): ?>
-                                    <p class="text-sm text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($inst_comment)) ?></p>
-                                    <?php else: ?>
-                                    <p class="text-sm italic text-slate-400">No written comments provided.</p>
-                                    <?php endif; ?>
-                                    <?php if (($instructor_eval['report_status'] ?? '') === 'rejected' && !empty($instructor_eval['instructor_comments'])): ?>
-                                    <div class="bg-red-50 border border-red-100 rounded-xl p-3">
-                                        <p class="text-label font-bold text-red-400 uppercase tracking-wider mb-1">Revision Requested</p>
-                                        <p class="text-sm text-red-600 leading-relaxed"><?= nl2br(htmlspecialchars($instructor_eval['instructor_comments'])) ?></p>
-                                    </div>
-                                    <?php endif; ?>
-                                </div>
-                                <p class="text-caption text-slate-400 mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    Evaluated <?= htmlspecialchars((new DateTime($instructor_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
-                                </p>
-                                <?php else: ?>
-                                <div class="flex-1 flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 py-8 text-center">
-                                    <div>
-                                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-lg mx-auto mb-2">
-                                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        </div>
-                                        <p class="text-sm font-semibold text-slate-500">Awaiting instructor evaluation…</p>
-                                        <p class="text-xs text-slate-400 mt-1">Your CU instructor has not reviewed this week yet.</p>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-
-                        </div>
-                    </div>
-
                     <?php endif; ?>
 
                 </div>
 
             <?php endif; ?>
-
-            </div>
-            <!-- AJAX-CONTENT:END -->
 
         </div>
         </main>
@@ -2588,15 +2025,3 @@ function exportAsCSV() {
 </script>
 </body>
 </html>
-<?php if ($is_ajax): ?>
-<?php
-$full = ob_get_clean();
-$start = strpos($full, '<!-- AJAX-CONTENT:START -->');
-$end   = strpos($full, '<!-- AJAX-CONTENT:END -->');
-if ($start !== false && $end !== false) {
-    echo substr($full, $start + strlen('<!-- AJAX-CONTENT:START -->'), $end - $start - strlen('<!-- AJAX-CONTENT:START -->'));
-} else {
-    echo '';
-}
-?>
-<?php endif; ?>

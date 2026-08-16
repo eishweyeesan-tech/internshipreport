@@ -12,8 +12,11 @@
  * @param string $selected_date          Y-m-d format
  * @return int  Week number (1-based). Returns 0 if date is before start.
  */
-function getInternshipWeekNumber(string $internship_start_date, string $selected_date): int
+function getInternshipWeekNumber(?string $internship_start_date, string $selected_date): int
 {
+    if (empty($internship_start_date)) {
+        return 0;
+    }
     $start = new DateTime($internship_start_date);
     $selected = new DateTime($selected_date);
 

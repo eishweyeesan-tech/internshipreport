@@ -1,13 +1,8 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
-
-if ($_SESSION['role'] !== 'supervisor') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
@@ -170,21 +165,7 @@ function build_query_url($overrides = []) {
         if (theme === 'dark') document.documentElement.classList.add('dark');
     })();
 
-    function toggleProfileDropdown(e) {
-        e.stopPropagation();
-        var dd = document.getElementById('profile-dropdown-menu');
-        dd.classList.toggle('hidden');
-        var nd = document.getElementById('notif-dropdown');
-        if (nd) { nd.style.opacity = '0'; nd.style.visibility = 'hidden'; nd.style.transform = 'translateY(-8px) scale(0.95)'; }
-    }
-    document.addEventListener('click', function(e) {
-        var dd = document.getElementById('profile-dropdown-menu');
-        var btn = document.getElementById('profile-avatar-btn');
-        if (dd && !dd.contains(e.target) && !btn.contains(e.target)) {
-            dd.classList.add('hidden');
-        }
-    });
-
+    </script>
     <script src="../assets/js/main.js"></script>
     <script src="../assets/js/notifications.js"></script>
 </head>

@@ -1,16 +1,28 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/internship_progress.php';
-
-if ($_SESSION['role'] !== 'instructor') {
-    header('Location: ../dashboard.php');
-    exit;
-}
+require_once __DIR__ . '/../config/notify.php';
+require_once __DIR__ . '/../includes/notification_actions.php';
 
 $inst_id   = $_SESSION['user_id'];
 $inst_name = $_SESSION['username'];
 $db        = $mysqli ?? $conn;
+
+handle_notification_ajax_actions($db, $inst_id);
+
+$unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+$unread_notif_q->bind_param("i", $inst_id);
+$unread_notif_q->execute();
+$res = $unread_notif_q->get_result();
+$row = $res ? $res->fetch_row() : null;
+$unread_notif_count = (int) ($row[0] ?? 0);
+
+$recent_notifs_q = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+$recent_notifs_q->bind_param("i", $inst_id);
+$recent_notifs_q->execute();
+$res = $recent_notifs_q->get_result();
+$recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Fetch instructor email
 $inst_email_q = $db->prepare("SELECT email FROM users WHERE id = ?");
@@ -21,10 +33,37 @@ $row = $res ? $res->fetch_row() : null;
 $inst_email = $row[0] ?? '';
 
 // ══════════════════════════════════════════════════════════════════════
-// FETCH ASSIGNED STUDENTS
-// Students where instructor_id matches OR instructor_email matches
+// DYNAMIC ACADEMIC YEAR SELECTION
 // ══════════════════════════════════════════════════════════════════════
-$stu_stmt = $db->prepare("
+$res_ay = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
+$academic_years = [];
+if ($res_ay) {
+    while ($row = $res_ay->fetch_assoc()) {
+        if (!empty($row['academic_year'])) {
+            $academic_years[] = $row['academic_year'];
+        }
+    }
+}
+
+$default_active_year = '2025-2026';
+if (isset($_GET['year']) && $_GET['year'] !== '') {
+    $selected_year = trim($_GET['year']);
+} else {
+    if (in_array($default_active_year, $academic_years)) {
+        $selected_year = $default_active_year;
+    } elseif (!empty($academic_years)) {
+        $selected_year = $academic_years[0];
+    } else {
+        $selected_year = '';
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FETCH ASSIGNED STUDENTS (WITH OPTIONAL SEARCH AND YEAR FILTER)
+// ══════════════════════════════════════════════════════════════════════
+$search_term = trim($_GET['search'] ?? '');
+
+$sql_stu = "
     SELECT u.id AS uid, u.username, u.email, u.academic_year,
            sp.full_name, sp.student_roll, sp.major, sp.company_name,
            sp.job_role, sp.supervisor_id,
@@ -35,12 +74,31 @@ $stu_stmt = $db->prepare("
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     WHERE u.role = 'student'
       AND (sp.instructor_id = ? OR (sp.instructor_email != '' AND sp.instructor_email = ?))
-    ORDER BY sp.full_name ASC
-");
-$stu_stmt->bind_param("is", $inst_id, $inst_email);
+";
+$stu_params = [$inst_id, $inst_email];
+$stu_types  = "is";
+
+if ($selected_year !== '' && $selected_year !== 'all') {
+    $sql_stu .= " AND u.academic_year = ?";
+    $stu_params[] = $selected_year;
+    $stu_types .= "s";
+}
+
+if ($search_term !== '') {
+    $sql_stu .= " AND (sp.full_name LIKE ? OR sp.student_roll LIKE ? OR u.username LIKE ? OR sp.company_name LIKE ? OR u.email LIKE ?)";
+    $like = '%' . $search_term . '%';
+    $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like;
+    $stu_types .= "sssss";
+}
+
+$sql_stu .= " ORDER BY sp.full_name ASC";
+
+$stu_stmt = $db->prepare($sql_stu);
+$stu_stmt->bind_param($stu_types, ...$stu_params);
 $stu_stmt->execute();
 $res = $stu_stmt->get_result();
 $all_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+$stu_stmt->close();
 
 // ══════════════════════════════════════════════════════════════════════
 // COMPUTE PER-STUDENT STATUS FOR CURRENT WEEK
@@ -226,69 +284,162 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
 
 <div class="flex h-screen overflow-hidden">
 
+    <!-- ─── SIDEBAR BACKDROP (MOBILE) ─── -->
+    <div id="instructorSidebarBackdrop" onclick="toggleInstructorSidebar()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden print:hidden"></div>
+
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 bg-white/90 backdrop-blur-xl border-r border-teal-100 flex flex-col shrink-0 shadow-xl shadow-teal-900/5">
-        <div class="h-16 flex items-center px-6 border-b border-teal-50 bg-gradient-to-r from-teal-50/50 to-emerald-50/30">
+    <aside id="instructorSidebar" class="w-64 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 lg:static lg:z-auto transition-transform duration-200 ease-in-out bg-[#005f73] border-r border-teal-700/40 flex flex-col shrink-0 text-white shadow-xl print:hidden">
+        <div class="h-16 flex items-center justify-between px-6 border-b border-teal-700/40 bg-teal-900/30">
             <div class="flex items-center gap-3">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center shadow-lg shadow-teal-600/30">
+                <div class="w-9 h-9 rounded-xl bg-teal-600 flex items-center justify-center shadow-md">
                     <span class="text-white text-sm">📋</span>
                 </div>
                 <div>
-                    <span class="text-sm font-extrabold text-slate-800 tracking-tight">InternReport</span>
-                    <span class="block text-caption font-bold text-teal-700 bg-teal-100/60 px-1.5 py-0.5 rounded mt-0.5">INSTRUCTOR</span>
+                    <span class="text-sm font-extrabold text-white tracking-tight">InternReport</span>
+                    <span class="block text-caption font-bold text-teal-100 bg-teal-700/60 border border-teal-500/40 px-1.5 py-0.5 rounded mt-0.5">INSTRUCTOR</span>
                 </div>
             </div>
+            <button type="button" onclick="toggleInstructorSidebar()" class="lg:hidden text-teal-200 hover:text-white p-1 rounded-lg transition" aria-label="Close sidebar">✕</button>
         </div>
         <nav class="flex-1 py-5 px-3 space-y-1">
-            <a href="instructor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-gradient-to-r from-teal-600 to-teal-700 text-white font-semibold shadow-lg shadow-teal-600/25">
+            <a href="instructor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 bg-[#0a9396] text-white font-semibold shadow-sm border border-teal-400/30">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">📊</span> Dashboard
             </a>
-            <a href="../supervisor/supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-slate-600 hover:bg-teal-50 hover:text-teal-900">
+            <a href="../supervisor/supervisor-dashboard.php" class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-subtitle leading-relaxed transition-colors duration-200 font-medium text-teal-100 hover:bg-teal-700/60 hover:text-white">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">👩‍🏫</span> Supervisor View
             </a>
         </nav>
-        <div class="p-3 border-t border-slate-100">
-            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-200">
+        <div class="p-3 border-t border-teal-700/40">
+            <a href="../logout.php" class="flex items-center gap-3 px-4 py-2.5 text-subtitle leading-relaxed font-semibold text-red-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-colors duration-200">
                 <span class="w-5 h-5 flex items-center justify-center shrink-0">🚪</span> Logout
             </a>
         </div>
     </aside>
 
+    <script>
+    function toggleInstructorSidebar() {
+        var sb = document.getElementById('instructorSidebar');
+        var bd = document.getElementById('instructorSidebarBackdrop');
+        if (!sb) return;
+        if (sb.classList.contains('-translate-x-full')) {
+            sb.classList.remove('-translate-x-full');
+            if (bd) bd.classList.remove('hidden');
+        } else {
+            sb.classList.add('-translate-x-full');
+            if (bd) bd.classList.add('hidden');
+        }
+    }
+    </script>
+
     <!-- ─── MAIN ─── -->
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <header class="h-16 bg-white/90 backdrop-blur-xl border-b border-teal-100 flex items-center justify-between px-8 shrink-0 shadow-sm">
-            <div class="flex items-center gap-4">
+        <header class="h-16 bg-white/90 backdrop-blur-xl border-b border-teal-100 flex items-center justify-between px-4 lg:px-8 shrink-0 shadow-sm print:hidden">
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="toggleInstructorSidebar()" class="lg:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer" aria-label="Toggle Navigation">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
                 <h1 class="text-base font-bold text-slate-800">Instructor Dashboard</h1>
+                <?php if (!empty($academic_years)): ?>
+                <form method="GET" class="flex items-center gap-1.5 border-l border-teal-100 pl-3">
+                    <select name="year" id="ay_select" onchange="this.form.submit()" class="bg-white border border-teal-200 text-teal-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-sm font-semibold rounded-lg px-3 py-1 shadow-sm focus:outline-none transition cursor-pointer">
+                        <?php foreach ($academic_years as $ay): ?>
+                        <option value="<?= htmlspecialchars($ay) ?>" <?= ($selected_year ?? '') === $ay ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </form>
+                <?php endif; ?>
             </div>
             <div class="flex items-center gap-5">
                 <div class="flex items-center gap-2 px-3 py-1.5 bg-teal-50 border border-teal-200 rounded-full">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span class="text-xs font-bold text-teal-700"><?= $total_students ?> Student<?= $total_students !== 1 ? 's' : '' ?></span>
                 </div>
-                <div class="flex items-center gap-3 pl-5 border-l border-slate-200 relative">
-                    <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="relative focus:outline-none">
-                        <?php if (!empty($_SESSION['profile_pic'])): ?>
-                        <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-lg shadow-amber-500/20">
-                        <?php else: ?>
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-xs font-bold shadow-lg shadow-amber-500/20">
-                            <?= strtoupper(substr($inst_name, 0, 1)) ?>
-                        </div>
+                <!-- Notification Bell -->
+                <div class="relative" id="notif-bell-wrapper">
+                    <button onclick="toggleNotifDropdown()" class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-teal-50 rounded-full transition cursor-pointer">
+                        <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                        <?php if (($unread_notif_count ?? 0) > 0): ?>
+                        <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
                         <?php endif; ?>
                     </button>
-                    <div class="text-right">
-                        <p class="text-xs font-bold text-slate-700"><?= htmlspecialchars($inst_name) ?></p>
-                        <p class="text-sm text-slate-400">Company Instructor</p>
-                    </div>
-                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-xl w-48 py-2">
-                        <div class="px-4 py-2.5 border-b border-slate-100">
-                            <p class="text-sm font-bold text-slate-400">Signed in as</p>
-                            <p class="text-xs font-semibold text-slate-700"><?= htmlspecialchars($inst_email) ?></p>
+                    <!-- Notification Dropdown -->
+                    <div id="notif-dropdown" class="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
+                        <div class="p-3 border-b border-slate-100 flex items-center justify-between bg-teal-50/60">
+                            <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Notifications</h4>
+                            <?php if (($unread_notif_count ?? 0) > 0): ?>
+                            <button onclick="markAllNotifsRead()" id="notif-mark-all-btn" class="text-label font-bold text-teal-700 hover:text-teal-900 hover:bg-teal-100/60 px-2 py-1 rounded transition cursor-pointer">Mark all read</button>
+                            <?php endif; ?>
                         </div>
-                        <div class="my-1 border-t border-slate-100"></div>
-                        <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition">
-                            <span>🚪</span> Logout
+                        <div class="max-h-80 overflow-y-auto">
+                            <?php if (!empty($recent_notifications)): ?>
+                            <?php foreach ($recent_notifications as $notif): ?>
+                            <?php
+                                $notif_url = notif_action_url($notif, 'instructor');
+                                $meta = notif_type_meta($notif['type'] ?? 'info');
+                            ?>
+                            <a href="<?= htmlspecialchars($notif_url) ?>" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)" class="flex items-start gap-2.5 px-3 py-3 <?= !$notif['is_read'] ? 'bg-teal-50/40' : '' ?> hover:bg-teal-50 transition-all duration-150 border-b border-slate-100 last:border-0 group cursor-pointer block no-underline">
+                                <?php if (!$notif['is_read']): ?>
+                                <span class="w-2 h-2 bg-teal-500 rounded-full flex-shrink-0 mt-2"></span>
+                                <?php else: ?>
+                                <span class="w-2 h-2 flex-shrink-0 mt-2"></span>
+                                <?php endif; ?>
+                                <div class="w-8 h-8 rounded-full <?= $meta['classes'] ?> flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-sm">
+                                    <?= $meta['icon'] ?>
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="text-caption font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-500' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
+                                    <p class="text-label text-slate-400 mt-0.5 leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"><?= htmlspecialchars($notif['message']) ?></p>
+                                    <p class="text-caption text-slate-300 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
+                                </div>
+                            </a>
+                            <?php endforeach; ?>
+                            <?php else: ?>
+                            <div class="p-8 text-center">
+                                <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                                    <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                                </div>
+                                <p class="text-xs font-semibold text-slate-400">No notifications yet</p>
+                                <p class="text-label text-slate-300 mt-1">You'll see updates here</p>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="relative shrink-0" id="profileDropdownContainer">
+                    <button
+                        type="button"
+                        onclick="toggleProfileDropdown(event)"
+                        id="profile-avatar-btn"
+                        class="flex items-center gap-2.5 p-1.5 hover:bg-teal-50 border border-transparent hover:border-teal-100 rounded-xl transition-all cursor-pointer group"
+                    >
+                        <?php if (!empty($_SESSION['profile_pic'])): ?>
+                        <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-teal-200 shadow-sm">
+                        <?php else: ?>
+                        <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-sm">
+                            <?= strtoupper(substr($_SESSION['username'] ?? 'I', 0, 1)) ?>
+                        </div>
+                        <?php endif; ?>
+                        <div class="text-left hidden sm:block">
+                            <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars($inst_name) ?></p>
+                            <p class="text-xs font-medium text-teal-700 capitalize">Company Instructor</p>
+                        </div>
+                        <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+
+                    <!-- Profile Dropdown Menu -->
+                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-teal-100 py-1.5 z-50 divide-y divide-slate-100">
+                        <a href="instructor-dashboard.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
+                            <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> My Profile
+                        </a>
+                        <a href="instructor-dashboard.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
+                            <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Change Password
+                        </a>
+                        <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition">
+                            <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
                         </a>
                     </div>
                 </div>
@@ -348,10 +499,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
 
                 <!-- ═══ STUDENT TABLE ═══ -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white flex items-center justify-between flex-wrap gap-3">
                         <h2 class="text-sm font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
                             <span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center text-sm">📋</span> Assigned Students
                         </h2>
+                        <!-- Search Form -->
+                        <form method="GET" class="flex items-center gap-2">
+                            <?php if (!empty($selected_year)): ?><input type="hidden" name="year" value="<?= htmlspecialchars($selected_year) ?>"><?php endif; ?>
+                            <div class="relative flex-1 sm:w-64 max-w-xs">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                </span>
+                                <input type="text" name="search" value="<?= htmlspecialchars($search_term ?? '') ?>" placeholder="Search student, roll, company..." class="w-full bg-white border border-teal-200 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200">
+                                <?php if (!empty($search_term)): ?>
+                                <a href="?<?= http_build_query(array_diff_key($_GET, ['search' => ''])) ?>" class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold transition" title="Clear search">✕</a>
+                                <?php endif; ?>
+                            </div>
+                            <button type="submit" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer">Search</button>
+                        </form>
                     </div>
                     <?php if (!empty($all_students)): ?>
                     <div class="overflow-x-auto">
@@ -457,5 +622,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
     </div>
 </div>
 
+<script src="../assets/js/main.js"></script>
+<script src="../assets/js/notifications.js"></script>
 </body>
 </html>

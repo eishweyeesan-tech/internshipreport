@@ -1,14 +1,9 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/phone_validation.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
-
-if ($_SESSION['role'] !== 'supervisor') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
@@ -30,7 +25,7 @@ handle_notification_ajax_actions($db, $sup_id);
 $unread_notif_count = 0;
 $recent_notifications = [];
 try {
-    $notif_stmt2 = $db->prepare("SELECT id, title, message, type, related_week, announcement_id, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+    $notif_stmt2 = $db->prepare("SELECT id, title, message, type, related_week, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
     $notif_stmt2->bind_param("i", $sup_id);
     $notif_stmt2->execute();
     $res = $notif_stmt2->get_result();

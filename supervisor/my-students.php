@@ -1,14 +1,9 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/internship_progress.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
-
-if ($_SESSION['role'] !== 'supervisor') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
@@ -36,6 +31,26 @@ $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 $filter_status = $_GET['status'] ?? '';
 if (!in_array($filter_status, ['red', 'amber', 'green', 'none'], true)) $filter_status = '';
 $search = trim($_GET['search'] ?? '');
+$filter_year = trim($_GET['year'] ?? ($_GET['academic_year'] ?? ''));
+
+// ── Available Academic Years ────────────────────────────────────
+$years_q = $db->prepare("
+    SELECT DISTINCT u.academic_year
+    FROM users u
+    JOIN student_profiles sp ON sp.user_id = u.id
+    WHERE u.role = 'student' AND sp.supervisor_id = ?
+      AND u.academic_year IS NOT NULL AND u.academic_year != ''
+    ORDER BY u.academic_year DESC
+");
+$years_q->bind_param("i", $sup_id);
+$years_q->execute();
+$res = $years_q->get_result();
+$available_years = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $available_years[] = $row[0];
+    }
+}
 
 // ── Summary counts (assigned students scope) ───────────────────
 $pending_reviews_q = $db->prepare("
@@ -77,6 +92,12 @@ $sql = "
 ";
 $types = "i";
 $params = [$sup_id];
+
+if ($filter_year && $filter_year !== 'all') {
+    $sql .= " AND u.academic_year = ?";
+    $types .= "s";
+    $params[] = $filter_year;
+}
 
 if ($search) {
     $sql .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ? OR sp.job_role LIKE ? OR u.email LIKE ?)";
@@ -347,9 +368,26 @@ function build_query_url($overrides = []) {
 
                 <div class="flex-1"></div>
 
-                <?php if ($filter_status || $search): ?>
-                <a href="my-students.php" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all duration-200">✕ Clear</a>
-                <?php endif; ?>
+                <form method="GET" class="flex items-center gap-2 flex-wrap">
+                    <?php if ($filter_status): ?><input type="hidden" name="status" value="<?= htmlspecialchars($filter_status) ?>"><?php endif; ?>
+
+                    <div class="relative">
+                        <input type="text" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Search student..." class="bg-slate-100/80 border border-transparent focus:border-indigo-300 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all duration-200 w-44">
+                        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    </div>
+
+                    <!-- Academic Year Filter -->
+                    <select name="year" onchange="this.form.submit()" class="bg-white border border-teal-200 text-slate-700 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 cursor-pointer max-w-[14rem]">
+                        <option value="all">All Academic Years</option>
+                        <?php foreach ($available_years as $ay): ?>
+                        <option value="<?= htmlspecialchars($ay) ?>" <?= ($filter_year === $ay || (empty($filter_year) && $ay === '2025-2026')) ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+
+                    <?php if ($filter_status || ($filter_year && $filter_year !== 'all') || $search): ?>
+                    <a href="my-students.php" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all duration-200">✕ Clear</a>
+                    <?php endif; ?>
+                </form>
             </div>
         </div>
 

@@ -1,14 +1,9 @@
 <?php
+require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/notify.php';
-require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
-
-if ($_SESSION['role'] !== 'supervisor') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
@@ -68,7 +63,7 @@ if ($page > $total_pages) { $page = $total_pages; $offset = ($page - 1) * $per_p
 
 $list_sql = "
     SELECT n.id, n.title, n.message, n.type, n.related_week, n.student_id, n.report_id,
-           n.announcement_id, n.is_read, n.created_at,
+           n.is_read, n.created_at,
            su.username AS student_username, su.profile_pic,
            sp.full_name AS student_name
     FROM notifications n

@@ -3,16 +3,74 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+// 1. Prevent caching of authenticated pages
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Cache-Control: post-check=0, pre-check=0', false);
+header('Pragma: no-cache');
+
+// 2. Redirect unauthenticated guests to login.php
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/instructor/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
+    $login_path = $in_sub ? '../login.php' : 'login.php';
+    header('Location: ' . $login_path);
     exit;
 }
 
+// 3. First-time login redirect to change password
 if (!empty($_SESSION['is_first_login'])) {
-    header('Location: change-password.php');
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/instructor/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
+    $change_pw_path = $in_sub ? '../change-password.php' : 'change-password.php';
+    header('Location: ' . $change_pw_path);
     exit;
 }
 
+// 4. Role-based redirect helper
+if (!function_exists('get_user_dashboard_url')) {
+    function get_user_dashboard_url($role) {
+        switch ($role) {
+            case 'admin':      return 'admin/admin-dashboard.php';
+            case 'supervisor': return 'supervisor/supervisor-dashboard.php';
+            case 'instructor': return 'instructor/instructor-dashboard.php';
+            case 'student':    return 'student/student-dashboard.php';
+            default:           return 'login.php';
+        }
+    }
+}
+
+if (!function_exists('require_role')) {
+    function require_role($allowed_roles) {
+        if (!is_array($allowed_roles)) {
+            $allowed_roles = [$allowed_roles];
+        }
+        $user_role = $_SESSION['role'] ?? '';
+        if (!in_array($user_role, $allowed_roles, true)) {
+            $script = $_SERVER['SCRIPT_NAME'] ?? '';
+            $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/instructor/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
+            $prefix = $in_sub ? '../' : '';
+            $target = $prefix . get_user_dashboard_url($user_role);
+            header('Location: ' . $target);
+            exit;
+        }
+    }
+}
+
+// 5. Automatic Directory-Level RBAC Enforcement
+$script_name = $_SERVER['SCRIPT_NAME'] ?? '';
+if (strpos($script_name, '/admin/') !== false) {
+    require_role('admin');
+} elseif (strpos($script_name, '/instructor/') !== false) {
+    if (strpos($script_name, 'view-report.php') === false || !isset($_GET['token'])) {
+        require_role('instructor');
+    }
+} elseif (strpos($script_name, '/supervisor/') !== false) {
+    require_role('supervisor');
+} elseif (strpos($script_name, '/student/') !== false) {
+    require_role('student');
+}
+
+// Load DB connection & update session user data
 require_once __DIR__ . '/config/db.php';
 
 $_SESSION['profile_pic'] = $_SESSION['profile_pic'] ?? null;

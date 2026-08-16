@@ -1,14 +1,9 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/internship_progress.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
-
-if ($_SESSION['role'] !== 'supervisor') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
@@ -79,13 +74,26 @@ function sendRedBadgeAlert($db, $supervisor_id, $supervisor_name, $supervisor_em
     );
 }
 
-$filter_year = $_GET['academic_year'] ?? '';
+$filter_year = $_GET['year'] ?? ($_GET['academic_year'] ?? '');
 $filter_status = $_GET['status'] ?? '';
 $search = trim($_GET['search'] ?? '');
 $page = max(1, (int) ($_GET['page'] ?? 1));
 $per_page = 10;
-$tab = $_GET['tab'] ?? 'dashboard';
-if (!in_array($tab, ['dashboard', 'trainee-archive'])) $tab = 'dashboard';
+$tab = 'dashboard';
+
+// Fetch distinct academic years for supervisor's assigned students
+$valid_years = [];
+$ay_q = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.academic_year IS NOT NULL AND u.academic_year <> '' ORDER BY u.academic_year DESC");
+$ay_q->bind_param("i", $sup_id);
+$ay_q->execute();
+$res = $ay_q->get_result();
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $valid_years[] = $row[0];
+    }
+}
+$current_academic_year = $valid_years[0] ?? (date('Y') . '-' . (date('Y') + 1));
+$selected_year = $filter_year ?: $current_academic_year;
 
 // ── Current Week Boundaries ─────────────────────────────────────────
 $today = new DateTime();
@@ -715,9 +723,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         .scroll-margin { scroll-margin-top: 88px; }
         #dashboard-student-search::-webkit-search-cancel-button { -webkit-appearance: none; }
     </style>
-        }
-    });
-
+    <script>
     function onNotificationItemClick(e, el) {
         e.preventDefault();
         var id = el.getAttribute('data-notif-id');
@@ -742,8 +748,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                   item.querySelector('.unread-dot')?.remove();
               }
           })
-          .catch(function() {});
-        window.location.href = url;
+          .catch(function() {})
+          .finally(function() {
+              window.location.href = url;
+          });
     }
 
     function markAllNotifsRead() {
@@ -784,6 +792,24 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             setTimeout(function() { toast.remove(); }, 300);
         }, 3000);
     }
+    function toggleProfileDropdown(e) {
+        if (e) e.stopPropagation();
+        var dd = document.getElementById('profile-dropdown-menu');
+        if (dd) dd.classList.toggle('hidden');
+        var nd = document.getElementById('notif-dropdown');
+        if (nd) {
+            nd.style.opacity = '0';
+            nd.style.visibility = 'hidden';
+            nd.style.transform = 'translateY(-8px) scale(0.95)';
+        }
+    }
+    document.addEventListener('click', function(e) {
+        var dd = document.getElementById('profile-dropdown-menu');
+        var btn = document.getElementById('profile-avatar-btn');
+        if (dd && !dd.classList.contains('hidden') && !dd.contains(e.target) && !btn.contains(e.target)) {
+            dd.classList.add('hidden');
+        }
+    });
     </script>
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
@@ -791,7 +817,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 <div class="flex h-screen overflow-hidden">
 
     <!-- ─── SIDEBAR ─── -->
-    <?php $active_page = $tab === 'trainee-archive' ? 'archive' : 'dashboard'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
+    <?php $active_page = 'dashboard'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
     <div id="top" class="flex-1 flex flex-col min-h-0">
@@ -799,7 +825,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         <!-- Top Header -->
         <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-[1050]">
             <div class="flex items-center gap-4 flex-1 min-w-0">
-                <h1 class="text-base font-bold text-slate-800 hidden sm:block"><?= $tab === 'trainee-archive' ? 'Past Academic Years' : 'University Supervisor Dashboard' ?></h1>
+                <h1 class="text-base font-bold text-slate-800 hidden sm:block">University Supervisor Dashboard</h1>
 
                 <!-- Search -->
                 <div id="dash-search" class="relative flex-1 max-w-xs hidden md:block ml-4 no-print">
@@ -918,32 +944,42 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                         </div>
                     </div>
 
-                    <!-- Profile -->
-                    <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="relative focus:outline-none">
-                        <?php if (!empty($_SESSION['profile_pic'])): ?>
-                        <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-lg shadow-indigo-500/20">
-                        <?php else: ?>
-                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-bold shadow-lg shadow-indigo-500/20">
-                            <?= strtoupper(substr($sup_name, 0, 1)) ?>
+                    <!-- Profile Dropdown -->
+                    <div class="relative shrink-0" id="profileDropdownContainer">
+                        <button
+                            type="button"
+                            onclick="toggleProfileDropdown(event)"
+                            id="profile-avatar-btn"
+                            class="flex items-center gap-2.5 p-1.5 hover:bg-teal-50 border border-transparent hover:border-teal-100 rounded-xl transition-all cursor-pointer group"
+                        >
+                            <?php if (!empty($_SESSION['profile_pic'])): ?>
+                            <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-teal-200 shadow-sm">
+                            <?php else: ?>
+                            <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-sm">
+                                <?= strtoupper(substr($_SESSION['username'] ?? 'S', 0, 1)) ?>
+                            </div>
+                            <?php endif; ?>
+                            <div class="text-left hidden sm:block">
+                                <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars($sup_name) ?></p>
+                                <p class="text-xs font-medium text-teal-700 capitalize">Supervisor</p>
+                            </div>
+                            <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </button>
+
+                        <!-- Profile Dropdown Menu -->
+                        <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-teal-100 py-1.5 z-50 divide-y divide-slate-100">
+                            <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
+                                <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> My Profile
+                            </a>
+                            <a href="profile.php#security-section" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
+                                <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Change Password
+                            </a>
+                            <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition">
+                                <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
+                            </a>
                         </div>
-                        <?php endif; ?>
-                    </button>
-                    <div class="text-right">
-                        <p class="text-xs font-bold text-slate-700"><?= htmlspecialchars($sup_name) ?></p>
-                        <p class="text-sm text-slate-400">Supervisor</p>
-                    </div>
-                    <!-- Profile Dropdown Menu -->
-                    <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 z-[1050] bg-white border border-slate-200 rounded-xl shadow-[0_4px_12px_rgba(0,0,0,0.15)] w-48 py-2">
-                        <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-                            <span>👤</span> My Profile
-                        </a>
-                        <a href="profile.php#security-section" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
-                            <span>🔑</span> Change Password
-                        </a>
-                        <div class="my-1 border-t border-slate-100"></div>
-                        <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition">
-                            <span>🚪</span> Logout
-                        </a>
                     </div>
                 </div>
             </div>
@@ -973,10 +1009,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
                             </div>
                             <div class="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-3 text-center">
                                 <p class="text-xs font-bold text-indigo-200 uppercase tracking-wider">Academic Year</p>
-                                <select onchange="location = this.value;" class="mt-1 appearance-none bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer">
-                                    <option value="?<?= http_build_query(array_merge($_GET, ['academic_year' => ''])) ?>" class="text-slate-800" <?= !$filter_year ? 'selected' : '' ?>>All Years</option>
+                                <select onchange="location = this.value;" class="mt-1 bg-white/20 text-sm font-bold text-white rounded-lg px-2.5 py-1 border border-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 cursor-pointer">
+                                    <option value="?<?= http_build_query(array_merge($_GET, ['year' => '', 'academic_year' => ''])) ?>" class="text-slate-800" <?= !$filter_year ? 'selected' : '' ?>>All Years</option>
                                     <?php foreach ($valid_years as $vy): ?>
-                                    <option value="?<?= http_build_query(array_merge($_GET, ['academic_year' => $vy])) ?>" class="text-slate-800" <?= $filter_year === $vy ? 'selected' : '' ?>>
+                                    <option value="?<?= http_build_query(array_merge($_GET, ['year' => $vy, 'academic_year' => $vy])) ?>" class="text-slate-800" <?= $filter_year === $vy ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($vy) ?><?= $vy === $current_academic_year ? ' (Current)' : '' ?>
                                     </option>
                                     <?php endforeach; ?>
@@ -1449,221 +1485,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
             </div>
         </main>
-
-<?php elseif ($tab === 'trainee-archive'): ?>
-        <!-- ═══ TRAINEE ARCHIVE CONTENT ═══ -->
-        <?php
-        $ta_year = $_GET['academic_year'] ?? '';
-        $ta_years = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived' AND u.academic_year IS NOT NULL AND u.academic_year <> '' ORDER BY u.academic_year DESC");
-        $ta_years->bind_param("i", $sup_id);
-        $ta_years->execute();
-        $res = $ta_years->get_result();
-        $ta_valid_years = [];
-        if ($res) {
-            while ($row = $res->fetch_row()) {
-                $ta_valid_years[] = $row[0];
-            }
-        }
-        $ta_years->close();
-
-        $ta_sql = "
-            SELECT u.id AS uid, u.username, u.email, u.academic_year, u.created_at,
-                   sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
-                   sp.instructor_name, sp.internship_start_date, sp.internship_end_date
-            FROM users u
-            JOIN student_profiles sp ON sp.user_id = u.id
-            WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.status = 'Archived'
-        ";
-        if ($ta_year && preg_match('/^\d{4}-\d{4}$/', $ta_year)) {
-            $ta_sql .= " AND u.academic_year = ? ORDER BY sp.full_name ASC";
-            $ta_stmt = $db->prepare($ta_sql);
-            $ta_stmt->bind_param("is", $sup_id, $ta_year);
-        } else {
-            $ta_sql .= " ORDER BY sp.full_name ASC";
-            $ta_stmt = $db->prepare($ta_sql);
-            $ta_stmt->bind_param("i", $sup_id);
-        }
-        $ta_stmt->execute();
-        $res = $ta_stmt->get_result();
-        $ta_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-
-        $ta_total = count($ta_students);
-        $ta_companies = [];
-        foreach ($ta_students as $ts) {
-            if (!empty($ts['company_name'])) $ta_companies[$ts['company_name']] = true;
-        }
-
-        $ta_grades = [];
-        $gq = $db->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
-        foreach ($ta_students as $ts) {
-            $gq->bind_param("i", $ts['uid']);
-            $gq->execute();
-            $res = $gq->get_result();
-            $row = $res ? $res->fetch_row() : null;
-            $ta_grades[$ts['uid']] = $row[0] ?? null;
-        }
-
-        $ta_grade_dist = ['excellent' => 0, 'good' => 0, 'average' => 0, 'needs_improvement' => 0];
-        foreach ($ta_grades as $gv) {
-            if ($gv && isset($ta_grade_dist[$gv])) $ta_grade_dist[$gv]++;
-        }
-        ?>
-
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-7xl mx-auto space-y-6">
-
-                <!-- Archive Header -->
-                <div class="bg-gradient-to-r from-purple-900 via-purple-950 to-indigo-950 rounded-2xl p-6 text-white shadow-xl shadow-purple-500/10">
-                    <div class="flex items-center justify-between flex-wrap gap-4">
-                        <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-sm flex items-center justify-center text-xl border border-white/20">⏪</div>
-                            <div>
-                                <h2 class="text-lg font-black uppercase tracking-wider">My Trainees <?= $ta_year ? htmlspecialchars($ta_year) : '' ?></h2>
-                                <p class="text-sm text-purple-200 mt-0.5">Your Past Assigned Students — Historical Data</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <label class="text-xs font-bold text-white/60 uppercase tracking-wider">Filter by Year:</label>
-                            <select onchange="location = this.value;" class="appearance-none bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-4 py-2.5 pr-10 text-sm font-bold text-white focus:outline-none cursor-pointer">
-                                <option value="?tab=trainee-archive">All Archived Years</option>
-                                <?php foreach ($ta_valid_years as $ty): ?>
-                                <option value="?tab=trainee-archive&academic_year=<?= urlencode($ty) ?>" <?= $ta_year === $ty ? 'selected' : '' ?>><?= htmlspecialchars($ty) ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Summary Cards -->
-                <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-lg">⏪</div>
-                            <div>
-                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Archived</p>
-                                <p class="text-2xl font-black text-slate-800"><?= $ta_total ?></p>
-                                <?php if ($ta_year): ?>
-                                <p class="text-xs text-purple-500 font-bold font-mono"><?= htmlspecialchars($ta_year) ?></p>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center text-lg">🏢</div>
-                            <div>
-                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Companies</p>
-                                <p class="text-2xl font-black text-slate-800"><?= count($ta_companies) ?></p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 col-span-2 lg:col-span-1">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-lg">📊</div>
-                            <div class="flex-1">
-                                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Grades</p>
-                                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-2">
-                                    <span title="Outstanding / Excellent" class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>OE: <?= $ta_grade_dist['excellent'] ?></span>
-                                    <span title="Good" class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>OG: <?= $ta_grade_dist['good'] ?></span>
-                                    <span title="Average" class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>OA: <?= $ta_grade_dist['average'] ?></span>
-                                    <span title="Needs Attention / Not Graded" class="inline-flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded-lg cursor-help"><span class="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>ON: <?= $ta_grade_dist['needs_improvement'] ?></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Archived Trainees Table -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h3 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-purple-50 text-purple-600 rounded">⏪</span> Past Assigned Students
-                        </h3>
-                        <span class="text-sm text-slate-400"><?= $ta_total ?> student(s)</span>
-                    </div>
-
-                    <?php if (!empty($ta_students)): ?>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-sm">
-                                    <th class="px-4 py-2.5 text-left">Roll No</th>
-                                    <th class="px-4 py-2.5 text-left">Student Name</th>
-                                    <th class="px-4 py-2.5 text-left">Job Role</th>
-                                    <th class="px-4 py-2.5 text-left">Company</th>
-                                    <th class="px-4 py-2.5 text-left">Duration</th>
-                                    <th class="px-4 py-2.5 text-left">Year</th>
-                                    <th class="px-4 py-2.5 text-left">Grade</th>
-                                    <th class="px-4 py-2.5 text-left">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                <?php foreach ($ta_students as $ts): ?>
-                                <tr class="hover:bg-slate-50 transition">
-                                    <td class="px-4 py-2.5 font-mono font-semibold text-slate-700"><?= htmlspecialchars($ts['student_roll'] ?: '—') ?></td>
-                                    <td class="px-4 py-2.5">
-                                        <div class="flex items-center gap-2">
-                                            <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-sm font-bold shrink-0">
-                                                <?= strtoupper(($ts['full_name'] ?: $ts['username'])[0]) ?>
-                                            </div>
-                                            <div>
-                                                <p class="font-semibold text-slate-700"><?= htmlspecialchars($ts['full_name'] ?: $ts['username']) ?></p>
-                                                <p class="text-xs text-slate-400"><?= htmlspecialchars($ts['email']) ?></p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-2.5 text-slate-600 max-w-[120px] truncate" title="<?= htmlspecialchars($ts['job_role'] ?? '') ?>"><?= htmlspecialchars($ts['job_role'] ?: '—') ?></td>
-                                    <td class="px-4 py-2.5 text-slate-600 max-w-[130px] truncate" title="<?= htmlspecialchars($ts['company_name'] ?? '') ?>"><?= htmlspecialchars($ts['company_name'] ?: '—') ?></td>
-                                    <td class="px-4 py-2.5 text-slate-500 text-xs">
-                                        <?php if ($ts['internship_start_date'] && $ts['internship_end_date']): ?>
-                                            <?= htmlspecialchars((new DateTime($ts['internship_start_date']))->format('d M Y')) ?> – <?= htmlspecialchars((new DateTime($ts['internship_end_date']))->format('d M Y')) ?>
-                                        <?php else: ?>
-                                            —
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="px-4 py-2.5">
-                                        <span class="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($ts['academic_year'] ?: '—') ?></span>
-                                    </td>
-                                    <td class="px-4 py-2.5">
-                                        <?php
-                                        $grade_map = [
-                                            'excellent'         => ['Excellent',         'text-emerald-600', 'bg-emerald-50'],
-                                            'good'              => ['Good',              'text-blue-600',    'bg-blue-50'],
-                                            'average'           => ['Average',           'text-amber-600',   'bg-amber-50'],
-                                            'needs_improvement' => ['Needs Improvement', 'text-red-600',     'bg-red-50'],
-                                        ];
-                                        $gv = $ta_grades[$ts['uid']] ?? null;
-                                        $gs = $gv ? ($grade_map[$gv] ?? ['—', 'text-slate-400', 'bg-slate-50']) : ['—', 'text-slate-400', 'bg-slate-50'];
-                                        ?>
-                                        <span class="text-xs font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
-                                    </td>
-                                    <td class="px-4 py-2.5">
-                                        <a href="../view_student_history.php?uid=<?= $ts['uid'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-50 text-purple-600 text-xs font-bold rounded-lg hover:bg-purple-100 transition">
-                                            👁️ View
-                                        </a>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                    <?php else: ?>
-                    <div class="p-12 text-center">
-                        <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">⏪</div>
-                        <p class="text-sm text-slate-500 font-medium">
-                            <?php if ($ta_year): ?>
-                                No archived trainees found for <?= htmlspecialchars($ta_year) ?>.
-                            <?php else: ?>
-                                No archived trainees assigned to you yet.
-                            <?php endif; ?>
-                        </p>
-                    </div>
-                    <?php endif; ?>
-                </div>
-
-            </div>
-        </main>
-<?php endif; ?>
+    <?php endif; ?>
     </div>
 </div>
 

@@ -1,10 +1,10 @@
 <?php
+require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
-require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 
-$user_id       = $_SESSION['user_id'];
+$user_id       = (int) $_SESSION['user_id'];
 $username      = $_SESSION['username'];
 $internship_id = $user_id;
 
@@ -81,6 +81,17 @@ $res = $lock_stmt->get_result();
 $lock_row = $res ? $res->fetch_assoc() : null;
 if ($lock_row && !empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
     $log_locked = true;
+}
+$weekly_report_submitted = false;
+$ref_chk_stmt = $db->prepare("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
+$ref_chk_stmt->bind_param("ii", $internship_id, $selected_week);
+$ref_chk_stmt->execute();
+$ref_chk_res = $ref_chk_stmt->get_result();
+$ref_chk_row = $ref_chk_res ? $ref_chk_res->fetch_row() : null;
+$reflection_submitted = ((int) ($ref_chk_row[0] ?? 0) > 0);
+
+if (($reflection_submitted || $log_locked) && !($lock_row && $lock_row['report_status'] === 'rejected')) {
+    $weekly_report_submitted = true;
 }
 
 $error   = '';
@@ -256,9 +267,33 @@ if (!empty($weeks[$selected_week])) {
     $we->setTime(0, 0);
     $cursor = clone $ws;
     while ($cursor <= $we) {
-        $week_dates[] = $cursor->format('Y-m-d');
+        $day_num = (int)$cursor->format('N');
+        if ($day_num < 6) {
+            $week_dates[] = $cursor->format('Y-m-d');
+        }
         $cursor->modify('+1 day');
     }
+}
+
+$selected_date = trim($_GET['date'] ?? $_POST['log_date'] ?? '');
+if ($editing_log && !empty($editing_log['log_date'])) {
+    $selected_date = $editing_log['log_date'];
+} elseif (empty($selected_date) || (!empty($week_dates) && !in_array($selected_date, $week_dates, true))) {
+    $today_iso = date('Y-m-d');
+    if (!empty($week_dates) && in_array($today_iso, $week_dates, true)) {
+        $selected_date = $today_iso;
+    } elseif (!empty($week_dates)) {
+        $selected_date = $week_dates[0];
+    }
+}
+
+$active_day_log = null;
+if (!empty($selected_date)) {
+    $adl_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
+    $adl_stmt->bind_param("is", $internship_id, $selected_date);
+    $adl_stmt->execute();
+    $adl_res = $adl_stmt->get_result();
+    $active_day_log = $adl_res ? $adl_res->fetch_assoc() : null;
 }
 ?>
 <!DOCTYPE html>
@@ -302,14 +337,14 @@ if (!empty($weeks[$selected_week])) {
         .flatpickr-prev-month:hover, .flatpickr-next-month:hover { fill: #e0e7ff !important; stroke: #e0e7ff !important; }
         #logDateWrap { position: relative; }
         #logDateWrap .fp-input { padding-right: 2.5rem; }
-        .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+        .glass-sidebar { background: #005f73; border-right: 1px solid rgba(15, 118, 110, 0.4); }
         html { scrollbar-gutter: stable; overflow-y: scroll; }
         .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
         .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
         .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-        .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
-        .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
-        .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
+        .nav-link { color: #ccfbf1; font-weight: 500; }
+        .nav-link:hover { color: #fff; background: rgba(15, 118, 110, 0.6); }
+        .active-nav { background: #0a9396; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(10, 147, 150, 0.3); }
         @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } }
     </style>
 </head>
@@ -317,10 +352,14 @@ if (!empty($weeks[$selected_week])) {
 
 <div class="flex h-screen overflow-hidden">
 
+    <!-- ─── SIDEBAR BACKDROP (MOBILE) ─── -->
+    <div id="studentSidebarBackdrop" onclick="toggleStudentSidebar()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden print:hidden"></div>
+
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
-        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+    <aside id="studentSidebar" class="w-64 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 lg:static lg:z-auto transition-transform duration-200 ease-in-out glass-sidebar flex flex-col shrink-0 text-white shadow-xl print:hidden">
+        <div class="h-16 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
             <span class="font-black text-white tracking-tight text-lg">InternReport</span>
+            <button type="button" onclick="toggleStudentSidebar()" class="lg:hidden text-teal-200 hover:text-white p-1 rounded-lg transition" aria-label="Close sidebar">✕</button>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
@@ -386,7 +425,59 @@ if (!empty($weeks[$selected_week])) {
                 </div>
                 <?php endif; ?>
 
-                <!-- ═══════════ DAILY LOG FORM ═══════════ -->
+                <?php if ($weekly_report_submitted): ?>
+
+                <!-- ════ SUBMITTED WEEKLY REPORT — READ-ONLY LOCKED NOTICE ════ -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6 flex items-center justify-between flex-wrap gap-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 shadow-2xs">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h.01M5 21h14a2 2 0 001.71-3L13.71 4.86a2 2 0 00-3.42 0L3.29 18a2 2 0 001.71 3z"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
+                                Week <?= $selected_week ?> Daily Logs — Read-Only Mode
+                            </h3>
+                            <p class="text-caption text-slate-500 font-semibold">Weekly Report for Week <?= $selected_week ?> has been submitted. Daily log entries for this week are locked and read-only.</p>
+                        </div>
+                    </div>
+                    <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-full border bg-amber-50 text-amber-700 border-amber-200 shadow-2xs">
+                        <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        Locked - Weekly Report Submitted
+                    </span>
+                </div>
+
+                <?php else: ?>
+
+                <!-- ══════ WEEKDAY TIMELINE PILLS ══════ -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 mb-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                            <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            Week <?= $selected_week ?> Daily Logs Timeline
+                        </span>
+                        <span class="text-caption font-bold text-slate-400">Click a day pill to view or log entry</span>
+                    </div>
+                    <div class="flex items-center gap-2 overflow-x-auto pb-1">
+                        <?php foreach ($week_dates as $d_iso): ?>
+                            <?php
+                            $d_obj = new DateTime($d_iso);
+                            $d_label = $d_obj->format('D, d M');
+                            $has_log = isset($log_by_date[$d_iso]);
+                            $is_active = ($d_iso === $selected_date);
+                            ?>
+                            <a href="daily_log.php?week=<?= $selected_week ?>&date=<?= $d_iso ?>" class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 <?= $is_active ? 'bg-teal-700 text-white border-teal-700 shadow-sm' : ($has_log ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100') ?>">
+                                <span><?= $d_label ?></span>
+                                <?php if ($has_log): ?>
+                                <span class="w-4 h-4 rounded-full <?= $is_active ? 'bg-white text-teal-700' : 'bg-emerald-500 text-white' ?> flex items-center justify-center text-micro">✓</span>
+                                <?php else: ?>
+                                <span class="w-4 h-4 rounded-full <?= $is_active ? 'bg-teal-600 text-white' : 'bg-slate-200 text-slate-500' ?> flex items-center justify-center text-micro">+</span>
+                                <?php endif; ?>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <!-- ═══════════ DAILY LOG FORM / VIEW CARD ═══════════ -->
                 <?php if ($log_locked): ?>
                 <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-6">
                     <div class="flex items-center gap-3">
@@ -398,6 +489,121 @@ if (!empty($weeks[$selected_week])) {
                     </div>
                 </div>
                 <?php endif; ?>
+
+                <?php if ($active_day_log && !$editing_log): ?>
+
+                <!-- ════ SUBMITTED DAILY LOG — DATA CARD VIEW ════ -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50/60 to-slate-50 flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                                <?= (new DateTime($active_day_log['log_date']))->format('D') ?>
+                            </div>
+                            <div>
+                                <h2 class="text-sm font-black text-slate-800 flex items-center gap-2">
+                                    Daily Log — <?= (new DateTime($active_day_log['log_date']))->format('d M Y') ?>
+                                </h2>
+                                <p class="text-caption text-slate-400 font-semibold">
+                                    Week <?= $selected_week ?> • <?= (new DateTime($active_day_log['log_date']))->format('l') ?>
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <?php if (!empty($active_day_log['created_at'])): ?>
+                            <span class="inline-flex items-center gap-1.5 text-label font-bold text-slate-600 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-2xs">
+                                <svg class="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                Submitted <?= htmlspecialchars((new DateTime($active_day_log['created_at']))->format('d M Y, h:i A')) ?>
+                            </span>
+                            <?php endif; ?>
+                            <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                Submitted
+                            </span>
+                            <?php if (!$log_locked): ?>
+                            <a href="daily_log.php?week=<?= $selected_week ?>&date=<?= $selected_date ?>&edit=<?= $active_day_log['id'] ?>" class="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200 transition">
+                                ✏️ Edit Log
+                            </a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="p-6 space-y-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Attendance Status</span>
+                                <?php
+                                $att = $active_day_log['attendance_status'] ?? 'present';
+                                $reason = $active_day_log['reason_for_absence'] ?? '';
+                                $is_holiday = ($att === 'leave' || $att === 'absent') && stripos($reason, 'Public Holiday') === 0;
+                                ?>
+                                <?php if ($is_holiday): ?>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200">Public Holiday</span>
+                                <?php elseif ($att === 'present'): ?>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">Present</span>
+                                <?php else: ?>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-lg border border-red-200">Absent</span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Working Duration</span>
+                                <p class="text-sm font-mono font-bold text-teal-700 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <?= htmlspecialchars($active_day_log['calculated_duration'] ?? '08:00') ?> hrs
+                                </p>
+                            </div>
+                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Log Date</span>
+                                <p class="text-sm font-bold text-slate-700"><?= (new DateTime($active_day_log['log_date']))->format('d M Y (D)') ?></p>
+                            </div>
+                        </div>
+
+                        <?php if ($att === 'absent' || $is_holiday): ?>
+                        <div class="bg-red-50/60 rounded-xl p-4 border border-red-100">
+                            <span class="text-caption font-bold text-red-500 uppercase tracking-wider block mb-1">Reason for Absence / Leave</span>
+                            <p class="text-sm text-red-700 font-medium"><?= htmlspecialchars($reason ?: 'No reason provided.') ?></p>
+                        </div>
+                        <?php else: ?>
+
+                        <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+                            <span class="text-caption font-bold text-teal-700 uppercase tracking-wider block mb-1">Intended Task / Summary</span>
+                            <p class="text-sm font-semibold text-slate-800 leading-relaxed"><?= htmlspecialchars($active_day_log['task_title'] ?: '—') ?></p>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Task Detail Breakdown</span>
+                                <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['task_detail'] ?: '—')) ?></p>
+                            </div>
+                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Actual Tasks Accomplished</span>
+                                <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['tasks_performed'] ?: '—')) ?></p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-2">Tools & Tech Used</span>
+                                <?php if (!empty($active_day_log['tools_used'])): ?>
+                                    <div class="flex items-center gap-1.5 flex-wrap">
+                                        <?php foreach (explode(',', $active_day_log['tools_used']) as $tool): ?>
+                                            <span class="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-teal-700 shadow-2xs"><?= htmlspecialchars(trim($tool)) ?></span>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <p class="text-sm text-slate-400 italic">None specified</p>
+                                <?php endif; ?>
+                            </div>
+                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Knowledge Gained & Skills</span>
+                                <p class="text-sm text-slate-700 leading-relaxed"><?= htmlspecialchars($active_day_log['learnt_skills'] ?: '—') ?></p>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <?php else: ?>
+
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= $log_locked ? 'hidden' : '' ?>">
                     <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
                         <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg> <?= $editing_log ? 'Edit Log Entry' : 'New Log Entry' ?>
@@ -415,7 +621,7 @@ if (!empty($weeks[$selected_week])) {
                                 class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition cursor-pointer">
                                 <option value="">— Choose a week —</option>
                                 <?php foreach ($weeks as $wn => $wr): ?>
-                                <option value="<?= $wn ?>" <?= ($editing_log || $selected_week == $wn) ? 'selected' : '' ?>>
+                                <option value="<?= $wn ?>" <?= ($selected_week == $wn) ? 'selected' : '' ?>>
                                     Week <?= $wn ?> (<?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M Y') ?>)
                                 </option>
                                 <?php endforeach; ?>
@@ -427,9 +633,9 @@ if (!empty($weeks[$selected_week])) {
                         <div>
                             <label class="block text-sm font-bold text-slate-500 mb-1">Log Date</label>
                             <div id="logDateWrap" class="relative">
-                                <input type="text" name="log_date" id="logDate" required readonly <?= $editing_log ? '' : 'disabled' ?>
+                                <input type="text" name="log_date" id="logDate" required readonly <?= ($editing_log || $selected_week > 0) ? '' : 'disabled' ?>
                                     value="<?= $editing_log ? htmlspecialchars($editing_log['log_date']) : '' ?>"
-                                    placeholder="<?= $editing_log ? '' : 'Select a week first…' ?>"
+                                    placeholder="<?= ($editing_log || $selected_week > 0) ? 'Select a date…' : 'Select a week first…' ?>"
                                     class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed">
                             </div>
                             <p id="dateHint" class="text-sm text-slate-400 mt-1"><?= $editing_log ? 'Editing existing log' : 'Select a week first to open the calendar.' ?></p>
@@ -519,6 +725,8 @@ if (!empty($weeks[$selected_week])) {
                         </div>
                     </form>
                 </div>
+                <?php endif; ?>
+                <?php endif; ?>
 
                 <!-- ═══════════ LOG HISTORY TABLE ═══════════ -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
@@ -643,13 +851,14 @@ if (!empty($weeks[$selected_week])) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <?php foreach ($weeks as $wn => $wr): ?>
                                 <?php
-                                    $esc_ws = $conn->real_escape_string($wr['start']);
-                                    $esc_we = $conn->real_escape_string($wr['end']);
-                                    $cnt_r = $conn->query("SELECT COUNT(*) AS cnt FROM daily_logs WHERE internship_id = {$esc_iid} AND log_date BETWEEN '{$esc_ws}' AND '{$esc_we}'");
-                                    $cnt_row = $cnt_r ? $cnt_r->fetch_assoc() : null;
-                                    $log_count = $cnt_row ? (int) $cnt_row['cnt'] : 0;
+                                    $cnt_stmt = $db->prepare("SELECT COUNT(*) AS cnt FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+                                    foreach ($weeks as $wn => $wr):
+                                        $cnt_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
+                                        $cnt_stmt->execute();
+                                        $cnt_r = $cnt_stmt->get_result();
+                                        $cnt_row = $cnt_r ? $cnt_r->fetch_assoc() : null;
+                                        $log_count = $cnt_row ? (int) $cnt_row['cnt'] : 0;
                                 ?>
                                 <tr class="hover:bg-slate-50/50 transition-colors duration-150">
                                     <td class="px-5 py-3 font-bold text-slate-700">
@@ -682,6 +891,17 @@ if (!empty($weeks[$selected_week])) {
 <script>
 (function () {
     var weekRanges   = <?= json_encode($weeks, JSON_HEX_TAG) ?>;
+    var existingLogs = <?= json_encode($existing_logs, JSON_HEX_TAG) ?>;
+    var existingSet  = {};
+    if (Array.isArray(existingLogs)) {
+        existingLogs.forEach(function (d) { existingSet[d] = true; });
+    }
+
+    var dateInput  = document.getElementById('logDate');
+    var weekSelect = document.getElementById('weekSelect');
+    var dateHint   = document.getElementById('dateHint');
+    var weekHint   = document.getElementById('weekHint');
+
     function buildDisableList() {
         return existingLogs;
     }
@@ -700,7 +920,7 @@ if (!empty($weeks[$selected_week])) {
             if (existingSet[dateStr]) {
                 dayElem.classList.add('fp-log-exists');
                 dayElem.setAttribute('title', 'Already submitted — cannot select');
-
+            }
         },
         onChange: function (selectedDates, dateStr) {
             if (!dateStr) return;
@@ -719,8 +939,7 @@ if (!empty($weeks[$selected_week])) {
         }
     });
 
-    weekSelect.addEventListener('change', function () {
-        var wn = parseInt(this.value);
+    function applyWeekSelection(wn) {
         if (!wn || !weekRanges[wn]) {
             fp.set('clickOpens', false);
             fp.clear();
@@ -730,9 +949,11 @@ if (!empty($weeks[$selected_week])) {
             dateInput.placeholder = 'Select a week first…';
             dateInput.classList.add('bg-slate-100');
             dateInput.classList.remove('bg-white');
-            weekHint.classList.add('hidden');
-            dateHint.textContent = 'Select a week first to open the calendar.';
-            dateHint.className = 'text-sm text-slate-400 mt-1';
+            if (weekHint) weekHint.classList.add('hidden');
+            if (dateHint) {
+                dateHint.textContent = 'Select a week first to open the calendar.';
+                dateHint.className = 'text-sm text-slate-400 mt-1';
+            }
             return;
         }
         var range = weekRanges[wn];
@@ -743,19 +964,35 @@ if (!empty($weeks[$selected_week])) {
         fp.set('maxDate', range.end);
         fp.set('disable', buildDisableList());
         fp.set('clickOpens', true);
-        fp.clear();
         var startD = new Date(range.start + 'T00:00:00');
         var endD   = new Date(range.end + 'T00:00:00');
         var totalDays = Math.round((endD - startD) / 86400000) + 1;
-        weekHint.textContent = 'Week ' + wn + ': ' +
-            dayName(startD) + ', ' + startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-            ' → ' +
-            dayName(endD) + ', ' + endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-        weekHint.className = 'text-sm text-blue-500 font-semibold mt-1';
-        dateHint.textContent = 'Open the calendar — pick any weekday within this ' + totalDays + '-day window.';
-        dateHint.className = 'text-sm text-slate-400 mt-1';
-        fp.open();
-    });
+        if (weekHint) {
+            weekHint.textContent = 'Week ' + wn + ': ' +
+                dayName(startD) + ', ' + startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+                ' → ' +
+                dayName(endD) + ', ' + endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            weekHint.className = 'text-sm text-blue-500 font-semibold mt-1';
+            weekHint.classList.remove('hidden');
+        }
+        if (dateHint) {
+            dateHint.textContent = 'Open the calendar — pick any weekday within this ' + totalDays + '-day window.';
+            dateHint.className = 'text-sm text-slate-400 mt-1';
+        }
+    }
+
+    if (weekSelect) {
+        weekSelect.addEventListener('change', function () {
+            fp.clear();
+            applyWeekSelection(parseInt(this.value));
+            fp.open();
+        });
+
+        var initWn = parseInt(weekSelect.value);
+        if (initWn) {
+            applyWeekSelection(initWn);
+        }
+    }
 
     window.validateSubmit = function (e) {
         var wn  = parseInt(weekSelect.value);

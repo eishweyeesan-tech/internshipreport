@@ -1,11 +1,6 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
-
-if ($_SESSION['role'] !== 'admin') {
-    header('Location: ../dashboard.php');
-    exit;
-}
+require_once __DIR__ . '/../config/db.php';
 
 $admin_name = $_SESSION['username'];
 $admin_id   = (int) $_SESSION['user_id'];
@@ -26,10 +21,37 @@ if ($res_st) {
 $def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
 $def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
 
-// ── Academic Years (for dynamic dropdowns) ──────────────────────
-$res_ay = $db->query("SELECT DISTINCT academic_year AS year_label FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
-$all_academic_years = $res_ay ? $res_ay->fetch_all(MYSQLI_ASSOC) : [];
+// ── Academic Years (for dynamic dropdowns and filtering) ────────
+$res_ay = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
+$academic_years = [];
+if ($res_ay) {
+    while ($row = $res_ay->fetch_assoc()) {
+        if (!empty($row['academic_year'])) {
+            $academic_years[] = $row['academic_year'];
+        }
+    }
+}
+if (!in_array('2025-2026', $academic_years, true)) {
+    array_unshift($academic_years, '2025-2026');
+}
+$all_academic_years = array_map(function($y) { return ['year_label' => $y]; }, $academic_years);
 $ay_label_to_id = [];
+
+// Determine active tab first
+$tab = $_GET['tab'] ?? 'overview';
+if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive', 'history'], true)) {
+    $tab = 'overview';
+}
+
+// Determine selected academic year filter
+// On Reports tab ('history'), default to '2025-2026'; on other tabs (Overview/Manage), default to 'all'
+if (isset($_GET['year']) && $_GET['year'] !== '') {
+    $selected_year = trim($_GET['year']);
+} elseif ($tab === 'history') {
+    $selected_year = '2025-2026';
+} else {
+    $selected_year = 'all';
+}
 
 // ══════════════════════════════════════════════════════════════════
 // HANDLERS
@@ -254,6 +276,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_batch'])) {
     }
 }
 
+// ── Toggle Individual User Status (Active <-> Archived) ───────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_user_status'])) {
+    $target_uid = (int) ($_POST['status_uid'] ?? 0);
+    $new_status = trim($_POST['new_status'] ?? '');
+    if ($target_uid > 0 && in_array($new_status, ['Active', 'Archived'], true)) {
+        $up = $db->prepare("UPDATE users SET status = ? WHERE id = ?");
+        $up->bind_param("si", $new_status, $target_uid);
+        $up->execute();
+        $msg = "User status updated to {$new_status} successfully.";
+    }
+}
+
 
 
 // ── Mark notification as read ────────────────────────────────
@@ -281,14 +315,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
 
 // Analytics counts
 // 1. Active students
-$res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'Active'");
-$row = $res ? $res->fetch_row() : null;
-$student_count = (int) ($row[0] ?? 0);
+if ($selected_year !== '' && $selected_year !== 'all') {
+    $st_cnt = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND u.status = 'Active' AND u.academic_year = ?");
+    $st_cnt->bind_param("s", $selected_year);
+    $st_cnt->execute();
+    $res = $st_cnt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $student_count = (int) ($row[0] ?? 0);
+    $st_cnt->close();
+} else {
+    $res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'Active'");
+    $row = $res ? $res->fetch_row() : null;
+    $student_count = (int) ($row[0] ?? 0);
+}
 
 // 2. Active supervisors
-$res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND status = 'Active'");
-$row = $res ? $res->fetch_row() : null;
-$supervisor_count = (int) ($row[0] ?? 0);
+if ($selected_year !== '' && $selected_year !== 'all') {
+    $sup_cnt = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.role = 'supervisor' AND u.status = 'Active' AND (u.academic_year = ? OR u.academic_year IS NULL)");
+    $sup_cnt->bind_param("s", $selected_year);
+    $sup_cnt->execute();
+    $res = $sup_cnt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $supervisor_count = (int) ($row[0] ?? 0);
+    $sup_cnt->close();
+} else {
+    $res = $db->query("SELECT COUNT(*) FROM users WHERE role = 'supervisor' AND status = 'Active'");
+    $row = $res ? $res->fetch_row() : null;
+    $supervisor_count = (int) ($row[0] ?? 0);
+}
 
 // 3. Registered partner companies
 $res = $db->query("SELECT COUNT(*) FROM companies");
@@ -296,48 +350,109 @@ $row = $res ? $res->fetch_row() : null;
 $company_count = (int) ($row[0] ?? 0);
 
 // 4. Pending first login requests
-$res = $db->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'");
-$row = $res ? $res->fetch_row() : null;
-$pending_count = (int) ($row[0] ?? 0);
+if ($selected_year !== '' && $selected_year !== 'all') {
+    $pend_cnt = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.is_first_login = 1 AND u.role != 'admin' AND u.academic_year = ?");
+    $pend_cnt->bind_param("s", $selected_year);
+    $pend_cnt->execute();
+    $res = $pend_cnt->get_result();
+    $row = $res ? $res->fetch_row() : null;
+    $pending_count = (int) ($row[0] ?? 0);
+    $pend_cnt->close();
+} else {
+    $res = $db->query("SELECT COUNT(*) FROM users WHERE is_first_login = 1 AND role != 'admin'");
+    $row = $res ? $res->fetch_row() : null;
+    $pending_count = (int) ($row[0] ?? 0);
+}
 
 // Companies list
 $res_c = $db->query("SELECT * FROM companies ORDER BY company_name ASC");
 $companies = $res_c ? $res_c->fetch_all(MYSQLI_ASSOC) : [];
 
 // Supervisors list
-$res_sup = $db->query("SELECT id, username, email FROM users WHERE role = 'supervisor' ORDER BY username");
-$supervisors = $res_sup ? $res_sup->fetch_all(MYSQLI_ASSOC) : [];
+if ($selected_year !== '' && $selected_year !== 'all') {
+    $sup_list_stmt = $db->prepare("SELECT id, username, email FROM users WHERE role = 'supervisor' AND (academic_year = ? OR academic_year IS NULL) ORDER BY username");
+    $sup_list_stmt->bind_param("s", $selected_year);
+    $sup_list_stmt->execute();
+    $res_sup = $sup_list_stmt->get_result();
+    $supervisors = $res_sup ? $res_sup->fetch_all(MYSQLI_ASSOC) : [];
+    $sup_list_stmt->close();
+} else {
+    $res_sup = $db->query("SELECT id, username, email FROM users WHERE role = 'supervisor' ORDER BY username");
+    $supervisors = $res_sup ? $res_sup->fetch_all(MYSQLI_ASSOC) : [];
+}
 
 // Students list
-$res_stu = $db->query("
-    SELECT u.id AS uid, u.username, u.email, u.is_first_login, u.academic_year, u.status, u.created_at,
-           sp.full_name, sp.student_roll, sp.major, sp.company_name,
-           sp.instructor_name, sp.supervisor_id
-    FROM users u
-    LEFT JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student'
-    ORDER BY sp.full_name ASC, u.username ASC
-");
-$students = $res_stu ? $res_stu->fetch_all(MYSQLI_ASSOC) : [];
+if ($selected_year !== '' && $selected_year !== 'all') {
+    $stu_list_stmt = $db->prepare("
+        SELECT u.id AS uid, u.username, u.email, u.is_first_login, u.academic_year, u.status, u.created_at,
+               sp.full_name, sp.student_roll, sp.major, sp.company_name,
+               sp.instructor_name, sp.supervisor_id
+        FROM users u
+        LEFT JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role = 'student' AND u.academic_year = ?
+        ORDER BY sp.full_name ASC, u.username ASC
+    ");
+    $stu_list_stmt->bind_param("s", $selected_year);
+    $stu_list_stmt->execute();
+    $res_stu = $stu_list_stmt->get_result();
+    $students = $res_stu ? $res_stu->fetch_all(MYSQLI_ASSOC) : [];
+    $stu_list_stmt->close();
+} else {
+    $res_stu = $db->query("
+        SELECT u.id AS uid, u.username, u.email, u.is_first_login, u.academic_year, u.status, u.created_at,
+               sp.full_name, sp.student_roll, sp.major, sp.company_name,
+               sp.instructor_name, sp.supervisor_id
+        FROM users u
+        LEFT JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role = 'student'
+        ORDER BY sp.full_name ASC, u.username ASC
+    ");
+    $students = $res_stu ? $res_stu->fetch_all(MYSQLI_ASSOC) : [];
+}
 
-// All users (with optional role filter)
+// All users (with optional role filter, academic year filter, and search filter)
+$search_term = trim($_GET['search'] ?? '');
 $filter_role = $_GET['role'] ?? '';
 $all_users_sql = "
     SELECT u.id, u.username, u.email, u.role, u.is_first_login, u.academic_year, u.status, u.created_at,
-           sp.full_name, sp.student_roll
+           sp.full_name, sp.student_roll, sp.company_name
     FROM users u
     LEFT JOIN student_profiles sp ON sp.user_id = u.id
 ";
-if (in_array($filter_role, ['admin', 'supervisor', 'student'])) {
-    $all_users_sql .= " WHERE u.role = ?";
-    $all_users_sql .= " ORDER BY FIELD(u.role, 'admin', 'supervisor', 'student'), u.created_at DESC";
+$where_clauses = [];
+$params = [];
+$types = "";
+
+if (in_array($filter_role, ['admin', 'supervisor', 'student'], true)) {
+    $where_clauses[] = "u.role = ?";
+    $params[] = $filter_role;
+    $types .= "s";
+}
+if ($selected_year !== '' && $selected_year !== 'all') {
+    $where_clauses[] = "u.academic_year = ?";
+    $params[] = $selected_year;
+    $types .= "s";
+}
+if ($search_term !== '') {
+    $where_clauses[] = "(sp.full_name LIKE ? OR sp.student_roll LIKE ? OR u.username LIKE ? OR sp.company_name LIKE ? OR u.email LIKE ?)";
+    $like = '%' . $search_term . '%';
+    $params[] = $like; $params[] = $like; $params[] = $like; $params[] = $like; $params[] = $like;
+    $types .= "sssss";
+}
+
+if (!empty($where_clauses)) {
+    $all_users_sql .= " WHERE " . implode(" AND ", $where_clauses);
+}
+$all_users_sql .= " ORDER BY FIELD(u.role, 'admin', 'supervisor', 'student'), u.created_at DESC";
+
+if (!empty($params)) {
     $all_users_stmt = $db->prepare($all_users_sql);
-    $all_users_stmt->bind_param("s", $filter_role);
+    $all_users_stmt->bind_param($types, ...$params);
     $all_users_stmt->execute();
     $res = $all_users_stmt->get_result();
     $all_users = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+    $all_users_stmt->close();
 } else {
-    $all_users_sql .= " ORDER BY FIELD(u.role, 'admin', 'supervisor', 'student'), u.created_at DESC";
     $res = $db->query($all_users_sql);
     $all_users = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 }
@@ -418,10 +533,8 @@ usort($recent_activity_items, function ($a, $b) {
 $recent_activity_items = array_slice($recent_activity_items, 0, 8);
 
 // ══════════════════════════════════════════════════════════════════
-// ACTIVE TAB
+// ACTIVE TAB (Defined at top of file)
 // ══════════════════════════════════════════════════════════════════
-$tab = $_GET['tab'] ?? 'overview';
-if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive', 'history'])) $tab = 'overview';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -692,10 +805,10 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                         <div>
                             <label class="text-xs font-semibold text-slate-700 tracking-wide uppercase block mb-1.5">Academic Year *</label>
                             <select name="s_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:border-purple-500 focus:bg-white focus:outline-none transition-all duration-200">
-                                <?php foreach ($all_academic_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay['year_label']) ?>" <?= ($ay['is_current'] ?? 0) ? 'selected' : '' ?>><?= htmlspecialchars($ay['year_label']) ?><?= ($ay['is_current'] ?? 0) ? ' (Current)' : '' ?> — <?= htmlspecialchars($ay['status']) ?></option>
+                                <?php foreach ($academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay) ?>" <?= $ay === '2025-2026' ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
                                 <?php endforeach; ?>
-                                <?php if (empty($all_academic_years)): ?>
+                                <?php if (empty($academic_years)): ?>
                                 <option value="">No academic years configured</option>
                                 <?php endif; ?>
                             </select>
@@ -747,8 +860,8 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                             <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
                             <select name="t_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 <option value="">— Select Year —</option>
-                                <?php foreach ($all_academic_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay['year_label']) ?>" <?= ($ay['is_current'] ?? 0) ? 'selected' : '' ?>><?= htmlspecialchars($ay['year_label']) ?><?= ($ay['is_current'] ?? 0) ? ' (Current)' : '' ?></option>
+                                <?php foreach ($academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay) ?>" <?= $ay === '2025-2026' ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -773,12 +886,30 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                     <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="p-1 bg-slate-100 text-slate-600 rounded">👥</span> All Users
                     </h2>
-                    <div class="flex items-center gap-2">
-                        <a href="?tab=manage" class="px-3 py-1.5 text-sm font-bold rounded-lg transition <?= $filter_role === '' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200' ?>">All</a>
-                        <a href="?tab=manage&role=admin" class="px-3 py-1.5 text-sm font-bold rounded-lg transition <?= $filter_role === 'admin' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-100' ?>">Admin</a>
-                        <a href="?tab=manage&role=supervisor" class="px-3 py-1.5 text-sm font-bold rounded-lg transition <?= $filter_role === 'supervisor' ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' ?>">Supervisor</a>
-                        <a href="?tab=manage&role=student" class="px-3 py-1.5 text-sm font-bold rounded-lg transition <?= $filter_role === 'student' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' ?>">Student</a>
-                        <span class="text-sm text-slate-400 ml-1"><?= count($all_users) ?> total</span>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <!-- Search Form -->
+                        <form method="GET" class="flex items-center gap-2">
+                            <input type="hidden" name="tab" value="manage">
+                            <?php if ($filter_role): ?><input type="hidden" name="role" value="<?= htmlspecialchars($filter_role) ?>"><?php endif; ?>
+                            <?php if (!empty($selected_year)): ?><input type="hidden" name="year" value="<?= htmlspecialchars($selected_year) ?>"><?php endif; ?>
+                            <div class="relative flex-1 sm:w-56 max-w-xs">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                </span>
+                                <input type="text" name="search" value="<?= htmlspecialchars($search_term ?? '') ?>" placeholder="Search user, roll, company..." class="w-full bg-slate-50 border border-teal-200 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200">
+                                <?php if (!empty($search_term)): ?>
+                                <a href="?<?= http_build_query(array_diff_key($_GET, ['search' => ''])) ?>" class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold transition" title="Clear search">✕</a>
+                                <?php endif; ?>
+                            </div>
+                            <button type="submit" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer">Search</button>
+                        </form>
+                        <div class="flex items-center gap-1.5">
+                            <a href="?<?= http_build_query(array_merge($_GET, ['role' => ''])) ?>" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition <?= $filter_role === '' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200' ?>">All</a>
+                            <a href="?<?= http_build_query(array_merge($_GET, ['role' => 'admin'])) ?>" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition <?= $filter_role === 'admin' ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 hover:bg-amber-100' ?>">Admin</a>
+                            <a href="?<?= http_build_query(array_merge($_GET, ['role' => 'supervisor'])) ?>" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition <?= $filter_role === 'supervisor' ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' ?>">Supervisor</a>
+                            <a href="?<?= http_build_query(array_merge($_GET, ['role' => 'student'])) ?>" class="px-2.5 py-1.5 text-xs font-bold rounded-lg transition <?= $filter_role === 'student' ? 'bg-indigo-500 text-white' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' ?>">Student</a>
+                            <span class="text-xs text-slate-400 ml-1 font-semibold"><?= count($all_users) ?> total</span>
+                        </div>
                     </div>
                 </div>
                 <div class="overflow-x-auto">
@@ -832,6 +963,16 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                                 <td class="px-3 py-2.5">
                                     <?php if ($u['role'] !== 'admin'): ?>
                                     <div class="flex items-center gap-1.5">
+                                        <?php if ($u['role'] === 'student'): ?>
+                                        <form method="POST" onsubmit="return confirm('Toggle status for <?= htmlspecialchars($u['full_name'] ?: $u['username']) ?> to <?= ($u['status'] ?? 'Active') === 'Archived' ? 'Active' : 'Archived' ?>?')" class="inline">
+                                            <input type="hidden" name="toggle_user_status" value="1">
+                                            <input type="hidden" name="status_uid" value="<?= $u['id'] ?>">
+                                            <input type="hidden" name="new_status" value="<?= ($u['status'] ?? 'Active') === 'Archived' ? 'Active' : 'Archived' ?>">
+                                            <button type="submit" class="px-2 py-1 <?= ($u['status'] ?? 'Active') === 'Archived' ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?> text-sm font-bold rounded-lg transition cursor-pointer" title="<?= ($u['status'] ?? 'Active') === 'Archived' ? 'Restore to Active (Allow Login)' : 'Archive Student (Block Login)' ?>">
+                                                <?= ($u['status'] ?? 'Active') === 'Archived' ? '♻️ Activate' : '📦 Archive' ?>
+                                            </button>
+                                        </form>
+                                        <?php endif; ?>
                                         <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($u['full_name'] ?: $u['username']) ?>?\nNew password will be: <?= $u['role'] === 'supervisor' ? htmlspecialchars($def_supervisor_pw) : htmlspecialchars($def_student_pw) ?>')" class="inline">
                                             <input type="hidden" name="reset_password" value="1">
                                             <input type="hidden" name="reset_uid" value="<?= $u['id'] ?>">
@@ -870,8 +1011,8 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                             <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
                             <select name="batch_year" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 <option value="">— Select Year —</option>
-                                <?php foreach ($all_academic_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay['year_label']) ?>"><?= htmlspecialchars($ay['year_label']) ?> (<?= htmlspecialchars($ay['status']) ?>)</option>
+                                <?php foreach ($academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay) ?>"><?= htmlspecialchars($ay) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -929,8 +1070,8 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                             <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
                             <select name="restore_year" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-emerald-500 transition">
                                 <option value="">— Select Year —</option>
-                                <?php foreach ($all_academic_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay['year_label']) ?>"><?= htmlspecialchars($ay['year_label']) ?> (<?= htmlspecialchars($ay['status']) ?>)</option>
+                                <?php foreach ($academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay) ?>"><?= htmlspecialchars($ay) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -974,15 +1115,6 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
             <?php elseif ($tab === 'history'): ?>
             <!-- ════ TAB: STUDENT HISTORY ════ -->
             <?php
-            $hist_year = $_GET['academic_year'] ?? '';
-            $res_hy = $db->query("SELECT DISTINCT academic_year AS year_label FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
-            $hist_years = [];
-            if ($res_hy) {
-                while ($row = $res_hy->fetch_row()) {
-                    $hist_years[] = $row[0];
-                }
-            }
-
             $hist_sql = "
                 SELECT u.id AS uid, u.username, u.email, u.academic_year, u.status, u.created_at,
                        sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
@@ -993,16 +1125,31 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
                 WHERE u.role = 'student'
             ";
-            if ($hist_year && preg_match('/^\d{4}-\d{4}$/', $hist_year)) {
+            $hist_params = [];
+            $hist_types = "";
+
+            if ($selected_year !== '' && $selected_year !== 'all') {
                 $hist_sql .= " AND u.academic_year = ?";
-                $hist_sql .= " ORDER BY sp.full_name ASC, u.username ASC";
+                $hist_params[] = $selected_year;
+                $hist_types .= "s";
+            }
+            if ($search_term !== '') {
+                $hist_sql .= " AND (sp.full_name LIKE ? OR sp.student_roll LIKE ? OR u.username LIKE ? OR sp.company_name LIKE ? OR sp.instructor_name LIKE ? OR sup_u.username LIKE ?)";
+                $like = '%' . $search_term . '%';
+                $hist_params[] = $like; $hist_params[] = $like; $hist_params[] = $like; $hist_params[] = $like; $hist_params[] = $like; $hist_params[] = $like;
+                $hist_types .= "ssssss";
+            }
+
+            $hist_sql .= " ORDER BY sp.full_name ASC, u.username ASC";
+
+            if (!empty($hist_params)) {
                 $hist_stmt = $db->prepare($hist_sql);
-                $hist_stmt->bind_param("s", $hist_year);
+                $hist_stmt->bind_param($hist_types, ...$hist_params);
                 $hist_stmt->execute();
                 $res = $hist_stmt->get_result();
                 $hist_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+                $hist_stmt->close();
             } else {
-                $hist_sql .= " ORDER BY sp.full_name ASC, u.username ASC";
                 $res = $db->query($hist_sql);
                 $hist_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
             }
@@ -1016,6 +1163,7 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 $res = $gq->get_result();
                 $row = $res ? $res->fetch_row() : null;
                 $hist_grades[$hs['uid']] = $row[0] ?? null;
+                $gq->close();
             }
             ?>
 
@@ -1023,22 +1171,39 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                 <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
                     <h2 class="text-lg font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="p-1 bg-purple-50 text-purple-600 rounded">📜</span> Student History
-                        <?php if ($hist_year): ?>
-                            <span class="text-indigo-600 font-mono">— <?= htmlspecialchars($hist_year) ?></span>
+                        <?php if ($selected_year && $selected_year !== 'all'): ?>
+                            <span class="text-indigo-600 font-mono">— <?= htmlspecialchars($selected_year) ?></span>
+                        <?php elseif ($selected_year === 'all'): ?>
+                            <span class="text-indigo-600 font-mono">— All Years</span>
                         <?php endif; ?>
                     </h2>
-                    <form method="GET" class="flex items-center gap-2">
-                        <input type="hidden" name="tab" value="history">
-                        <select name="academic_year" onchange="this.form.submit()" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-700 font-semibold focus:outline-none focus:border-blue-500 transition cursor-pointer">
-                            <option value="">All Academic Years</option>
-                            <?php foreach ($hist_years as $hy): ?>
-                            <option value="<?= htmlspecialchars($hy) ?>" <?= $hist_year === $hy ? 'selected' : '' ?>><?= htmlspecialchars($hy) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <?php if ($hist_year): ?>
-                        <a href="?tab=history" class="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-bold rounded-lg transition">✕ Clear</a>
-                        <?php endif; ?>
-                    </form>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <!-- Search Form -->
+                        <form method="GET" class="flex items-center gap-2">
+                            <input type="hidden" name="tab" value="history">
+                            <?php if (!empty($selected_year)): ?><input type="hidden" name="year" value="<?= htmlspecialchars($selected_year) ?>"><?php endif; ?>
+                            <div class="relative flex-1 sm:w-56 max-w-xs">
+                                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                                </span>
+                                <input type="text" name="search" value="<?= htmlspecialchars($search_term ?? '') ?>" placeholder="Search student, roll, company..." class="w-full bg-slate-50 border border-teal-200 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all duration-200">
+                                <?php if (!empty($search_term)): ?>
+                                <a href="?<?= http_build_query(array_diff_key($_GET, ['search' => ''])) ?>" class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 text-xs font-bold transition" title="Clear search">✕</a>
+                                <?php endif; ?>
+                            </div>
+                            <button type="submit" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer">Search</button>
+                        </form>
+                        <form method="GET" class="flex items-center gap-2">
+                            <input type="hidden" name="tab" value="history">
+                            <?php if (!empty($search_term)): ?><input type="hidden" name="search" value="<?= htmlspecialchars($search_term) ?>"><?php endif; ?>
+                            <select name="year" onchange="this.form.submit()" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:border-teal-500 transition cursor-pointer">
+                                <option value="all" <?= $selected_year === 'all' ? 'selected' : '' ?>>All Academic Years</option>
+                                <?php foreach ($academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay) ?>" <?= $selected_year === $ay ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </form>
+                    </div>
                 </div>
 
                 <?php if (!empty($hist_students)): ?>
@@ -1105,12 +1270,12 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
                     </table>
                 </div>
                 <div class="px-5 py-2.5 border-t border-slate-100 bg-slate-50">
-                    <p class="text-sm text-slate-400">Showing <?= count($hist_students) ?> student(s) <?= $hist_year ? 'for ' . htmlspecialchars($hist_year) : 'across all years' ?></p>
+                    <p class="text-sm text-slate-400">Showing <?= count($hist_students) ?> student(s) <?= ($selected_year && $selected_year !== 'all') ? 'for ' . htmlspecialchars($selected_year) : 'across all years' ?></p>
                 </div>
                 <?php else: ?>
                 <div class="p-8 text-center text-sm text-slate-400">
-                    <?php if ($hist_year): ?>
-                        No students found for academic year <?= htmlspecialchars($hist_year) ?>.
+                    <?php if ($selected_year && $selected_year !== 'all'): ?>
+                        No students found for academic year <?= htmlspecialchars($selected_year) ?>.
                     <?php else: ?>
                         No students registered yet.
                     <?php endif; ?>

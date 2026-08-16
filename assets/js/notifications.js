@@ -138,3 +138,7 @@ function markAllNotifsRead() {
       })
       .catch(function() {});
 }
+
+function markAllNotificationsRead() {
+    markAllNotifsRead();
+}

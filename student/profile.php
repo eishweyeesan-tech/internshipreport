@@ -1,18 +1,13 @@
 <?php
+require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
-require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../includes/phone_validation.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 
-$user_id  = $_SESSION['user_id'];
+$user_id  = (int) $_SESSION['user_id'];
 $username = $_SESSION['username'];
-$role     = $_SESSION['role'];
-
-if ($role !== 'student') {
-    header('Location: ../dashboard.php');
-    exit;
-}
+$role     = $_SESSION['role'] ?? 'student';
 
 $db = $mysqli ?? $conn;
 
@@ -218,19 +213,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile – InternReport</title>
-    <script>
-    (function() {
-        var theme = localStorage.getItem('theme');
-        if (theme === 'dark') document.documentElement.classList.add('dark');
-    })();
-    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
     html { scrollbar-gutter: stable; overflow-y: scroll; }
-    .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
-    .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
-    .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
-    .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+    .nav-link { color: #ccfbf1; font-weight: 500; }
+    .nav-link:hover { color: #fff; background: rgba(15, 118, 110, 0.6); }
+    .active-nav { background: #0a9396; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(10, 147, 150, 0.3); }
+    .glass-sidebar { background: #005f73; border-right: 1px solid rgba(15, 118, 110, 0.4); }
     .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
     .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
     .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
@@ -238,7 +228,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     </style>
     <script>
     tailwind.config = {
-        darkMode: 'class',
         theme: {
             extend: {
                 fontSize: {
@@ -277,10 +266,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
 
 <div class="flex h-screen overflow-hidden">
 
+    <!-- ─── SIDEBAR BACKDROP (MOBILE) ─── -->
+    <div id="studentSidebarBackdrop" onclick="toggleStudentSidebar()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden print:hidden"></div>
+
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
-        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+    <aside id="studentSidebar" class="w-64 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 lg:static lg:z-auto transition-transform duration-200 ease-in-out glass-sidebar flex flex-col shrink-0 text-white shadow-xl print:hidden">
+        <div class="h-16 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
             <span class="font-black text-white tracking-tight text-lg">InternReport</span>
+            <button type="button" onclick="toggleStudentSidebar()" class="lg:hidden text-teal-200 hover:text-white p-1 rounded-lg transition" aria-label="Close sidebar">✕</button>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
@@ -346,8 +339,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <?php if ($profile_pic): ?>
                             <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-16 h-16 rounded-full object-cover">
                         <?php else: ?>
+                            <?php
+                            $_p_initial = mb_substr($student_name, 0, 1, 'UTF-8');
+                            $_p_initial_display = ($_p_initial === '—' || empty($_p_initial)) ? 'S' : mb_strtoupper($_p_initial, 'UTF-8');
+                            ?>
                             <div class="w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl font-bold">
-                                <?= strtoupper(($profile['full_name'] ?: $username)[0]) ?>
+                                <?= htmlspecialchars($_p_initial_display) ?>
                             </div>
                         <?php endif; ?>
                         <div class="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200" title="Change avatar">
@@ -355,12 +352,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         </div>
                     </div>
                     <div>
-                        <h2 class="text-sm font-black text-slate-800"><?= htmlspecialchars($profile['full_name'] ?: $username) ?></h2>
+                        <h2 class="text-sm font-black text-slate-800"><?= htmlspecialchars($student_name) ?></h2>
                         <p class="text-sm text-slate-400 mt-0.5"><?= htmlspecialchars($user_email) ?></p>
                         <div class="flex items-center gap-2 mt-1.5">
                             <span class="text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded capitalize"><?= htmlspecialchars($role) ?></span>
-                            <?php if ($profile['student_roll']): ?>
-                            <span class="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($profile['student_roll']) ?></span>
+                            <?php if (!empty($student_roll)): ?>
+                            <span class="text-sm font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($student_roll) ?></span>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -392,7 +389,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                                 <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Current avatar" class="w-14 h-14 rounded-full object-cover border border-slate-200">
                             <?php else: ?>
                                 <div class="w-14 h-14 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-bold border border-slate-200">
-                                    <?= strtoupper($username[0]) ?>
+                                    <?= htmlspecialchars($_p_initial_display) ?>
                                 </div>
                             <?php endif; ?>
                             <div class="flex-1">
@@ -660,30 +657,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
     </div>
 </div>
 
-<!-- Dark Mode Toggle -->
-<div class="fixed bottom-6 right-6 z-50">
-    <button id="darkToggle" onclick="toggleDarkMode()" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 shadow-lg rounded-full text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer">
-        <svg id="sunIcon" class="w-4 h-4 text-amber-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-        <svg id="moonIcon" class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
-        <span id="toggleLabel">Dark Mode</span>
-    </button>
-</div>
 
-<script>
-function toggleDarkMode() {
-    var isDark = document.documentElement.classList.toggle('dark');
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-    updateToggleUI(isDark);
-}
-function updateToggleUI(isDark) {
-    document.getElementById('sunIcon').classList.toggle('hidden', !isDark);
-    document.getElementById('moonIcon').classList.toggle('hidden', isDark);
-    document.getElementById('toggleLabel').textContent = isDark ? 'Light Mode' : 'Dark Mode';
-}
-document.addEventListener('DOMContentLoaded', function() {
-    updateToggleUI(document.documentElement.classList.contains('dark'));
-});
-</script>
 
 </body>
 </html>

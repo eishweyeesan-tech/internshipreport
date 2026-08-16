@@ -1,12 +1,7 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/phone_validation.php';
-
-if ($_SESSION['role'] !== 'admin') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $admin_name = $_SESSION['username'];
 $admin_id   = (int) $_SESSION['user_id'];

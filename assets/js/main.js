@@ -29,11 +29,12 @@ function toggleProfileDropdown(e) {
 
 // Global click listener to close profile dropdown when clicking outside
 document.addEventListener('click', function(e) {
-    var dd = document.getElementById('profile-dropdown-menu') || document.getElementById('profileDropdownMenu');
-    var btn = document.getElementById('profile-avatar-btn') || document.getElementById('profileDropdownContainer');
-    if (dd && !dd.contains(e.target) && btn && !btn.contains(e.target)) {
-        dd.classList.add('hidden');
-    }
+    document.querySelectorAll('#profile-dropdown-menu, #profileDropdownMenu').forEach(function(dd) {
+        var container = dd.closest('#profileDropdownContainer') || dd.closest('#profile-dropdown-wrapper') || dd.parentElement;
+        if (dd && !dd.classList.contains('hidden') && container && !container.contains(e.target)) {
+            dd.classList.add('hidden');
+        }
+    });
 });
 
 /**

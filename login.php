@@ -66,44 +66,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if ($user && password_verify($password, $user['password'])) {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['role'] = $user['role'];
-            $_SESSION['is_first_login'] = (bool) $user['is_first_login'];
+        // Active Academic Year Standard (e.g. '2025-2026')
+        $current_active_year = '2025-2026';
+        try {
+            $ay_setting_res = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'current_academic_year' LIMIT 1");
+            if ($ay_setting_res && ($ay_setting_row = $ay_setting_res->fetch_assoc()) && !empty($ay_setting_row['setting_value'])) {
+                $current_active_year = trim($ay_setting_row['setting_value']);
+            } else {
+                $latest_ay_res = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC LIMIT 1");
+                if ($latest_ay_res && ($latest_ay_row = $latest_ay_res->fetch_assoc()) && !empty($latest_ay_row['academic_year'])) {
+                    $current_active_year = trim($latest_ay_row['academic_year']);
+                }
+            }
+        } catch (Throwable $e) {
+            // Fallback to default active year '2025-2026'
+        }
 
-            // Update last_login_at timestamp
-            try {
-                $login_update = $db->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
-                $uid = (int) $user['id'];
-                $login_update->bind_param("i", $uid);
-                $login_update->execute();
-            } catch (Throwable $e) {
-                // Silently ignore if error occurs
+        if ($user && password_verify($password, $user['password'])) {
+            $user_status = trim((string) ($user['status'] ?? 'Active'));
+            $user_academic_year = trim((string) ($user['academic_year'] ?? ''));
+
+            // Restrict student access if status != Active OR academic_year != current active year
+            if ($user['role'] === 'student') {
+                $is_archived_status = (strtolower($user_status) !== 'active');
+                $is_past_academic_year = ($user_academic_year !== '' && $user_academic_year !== $current_active_year);
+
+                if ($is_archived_status || $is_past_academic_year) {
+                    $error = 'သင်၏ အကောင့်မှာ ပညာသင်နှစ် ပြီးဆုံး၍ Archive လုပ်ထားပြီးဖြစ်သောကြောင့် Login ဝင်ရောက်ခွင့် မရှိတော့ပါ။';
+                }
             }
 
-            if ($user['is_first_login'] == 1) {
-                header('Location: change-password.php');
+            if (empty($error)) {
+                session_regenerate_id(true);
+                $_SESSION['user_id'] = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['role'] = $user['role'];
+                $_SESSION['is_first_login'] = (bool) $user['is_first_login'];
+
+                // Update last_login_at timestamp
+                try {
+                    $login_update = $db->prepare("UPDATE users SET last_login_at = NOW() WHERE id = ?");
+                    $uid = (int) $user['id'];
+                    $login_update->bind_param("i", $uid);
+                    $login_update->execute();
+                } catch (Throwable $e) {
+                    // Silently ignore if error occurs
+                }
+
+                if ($user['is_first_login'] == 1) {
+                    header('Location: change-password.php');
+                    exit;
+                }
+
+                switch ($user['role']) {
+                    case 'admin':
+                        header('Location: admin/admin-dashboard.php');
+                        break;
+                    case 'student':
+                        header('Location: student/student-dashboard.php');
+                        break;
+                    case 'supervisor':
+                        header('Location: supervisor/supervisor-dashboard.php');
+                        break;
+                    case 'instructor':
+                        header('Location: instructor/instructor-dashboard.php');
+                        break;
+                    default:
+                        header('Location: dashboard.php');
+                }
                 exit;
             }
-
-            switch ($user['role']) {
-                case 'admin':
-                    header('Location: admin/admin-dashboard.php');
-                    break;
-                case 'student':
-                    header('Location: student/student-dashboard.php');
-                    break;
-                case 'supervisor':
-                    header('Location: supervisor/supervisor-dashboard.php');
-                    break;
-                case 'instructor':
-                    header('Location: instructor/instructor-dashboard.php');
-                    break;
-                default:
-                    header('Location: dashboard.php');
-            }
-            exit;
         } else {
             $error = 'Invalid username or password.';
         }

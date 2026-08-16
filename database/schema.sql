@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS daily_logs (
     calculated_duration VARCHAR(20) NOT NULL DEFAULT '00:00',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_log (internship_id, log_date),
-    FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
+    FOREIGN KEY (internship_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Weekly reflections table
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS weekly_reflections (
     why_done TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_week (internship_id, week_number),
-    FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
+    FOREIGN KEY (internship_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -140,7 +140,7 @@ CREATE TABLE IF NOT EXISTS magic_links (
     expires_at DATETIME NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_week_link (internship_id, week_number),
-    FOREIGN KEY (internship_id) REFERENCES student_profiles(id) ON DELETE CASCADE
+    FOREIGN KEY (internship_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Report evaluations (instructor grading & approval)

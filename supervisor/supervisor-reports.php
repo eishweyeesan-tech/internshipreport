@@ -1,13 +1,8 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
-
-if ($_SESSION['role'] !== 'supervisor') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $sup_id   = (int) $_SESSION['user_id'];
 $sup_name = $_SESSION['username'];
@@ -40,6 +35,7 @@ if (!in_array($filter_status, $allowed_statuses, true)) $filter_status = '';
 
 $filter_week = isset($_GET['week']) && $_GET['week'] !== '' ? (int) $_GET['week'] : null;
 $filter_company = trim($_GET['company'] ?? '');
+$filter_year = trim($_GET['year'] ?? ($_GET['academic_year'] ?? ''));
 $search = trim($_GET['search'] ?? '');
 
 $page = (isset($_GET['page']) && (int) $_GET['page'] > 0) ? (int) $_GET['page'] : 1;
@@ -78,6 +74,24 @@ $row = $res ? $res->fetch_row() : null;
 $total_reports = (int) ($row[0] ?? 0);
 
 // ── Available filter options ────────────────────────────────────
+$years_q = $db->prepare("
+    SELECT DISTINCT u.academic_year
+    FROM users u
+    JOIN student_profiles sp ON sp.user_id = u.id
+    WHERE u.role = 'student' AND sp.supervisor_id = ?
+      AND u.academic_year IS NOT NULL AND u.academic_year != ''
+    ORDER BY u.academic_year DESC
+");
+$years_q->bind_param("i", $sup_id);
+$years_q->execute();
+$res = $years_q->get_result();
+$available_years = [];
+if ($res) {
+    while ($row = $res->fetch_row()) {
+        $available_years[] = $row[0];
+    }
+}
+
 $weeks_q = $db->prepare("
     SELECT DISTINCT re.week_number
     FROM report_evaluations re
@@ -144,6 +158,11 @@ if ($filter_company) {
     $where .= " AND sp.company_name = ?";
     $types .= "s";
     $params[] = $filter_company;
+}
+if ($filter_year && $filter_year !== 'all') {
+    $where .= " AND u.academic_year = ?";
+    $types .= "s";
+    $params[] = $filter_year;
 }
 if ($search) {
     $where .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ?)";
@@ -265,7 +284,15 @@ function build_query_url($overrides = []) {
                             </select>
                             <?php endif; ?>
 
-                            <?php if ($filter_status || $filter_week || $filter_company || $search): ?>
+                            <!-- Academic Year Filter -->
+                            <select name="year" onchange="this.form.submit()" class="bg-white border border-teal-200 text-slate-700 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 cursor-pointer max-w-[14rem]">
+                                <option value="all">All Academic Years</option>
+                                <?php foreach ($available_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay) ?>" <?= ($filter_year === $ay || (empty($filter_year) && $ay === '2025-2026')) ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+
+                            <?php if ($filter_status || $filter_week || $filter_company || ($filter_year && $filter_year !== 'all') || $search): ?>
                             <a href="supervisor-reports.php" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all duration-200">✕ Clear</a>
                             <?php endif; ?>
                         </form>

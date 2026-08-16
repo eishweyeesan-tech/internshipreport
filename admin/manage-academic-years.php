@@ -1,11 +1,6 @@
 <?php
-require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../auth.php';
-
-if (($_SESSION['role'] ?? '') !== 'admin') {
-    header('Location: ../dashboard.php');
-    exit;
-}
+require_once __DIR__ . '/../config/db.php';
 
 $admin_name = $_SESSION['username'] ?? 'Admin';
 $admin_id   = (int) ($_SESSION['user_id'] ?? 0);

@@ -50,6 +50,7 @@ if (!empty($weeks[$selected_week])) {
                     <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ</th>
                     <th class="px-4 py-2.5 text-left">လေ့လာသိရှိသော အသိပညာ</th>
                     <th class="px-4 py-2.5 text-left">ကြာချိန်</th>
+                    <th class="px-4 py-2.5 text-left">Submitted At</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -64,8 +65,10 @@ if (!empty($weeks[$selected_week])) {
                         <?php if ($log): ?>
                         <tr class="hover:bg-slate-50/50 transition-colors duration-150">
                             <td class="px-4 py-3 text-sm text-gray-700 leading-normal">
-                                <div class="text-xs font-semibold text-slate-800"><?= $date_display ?></div>
-                                <div class="text-xs text-gray-400"><?= $day_name ?></div>
+                                <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&date=<?= $date ?>" class="group block">
+                                    <div class="text-xs font-bold text-slate-800 group-hover:text-teal-600 transition"><?= $date_display ?></div>
+                                    <div class="text-xs text-gray-400 group-hover:text-teal-500 transition"><?= $day_name ?></div>
+                                </a>
                             </td>
                             <td class="px-4 py-3">
                                 <?php
@@ -86,20 +89,48 @@ if (!empty($weeks[$selected_week])) {
                             <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($log['tasks_performed'] ?? '-') ?></td>
                             <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($log['tools_used'] ?? '-') ?></td>
                             <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($log['learnt_skills'] ?? '-') ?></td>
-                            <td class="px-4 py-3 font-mono text-blue-600 text-sm font-semibold whitespace-nowrap"><?= htmlspecialchars($log['calculated_duration']) ?></td>
+                            <td class="px-4 py-3 font-mono text-blue-600 text-sm font-semibold whitespace-nowrap"><?= htmlspecialchars($log['calculated_duration'] ?? '') ?></td>
+                            <td class="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                                <?php if (!empty($log['created_at'])): ?>
+                                <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&date=<?= $date ?>" class="inline-flex items-center gap-1.5 text-teal-700 hover:text-teal-800 font-semibold" title="<?= htmlspecialchars($log['created_at']) ?>">
+                                    <svg class="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    <?= htmlspecialchars((new DateTime($log['created_at']))->format('d M Y, h:i A')) ?>
+                                </a>
+                                <?php else: ?>
+                                <span class="text-slate-300">—</span>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                         <?php else: ?>
                         <tr class="bg-slate-50/30 hover:bg-slate-50/60 transition-colors duration-150">
                             <td class="px-4 py-3 text-sm text-gray-700 leading-normal">
-                                <div class="text-xs font-semibold text-slate-800"><?= $date_display ?></div>
-                                <div class="text-xs text-gray-400"><?= $day_name ?></div>
+                                <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&date=<?= $date ?>" class="group block">
+                                    <div class="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition"><?= $date_display ?></div>
+                                    <div class="text-xs text-gray-400 group-hover:text-indigo-500 transition"><?= $day_name ?></div>
+                                </a>
                             </td>
-                            <td class="px-4 py-3" colspan="6">
-                                <span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200/60">No log yet — click Save Daily Log above</span>
+                            <td class="px-4 py-3" colspan="7">
+                                <?php if (!empty($weekly_report_submitted)): ?>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200/60">No log entry (Locked - Weekly Report Submitted)</span>
+                                <?php else: ?>
+                                <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&date=<?= $date ?>" class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 bg-slate-100 hover:bg-slate-200 px-2.5 py-0.5 rounded border border-slate-200/60 transition">
+                                    + Log entry for <?= $day_name ?> (<?= $date_display ?>)
+                                </a>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endif; ?>
                     <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="8" class="px-4 py-8 text-center text-slate-400">
+                            <div class="flex flex-col items-center justify-center">
+                                <svg class="w-10 h-10 text-slate-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z"/></svg>
+                                <p class="text-sm font-semibold text-slate-500">No daily logs recorded yet.</p>
+                                <p class="text-xs text-slate-400 mt-1">Select a week or enter a date above to start logging your daily internship activities.</p>
+                            </div>
+                        </td>
+                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>

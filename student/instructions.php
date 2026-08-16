@@ -1,17 +1,11 @@
 <?php
+require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
-require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 
-$user_id  = $_SESSION['user_id'];
+$user_id  = (int) $_SESSION['user_id'];
 $username = $_SESSION['username'];
-$role     = $_SESSION['role'];
-
-if ($role !== 'student') {
-    header('Location: ../dashboard.php');
-    exit;
-}
 
 $internship_id = $user_id;
 
@@ -84,13 +78,13 @@ if (!empty($weeks)) {
     <style>
         html { scrollbar-gutter: stable; overflow-y: scroll; }
         body { font-family: 'Inter', sans-serif; }
-        .glass-sidebar { background: #0f172a; border-right: 1px solid rgba(255,255,255,0.08); }
+        .glass-sidebar { background: #005f73; border-right: 1px solid rgba(15, 118, 110, 0.4); }
         .glass-sidebar nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
         .glass-sidebar nav::-webkit-scrollbar { width: 4px; }
         .glass-sidebar nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
-        .nav-link { color: rgba(255,255,255,0.55); font-weight: 500; }
-        .nav-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
-        .active-nav { background: #9333ea; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(147,51,234,0.3); }
+        .nav-link { color: #ccfbf1; font-weight: 500; }
+        .nav-link:hover { color: #fff; background: rgba(15, 118, 110, 0.6); }
+        .active-nav { background: #0a9396; color: #fff; font-weight: 600; box-shadow: 0 4px 12px rgba(10, 147, 150, 0.3); }
         @media print { aside, header, .no-print { display: none !important; } .flex.h-screen { height: auto !important; overflow: visible !important; } main { overflow: visible !important; } body { background: white !important; } }
     </style>
 </head>
@@ -98,10 +92,14 @@ if (!empty($weeks)) {
 
 <div class="flex h-screen overflow-hidden">
 
+    <!-- ─── SIDEBAR BACKDROP (MOBILE) ─── -->
+    <div id="studentSidebarBackdrop" onclick="toggleStudentSidebar()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden print:hidden"></div>
+
     <!-- ─── SIDEBAR ─── -->
-    <aside class="w-64 glass-sidebar flex flex-col shrink-0">
-        <div class="h-16 flex items-center px-5 border-b border-white/10 shrink-0">
+    <aside id="studentSidebar" class="w-64 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 lg:static lg:z-auto transition-transform duration-200 ease-in-out glass-sidebar flex flex-col shrink-0 text-white shadow-xl print:hidden">
+        <div class="h-16 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
             <span class="font-black text-white tracking-tight text-lg">InternReport</span>
+            <button type="button" onclick="toggleStudentSidebar()" class="lg:hidden text-teal-200 hover:text-white p-1 rounded-lg transition" aria-label="Close sidebar">✕</button>
         </div>
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
