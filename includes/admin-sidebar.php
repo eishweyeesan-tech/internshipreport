@@ -10,13 +10,14 @@
 if (!isset($activePage)) $activePage = 'dashboard';
 
 $nav_items = [
-    ['key' => 'dashboard',   'href' => 'admin-dashboard.php',                 'icon' => '📊', 'label' => 'Overview'],
-    ['key' => 'students',    'href' => 'admin-dashboard.php?tab=students',    'icon' => '🎓', 'label' => 'Student'],
-    ['key' => 'supervisors', 'href' => 'admin-dashboard.php?tab=supervisors', 'icon' => '👨‍🏫', 'label' => 'Supervisor'],
-    ['key' => 'manage',      'href' => 'admin-dashboard.php?tab=manage',      'icon' => '👥', 'label' => 'Manage Users'],
-    ['key' => 'companies',   'href' => 'manage-companies.php',                'icon' => '🏢', 'label' => 'Companies'],
-    ['key' => 'history',     'href' => 'admin-dashboard.php?tab=history',     'icon' => '📜', 'label' => 'Reports'],
-    ['key' => 'profile',     'href' => 'admin-profile.php',                   'icon' => '👤', 'label' => 'Profile'],
+    ['key' => 'dashboard',      'href' => 'admin-dashboard.php',                 'icon' => '📊', 'label' => 'Overview'],
+    ['key' => 'students',       'href' => 'admin-dashboard.php?tab=students',    'icon' => '🎓', 'label' => 'Student'],
+    ['key' => 'supervisors',    'href' => 'admin-dashboard.php?tab=supervisors', 'icon' => '👨‍🏫', 'label' => 'Supervisor'],
+    ['key' => 'manage',         'href' => 'admin-dashboard.php?tab=manage',      'icon' => '👥', 'label' => 'Manage Users'],
+    ['key' => 'academic-years', 'href' => 'academic-years.php',                   'icon' => '📅', 'label' => 'Academic Years'],
+    ['key' => 'companies',      'href' => 'manage-companies.php',                'icon' => '🏢', 'label' => 'Companies'],
+    ['key' => 'history',        'href' => 'admin-dashboard.php?tab=history',     'icon' => '📜', 'label' => 'Reports'],
+    ['key' => 'profile',        'href' => 'admin-profile.php',                   'icon' => '👤', 'label' => 'Profile'],
 ];
 ?>
     <!-- ─── SIDEBAR BACKDROP (MOBILE) ─── -->

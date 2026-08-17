@@ -73,24 +73,12 @@ $res = $total_reports_q->get_result();
 $row = $res ? $res->fetch_row() : null;
 $total_reports = (int) ($row[0] ?? 0);
 
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+ensure_academic_years_table($db);
+
 // ── Available filter options ────────────────────────────────────
-$years_q = $db->prepare("
-    SELECT DISTINCT u.academic_year
-    FROM users u
-    JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND sp.supervisor_id = ?
-      AND u.academic_year IS NOT NULL AND u.academic_year != ''
-    ORDER BY u.academic_year DESC
-");
-$years_q->bind_param("i", $sup_id);
-$years_q->execute();
-$res = $years_q->get_result();
-$available_years = [];
-if ($res) {
-    while ($row = $res->fetch_row()) {
-        $available_years[] = $row[0];
-    }
-}
+$available_years = get_academic_years_list($db);
+$active_year_label = get_active_academic_year_label($db);
 
 $weeks_q = $db->prepare("
     SELECT DISTINCT re.week_number
@@ -286,10 +274,7 @@ function build_query_url($overrides = []) {
 
                             <!-- Academic Year Filter -->
                             <select name="year" onchange="this.form.submit()" class="bg-white border border-teal-200 text-slate-700 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 cursor-pointer max-w-[14rem]">
-                                <option value="all">All Academic Years</option>
-                                <?php foreach ($available_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay) ?>" <?= ($filter_year === $ay || (empty($filter_year) && $ay === '2025-2026')) ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
-                                <?php endforeach; ?>
+                                <?= render_academic_year_options($db, $filter_year, true, 'All Academic Years') ?>
                             </select>
 
                             <?php if ($filter_status || $filter_week || $filter_company || ($filter_year && $filter_year !== 'all') || $search): ?>

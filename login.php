@@ -66,21 +66,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Active Academic Year Standard (e.g. '2025-2026')
-        $current_active_year = '2025-2026';
-        try {
-            $ay_setting_res = $db->query("SELECT setting_value FROM system_settings WHERE setting_key = 'current_academic_year' LIMIT 1");
-            if ($ay_setting_res && ($ay_setting_row = $ay_setting_res->fetch_assoc()) && !empty($ay_setting_row['setting_value'])) {
-                $current_active_year = trim($ay_setting_row['setting_value']);
-            } else {
-                $latest_ay_res = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC LIMIT 1");
-                if ($latest_ay_res && ($latest_ay_row = $latest_ay_res->fetch_assoc()) && !empty($latest_ay_row['academic_year'])) {
-                    $current_active_year = trim($latest_ay_row['academic_year']);
-                }
-            }
-        } catch (Throwable $e) {
-            // Fallback to default active year '2025-2026'
-        }
+        // Active Academic Year Standard
+        require_once __DIR__ . '/includes/academic_year_helper.php';
+        ensure_academic_years_table($db);
+        $current_active_year = get_active_academic_year_label($db, '2023-2024');
 
         if ($user && password_verify($password, $user['password'])) {
             $user_status = trim((string) ($user['status'] ?? 'Active'));

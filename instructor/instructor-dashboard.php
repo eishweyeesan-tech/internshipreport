@@ -35,21 +35,16 @@ $inst_email = $row[0] ?? '';
 // ══════════════════════════════════════════════════════════════════════
 // DYNAMIC ACADEMIC YEAR SELECTION
 // ══════════════════════════════════════════════════════════════════════
-$res_ay = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
-$academic_years = [];
-if ($res_ay) {
-    while ($row = $res_ay->fetch_assoc()) {
-        if (!empty($row['academic_year'])) {
-            $academic_years[] = $row['academic_year'];
-        }
-    }
-}
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+ensure_academic_years_table($db);
 
-$default_active_year = '2025-2026';
+$academic_years = get_academic_years_list($db);
+$default_active_year = get_active_academic_year_label($db);
+
 if (isset($_GET['year']) && $_GET['year'] !== '') {
     $selected_year = trim($_GET['year']);
 } else {
-    if (in_array($default_active_year, $academic_years)) {
+    if (in_array($default_active_year, $academic_years, true)) {
         $selected_year = $default_active_year;
     } elseif (!empty($academic_years)) {
         $selected_year = $academic_years[0];
@@ -344,9 +339,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
                 <?php if (!empty($academic_years)): ?>
                 <form method="GET" class="flex items-center gap-1.5 border-l border-teal-100 pl-3">
                     <select name="year" id="ay_select" onchange="this.form.submit()" class="bg-white border border-teal-200 text-teal-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-sm font-semibold rounded-lg px-3 py-1 shadow-sm focus:outline-none transition cursor-pointer">
-                        <?php foreach ($academic_years as $ay): ?>
-                        <option value="<?= htmlspecialchars($ay) ?>" <?= ($selected_year ?? '') === $ay ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
-                        <?php endforeach; ?>
+                        <?= render_academic_year_options($db, $selected_year, true, 'All Academic Years') ?>
                     </select>
                 </form>
                 <?php endif; ?>

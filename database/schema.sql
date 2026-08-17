@@ -50,6 +50,17 @@ CREATE TABLE IF NOT EXISTS companies (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Academic Years table
+CREATE TABLE IF NOT EXISTS academic_years (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    year_label VARCHAR(50) NOT NULL UNIQUE,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    is_current TINYINT(1) NOT NULL DEFAULT 0,
+    status ENUM('Active', 'Upcoming', 'Archived') NOT NULL DEFAULT 'Upcoming',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- System settings
 CREATE TABLE IF NOT EXISTS system_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -213,7 +224,13 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- Default system settings
 INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES
 ('default_student_password', 'password1234'),
-('default_supervisor_password', 'password1234');
+('default_supervisor_password', 'password1234'),
+('current_academic_year', '2023-2024');
+
+-- Default academic years
+INSERT IGNORE INTO academic_years (year_label, start_date, end_date, is_current, status) VALUES
+('2023-2024', '2023-09-01', '2024-08-31', 1, 'Active'),
+('2024-2025', '2024-09-01', '2025-08-31', 0, 'Upcoming');
 
 -- Default admin account (password: "password")
 INSERT IGNORE INTO users (username, email, password, role, is_first_login) VALUES

@@ -33,24 +33,12 @@ if (!in_array($filter_status, ['red', 'amber', 'green', 'none'], true)) $filter_
 $search = trim($_GET['search'] ?? '');
 $filter_year = trim($_GET['year'] ?? ($_GET['academic_year'] ?? ''));
 
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+ensure_academic_years_table($db);
+
 // ── Available Academic Years ────────────────────────────────────
-$years_q = $db->prepare("
-    SELECT DISTINCT u.academic_year
-    FROM users u
-    JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND sp.supervisor_id = ?
-      AND u.academic_year IS NOT NULL AND u.academic_year != ''
-    ORDER BY u.academic_year DESC
-");
-$years_q->bind_param("i", $sup_id);
-$years_q->execute();
-$res = $years_q->get_result();
-$available_years = [];
-if ($res) {
-    while ($row = $res->fetch_row()) {
-        $available_years[] = $row[0];
-    }
-}
+$available_years = get_academic_years_list($db);
+$active_year_label = get_active_academic_year_label($db);
 
 // ── Summary counts (assigned students scope) ───────────────────
 $pending_reviews_q = $db->prepare("
@@ -79,24 +67,33 @@ $res = $total_assigned_q->get_result();
 $row = $res ? $res->fetch_row() : null;
 $total_assigned = (int) ($row[0] ?? 0);
 
-// ── Students detail (assigned + active) ─────────────────────────
-$sql = "
-    SELECT u.id AS uid, u.username, u.email, u.academic_year, u.profile_pic,
-           sp.full_name, sp.student_roll, sp.major, sp.phone,
-           sp.company_name, sp.job_role,
-           sp.instructor_name, sp.instructor_email, sp.instructor_phone,
-           sp.internship_start_date, sp.internship_end_date
-    FROM users u
-    JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
-";
-$types = "i";
-$params = [$sup_id];
-
+// ── Students detail (assigned + active/archived for specific year) ─────────────────────────
 if ($filter_year && $filter_year !== 'all') {
-    $sql .= " AND u.academic_year = ?";
-    $types .= "s";
-    $params[] = $filter_year;
+    $sql = "
+        SELECT u.id AS uid, u.username, u.email, u.academic_year, u.status AS user_status, u.profile_pic,
+               sp.full_name, sp.student_roll, sp.major, sp.phone,
+               sp.company_name, sp.job_role,
+               sp.instructor_name, sp.instructor_email, sp.instructor_phone,
+               sp.internship_start_date, sp.internship_end_date
+        FROM users u
+        JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role = 'student' AND sp.supervisor_id = ? AND u.academic_year = ?
+    ";
+    $types = "is";
+    $params = [$sup_id, $filter_year];
+} else {
+    $sql = "
+        SELECT u.id AS uid, u.username, u.email, u.academic_year, u.status AS user_status, u.profile_pic,
+               sp.full_name, sp.student_roll, sp.major, sp.phone,
+               sp.company_name, sp.job_role,
+               sp.instructor_name, sp.instructor_email, sp.instructor_phone,
+               sp.internship_start_date, sp.internship_end_date
+        FROM users u
+        JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
+    ";
+    $types = "i";
+    $params = [$sup_id];
 }
 
 if ($search) {
@@ -378,10 +375,7 @@ function build_query_url($overrides = []) {
 
                     <!-- Academic Year Filter -->
                     <select name="year" onchange="this.form.submit()" class="bg-white border border-teal-200 text-slate-700 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 cursor-pointer max-w-[14rem]">
-                        <option value="all">All Academic Years</option>
-                        <?php foreach ($available_years as $ay): ?>
-                        <option value="<?= htmlspecialchars($ay) ?>" <?= ($filter_year === $ay || (empty($filter_year) && $ay === '2025-2026')) ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
-                        <?php endforeach; ?>
+                        <?= render_academic_year_options($db, $filter_year, true, 'All Academic Years') ?>
                     </select>
 
                     <?php if ($filter_status || ($filter_year && $filter_year !== 'all') || $search): ?>

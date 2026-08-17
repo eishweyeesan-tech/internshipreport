@@ -1,10 +1,13 @@
 <?php
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/academic_year_helper.php';
 
 $admin_name = $_SESSION['username'] ?? 'Admin';
 $admin_id   = (int) ($_SESSION['user_id'] ?? 0);
 $db         = $mysqli ?? $conn;
+
+ensure_academic_years_table($db);
 
 // Notifications
 $unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
@@ -21,37 +24,40 @@ $res = $recent_notifs_q->get_result();
 $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Fetch all academic years with student counts from users table
-$res = $db->query("
-    SELECT u.academic_year AS year_label,
-           COUNT(CASE WHEN u.role = 'student' THEN 1 END) AS student_count,
-           COUNT(CASE WHEN u.role = 'supervisor' THEN 1 END) AS supervisor_count
-    FROM users u
-    WHERE u.academic_year IS NOT NULL AND u.academic_year <> ''
-    GROUP BY u.academic_year
-    ORDER BY u.academic_year DESC
+$ay_rows = $db->query("
+    SELECT ay.*,
+           (SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND (u.academic_year_id = ay.id OR u.academic_year = ay.year_label)) AS student_count,
+           (SELECT COUNT(*) FROM users u WHERE u.role = 'supervisor' AND (u.academic_year_id = ay.id OR u.academic_year = ay.year_label)) AS supervisor_count
+    FROM academic_years ay
+    ORDER BY ay.start_date DESC, ay.year_label DESC
 ");
-$years_raw = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-$years = [];
-foreach ($years_raw as $idx => $y) {
-    $years[] = [
-        'id' => $idx + 1,
-        'year_label' => $y['year_label'],
-        'start_date' => date('Y-09-01'),
-        'end_date'   => date('Y-08-31'),
-        'status'     => $idx === 0 ? 'ACTIVE' : 'ARCHIVED',
-        'is_current' => $idx === 0 ? 1 : 0,
-        'student_count' => (int) $y['student_count'],
-        'supervisor_count' => (int) $y['supervisor_count'],
-        'created_at' => date('Y-m-d H:i:s'),
-    ];
+$years = $ay_rows ? $ay_rows->fetch_all(MYSQLI_ASSOC) : [];
+
+$current_active = null;
+foreach ($years as $y) {
+    if ((int)$y['is_current'] === 1) {
+        $current_active = $y;
+        break;
+    }
+}
+if (!$current_active) {
+    foreach ($years as $y) {
+        if (strtoupper($y['status']) === 'ACTIVE') {
+            $current_active = $y;
+            break;
+        }
+    }
+}
+if (!$current_active && !empty($years)) {
+    $current_active = $years[0];
 }
 
-$current_active = $years[0] ?? null;
 $selected_year = null;
 $selected_year_history = [];
 ?>
 <!DOCTYPE html>
 <html lang="en">
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Academic Years – Admin – InternReport</title>
@@ -101,7 +107,7 @@ $selected_year_history = [];
                 <div class="flex items-center justify-between">
                     <div>
                         <h2 class="text-lg font-black text-slate-800">Academic Years</h2>
-                        <p class="text-sm text-slate-400 mt-0.5">Manage year sessions, transition active year, and create upcoming years.</p>
+                        <p class="text-sm text-slate-400 mt-0.5">Manage year sessions, transition active year, and archive completed sessions.</p>
                     </div>
                     <button
                         onclick="document.getElementById('addYearModal').classList.remove('hidden')"
@@ -137,53 +143,7 @@ $selected_year_history = [];
                     <span class="text-xl">⚠️</span>
                     <div>
                         <p class="text-sm font-bold text-amber-700">No active academic year</p>
-                        <p class="text-xs text-amber-500">Transition an UPCOMING year to ACTIVE to get started.</p>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <?php if (!empty($selected_year['id'])): ?>
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-                    <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                        <div>
-                            <p class="text-xs uppercase tracking-wider text-slate-400">Selected Academic Year</p>
-                            <h3 class="text-xl font-black text-slate-800 mt-1"><?= htmlspecialchars($selected_year['year_label']) ?></h3>
-                            <p class="text-sm text-slate-500 mt-1"><?= (new DateTime($selected_year['start_date']))->format('d M Y') ?> – <?= (new DateTime($selected_year['end_date']))->format('d M Y') ?></p>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
-                                <p class="text-xs uppercase tracking-wider text-slate-400">Students</p>
-                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['students'] ?? 0 ?></p>
-                            </div>
-                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
-                                <p class="text-xs uppercase tracking-wider text-slate-400">Supervisors</p>
-                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['supervisors'] ?? 0 ?></p>
-                            </div>
-                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
-                                <p class="text-xs uppercase tracking-wider text-slate-400">Companies</p>
-                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['companies'] ?? 0 ?></p>
-                            </div>
-                            <div class="bg-slate-50 rounded-2xl p-4 text-center">
-                                <p class="text-xs uppercase tracking-wider text-slate-400">Daily logs</p>
-                                <p class="text-2xl font-black text-slate-800 mt-2"><?= $selected_year_history['logs'] ?? 0 ?></p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-6">
-                        <h4 class="text-sm font-bold text-slate-700 mb-3">Sample Students</h4>
-                        <?php if (!empty($selected_year_history['students_list'])): ?>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <?php foreach ($selected_year_history['students_list'] as $student): ?>
-                            <div class="rounded-2xl border border-slate-100 p-4 bg-slate-50">
-                                <p class="font-semibold text-slate-800"><?= htmlspecialchars($student['full_name'] ?: $student['username']) ?></p>
-                                <p class="text-xs text-slate-500 mt-1"><?= htmlspecialchars($student['student_roll'] ?? 'No roll') ?><?= !empty($student['company_name']) ? ' · ' . htmlspecialchars($student['company_name']) : '' ?></p>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
-                        <?php else: ?>
-                        <p class="text-sm text-slate-500">No students are linked to this year yet.</p>
-                        <?php endif; ?>
+                        <p class="text-xs text-amber-500">Select "Set Active" on an academic year to set the active session.</p>
                     </div>
                 </div>
                 <?php endif; ?>
@@ -222,7 +182,8 @@ $selected_year_history = [];
                                 <?php foreach ($years as $y): ?>
                                 <?php
                                     $is_current = (int) $y['is_current'] === 1;
-                                    $status_cfg = match($y['status']) {
+                                    $status_str = strtoupper($y['status']);
+                                    $status_cfg = match($status_str) {
                                         'ACTIVE'   => ['bg-emerald-100 text-emerald-700 border-emerald-200', '🟢 Active'],
                                         'UPCOMING' => ['bg-blue-100 text-blue-700 border-blue-200',       '🔵 Upcoming'],
                                         'ARCHIVED' => ['bg-slate-100 text-slate-500 border-slate-200',    '📦 Archived'],
@@ -268,17 +229,33 @@ $selected_year_history = [];
                                         <?= (new DateTime($y['created_at']))->format('d M Y, H:i') ?>
                                     </td>
                                     <td class="px-5 py-4 text-right">
-                                        <div class="flex items-center justify-end gap-1.5">
-
-                                            <?php if ($y['status'] === 'ACTIVE'): ?>
-                                            <span class="px-3 py-1.5 bg-emerald-50 text-emerald-400 text-xs font-bold rounded-lg cursor-default flex items-center gap-1">
-                                                ✓ Active
+                                        <div class="flex items-center justify-end gap-2">
+                                            <?php if ($is_current): ?>
+                                            <span class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-xl cursor-default">
+                                                ✓ Active Session
                                             </span>
-                                            <?php endif; ?>
-                                            <?php if ($y['status'] === 'ARCHIVED'): ?>
-                                            <span class="px-3 py-1.5 bg-slate-50 text-slate-400 text-xs font-bold rounded-lg cursor-default">
+                                            <button type="button"
+                                                    onclick="confirmArchiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>', <?= (int)$y['student_count'] ?>)"
+                                                    class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1">
+                                                📦 Archive
+                                            </button>
+                                            <?php else: ?>
+                                            <button type="button"
+                                                    onclick="setActiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>')"
+                                                    class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1">
+                                                ⭐ Set Active
+                                            </button>
+                                            <?php if ($status_str !== 'ARCHIVED'): ?>
+                                            <button type="button"
+                                                    onclick="confirmArchiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>', <?= (int)$y['student_count'] ?>)"
+                                                    class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1">
+                                                📦 Archive
+                                            </button>
+                                            <?php else: ?>
+                                            <span class="px-3 py-1.5 bg-slate-100 text-slate-400 text-xs font-bold rounded-xl cursor-default">
                                                 Archived
                                             </span>
+                                            <?php endif; ?>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -315,11 +292,11 @@ $selected_year_history = [];
                     name="year_label"
                     id="create_year_label"
                     required
-                    placeholder="e.g. 2027-2028"
+                    placeholder="e.g. 2024-2025"
                     pattern="^\d{4}-\d{4}$"
                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition font-mono"
                 >
-                <p class="text-caption text-slate-400 mt-1">Format: YYYY-YYYY (e.g. 2027-2028)</p>
+                <p class="text-caption text-slate-400 mt-1">Format: YYYY-YYYY (e.g. 2024-2025)</p>
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -343,11 +320,14 @@ $selected_year_history = [];
                     >
                 </div>
             </div>
-            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                <div class="flex items-center gap-2 text-xs text-slate-500">
-                    <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <span>New years are created with <strong>UPCOMING</strong> status. Use "Activate" to make it the current year.</span>
+            <div class="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3.5 flex items-center justify-between">
+                <div>
+                    <label for="set_as_current" class="text-xs font-extrabold text-slate-800 cursor-pointer flex items-center gap-2">
+                        ⭐ Set as Current Academic Year
+                    </label>
+                    <p class="text-micro text-slate-500 mt-0.5">Automatically archives previous active session without losing student history.</p>
                 </div>
+                <input type="checkbox" name="set_as_current" id="set_as_current" value="1" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
             </div>
             <div id="createError" class="hidden bg-red-50 border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl"></div>
             <div class="flex justify-end gap-2 pt-2">
@@ -361,9 +341,37 @@ $selected_year_history = [];
     </div>
 </div>
 
-
+<!-- ══════ ARCHIVE ACADEMIC YEAR MODAL ══════ -->
+<div id="archiveYearModal" class="hidden fixed inset-0 z-[999] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="document.getElementById('archiveYearModal').classList.add('hidden')"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md z-10 overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                <span class="p-1 bg-amber-50 text-amber-600 rounded">📦</span> Archive Academic Year
+            </h3>
+            <button onclick="document.getElementById('archiveYearModal').classList.add('hidden')" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold transition cursor-pointer">✕</button>
+        </div>
+        <div class="p-6 space-y-4">
+            <p class="text-sm text-slate-600">
+                Are you sure you want to archive academic year <strong id="archive_year_label_display" class="text-slate-800 font-bold"></strong>?
+            </p>
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-700 font-medium">
+                ⚠️ This will set the year status to <strong>Archived</strong> and batch update all <strong id="archive_student_count_display">0</strong> student(s) belonging to this year to <strong>Archived</strong> status.
+            </div>
+            <div id="archiveError" class="hidden bg-red-50 border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl"></div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('archiveYearModal').classList.add('hidden')" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs rounded-xl transition cursor-pointer">Cancel</button>
+                <button type="button" id="confirmArchiveBtn" onclick="doArchiveYear()" class="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-2">
+                    📦 Archive Year & Students
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
+var targetArchiveId = 0;
+
 // ── Create Year ──────────────────────────────────────────────────
 document.getElementById('createForm').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -405,7 +413,70 @@ document.getElementById('create_year_label').addEventListener('input', function(
     }
 });
 
+// ── Set Active Year ──────────────────────────────────────────────
+function setActiveYear(id, label) {
+    if (!confirm('Set academic year "' + label + '" as the active current year?')) return;
+    
+    var fd = new FormData();
+    fd.append('id', id);
+    fd.append('year_label', label);
 
+    fetch('api/set_active_year.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showToast('success', data.message || 'Active year updated.');
+                setTimeout(function() { location.reload(); }, 800);
+            } else {
+                showToast('error', data.error || 'Failed to update active year.');
+            }
+        })
+        .catch(function() {
+            showToast('error', 'Network error setting active year.');
+        });
+}
+
+// ── Confirm & Do Archive Year ────────────────────────────────────
+function confirmArchiveYear(id, label, studentCount) {
+    targetArchiveId = id;
+    document.getElementById('archive_year_label_display').textContent = label;
+    document.getElementById('archive_student_count_display').textContent = studentCount;
+    document.getElementById('archiveError').classList.add('hidden');
+    document.getElementById('archiveYearModal').classList.remove('hidden');
+}
+
+function doArchiveYear() {
+    if (!targetArchiveId) return;
+    var btn = document.getElementById('confirmArchiveBtn');
+    var errDiv = document.getElementById('archiveError');
+    btn.disabled = true;
+    btn.textContent = 'Archiving...';
+    errDiv.classList.add('hidden');
+
+    var fd = new FormData();
+    fd.append('id', targetArchiveId);
+
+    fetch('api/archive_year.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                document.getElementById('archiveYearModal').classList.add('hidden');
+                showToast('success', data.message || 'Academic year archived.');
+                setTimeout(function() { location.reload(); }, 800);
+            } else {
+                errDiv.textContent = data.error || 'Failed to archive year.';
+                errDiv.classList.remove('hidden');
+            }
+        })
+        .catch(function() {
+            errDiv.textContent = 'Network error while archiving.';
+            errDiv.classList.remove('hidden');
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.textContent = '📦 Archive Year & Students';
+        });
+}
 
 // ── Toast ────────────────────────────────────────────────────────
 function showToast(type, message) {

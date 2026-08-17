@@ -81,18 +81,14 @@ $page = max(1, (int) ($_GET['page'] ?? 1));
 $per_page = 10;
 $tab = 'dashboard';
 
-// Fetch distinct academic years for supervisor's assigned students
-$valid_years = [];
-$ay_q = $db->prepare("SELECT DISTINCT u.academic_year FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE sp.supervisor_id = ? AND u.role = 'student' AND u.academic_year IS NOT NULL AND u.academic_year <> '' ORDER BY u.academic_year DESC");
-$ay_q->bind_param("i", $sup_id);
-$ay_q->execute();
-$res = $ay_q->get_result();
-if ($res) {
-    while ($row = $res->fetch_row()) {
-        $valid_years[] = $row[0];
-    }
-}
-$current_academic_year = $valid_years[0] ?? (date('Y') . '-' . (date('Y') + 1));
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+ensure_academic_years_table($db);
+
+$filter_year = trim($_GET['year'] ?? ($_GET['academic_year'] ?? ''));
+
+// Fetch academic years from academic_years table
+$valid_years = get_academic_years_list($db);
+$current_academic_year = get_active_academic_year_label($db);
 $selected_year = $filter_year ?: $current_academic_year;
 
 // ── Current Week Boundaries ─────────────────────────────────────────
@@ -138,18 +134,33 @@ $total_reports = (int) ($row[0] ?? 0);
 // DYNAMIC CURRENT WEEK CALCULATION (per student)
 // ══════════════════════════════════════════════════════════════════════
 
-$stu_detail_sql = "
-    SELECT u.id AS uid, u.username, u.email, u.academic_year,
-           sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
-           sp.internship_start_date, sp.internship_end_date,
-           sp.instructor_name, sp.instructor_email, sp.instructor_id
-    FROM users u
-    JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
-    ORDER BY sp.full_name ASC
-";
-$stu_detail_stmt = $db->prepare($stu_detail_sql);
-$stu_detail_stmt->bind_param("i", $sup_id);
+if ($filter_year && $filter_year !== 'all') {
+    $stu_detail_sql = "
+        SELECT u.id AS uid, u.username, u.email, u.academic_year,
+               sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
+               sp.internship_start_date, sp.internship_end_date,
+               sp.instructor_name, sp.instructor_email, sp.instructor_id
+        FROM users u
+        JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role = 'student' AND sp.supervisor_id = ? AND u.academic_year = ?
+        ORDER BY sp.full_name ASC
+    ";
+    $stu_detail_stmt = $db->prepare($stu_detail_sql);
+    $stu_detail_stmt->bind_param("is", $sup_id, $filter_year);
+} else {
+    $stu_detail_sql = "
+        SELECT u.id AS uid, u.username, u.email, u.academic_year,
+               sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
+               sp.internship_start_date, sp.internship_end_date,
+               sp.instructor_name, sp.instructor_email, sp.instructor_id
+        FROM users u
+        JOIN student_profiles sp ON sp.user_id = u.id
+        WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
+        ORDER BY sp.full_name ASC
+    ";
+    $stu_detail_stmt = $db->prepare($stu_detail_sql);
+    $stu_detail_stmt->bind_param("i", $sup_id);
+}
 $stu_detail_stmt->execute();
 $res = $stu_detail_stmt->get_result();
 $all_students_detail = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
@@ -845,12 +856,18 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 
             <div class="flex items-center gap-5 shrink-0">
                 <?php if ($tab === 'dashboard'): ?>
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full no-print">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="text-xs font-bold text-emerald-700"><?= $total_assigned ?> Assigned</span>
-                    <?php if ($selected_year): ?>
-                    <span class="text-sm font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded font-mono"><?= htmlspecialchars($selected_year) ?></span>
-                    <?php endif; ?>
+                <div class="flex items-center gap-2.5 no-print">
+                    <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span class="text-xs font-bold text-emerald-700"><?= $total_assigned ?> Assigned</span>
+                    </div>
+                    <form method="GET" class="flex items-center">
+                        <?php if ($filter_status): ?><input type="hidden" name="status" value="<?= htmlspecialchars($filter_status) ?>"><?php endif; ?>
+                        <?php if ($search): ?><input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>"><?php endif; ?>
+                        <select name="year" onchange="this.form.submit()" class="bg-white border border-teal-200 text-teal-900 focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-xs font-semibold rounded-lg px-2.5 py-1.5 shadow-sm focus:outline-none transition cursor-pointer">
+                            <?= render_academic_year_options($db, $filter_year, true, 'All Academic Years') ?>
+                        </select>
+                    </form>
                 </div>
                 <?php endif; ?>
 

@@ -21,21 +21,21 @@ if ($res_st) {
 $def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
 $def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
 
-// ── Academic Years (for dynamic dropdowns and filtering) ────────
-$res_ay = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+ensure_academic_years_table($db);
+
+// ── Academic Years (from academic_years table) ────────────────
+$active_ay_rec = get_active_academic_year($db);
+$current_active_year_label = $active_ay_rec ? $active_ay_rec['year_label'] : '2023-2024';
+
+$all_ay_records = get_all_academic_years($db);
 $academic_years = [];
-if ($res_ay) {
-    while ($row = $res_ay->fetch_assoc()) {
-        if (!empty($row['academic_year'])) {
-            $academic_years[] = $row['academic_year'];
-        }
-    }
-}
-if (!in_array('2025-2026', $academic_years, true)) {
-    array_unshift($academic_years, '2025-2026');
+$ay_label_to_id = [];
+foreach ($all_ay_records as $rec) {
+    $academic_years[] = $rec['year_label'];
+    $ay_label_to_id[$rec['year_label']] = $rec['id'];
 }
 $all_academic_years = array_map(function($y) { return ['year_label' => $y]; }, $academic_years);
-$ay_label_to_id = [];
 
 // Determine active tab first
 $tab = $_GET['tab'] ?? 'overview';
@@ -44,11 +44,11 @@ if (!in_array($tab, ['overview', 'students', 'supervisors', 'manage', 'archive',
 }
 
 // Determine selected academic year filter
-// On Reports tab ('history'), default to '2025-2026'; on other tabs (Overview/Manage), default to 'all'
+// On Reports tab ('history'), default to current active year; on other tabs (Overview/Manage), default to 'all'
 if (isset($_GET['year']) && $_GET['year'] !== '') {
     $selected_year = trim($_GET['year']);
 } elseif ($tab === 'history') {
-    $selected_year = '2025-2026';
+    $selected_year = $current_active_year_label;
 } else {
     $selected_year = 'all';
 }
@@ -805,12 +805,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                         <div>
                             <label class="text-xs font-semibold text-slate-700 tracking-wide uppercase block mb-1.5">Academic Year *</label>
                             <select name="s_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:border-purple-500 focus:bg-white focus:outline-none transition-all duration-200">
-                                <?php foreach ($academic_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay) ?>" <?= $ay === '2025-2026' ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
-                                <?php endforeach; ?>
-                                <?php if (empty($academic_years)): ?>
-                                <option value="">No academic years configured</option>
-                                <?php endif; ?>
+                                <?= render_academic_year_options($db, $current_active_year_label, false) ?>
                             </select>
                         </div>
                         <div>
@@ -860,9 +855,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                             <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
                             <select name="t_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 <option value="">— Select Year —</option>
-                                <?php foreach ($academic_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay) ?>" <?= $ay === '2025-2026' ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
-                                <?php endforeach; ?>
+                                <?= render_academic_year_options($db, $current_active_year_label, false) ?>
                             </select>
                         </div>
                         <div>
@@ -1197,10 +1190,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                             <input type="hidden" name="tab" value="history">
                             <?php if (!empty($search_term)): ?><input type="hidden" name="search" value="<?= htmlspecialchars($search_term) ?>"><?php endif; ?>
                             <select name="year" onchange="this.form.submit()" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 font-semibold focus:outline-none focus:border-teal-500 transition cursor-pointer">
-                                <option value="all" <?= $selected_year === 'all' ? 'selected' : '' ?>>All Academic Years</option>
-                                <?php foreach ($academic_years as $ay): ?>
-                                <option value="<?= htmlspecialchars($ay) ?>" <?= $selected_year === $ay ? 'selected' : '' ?>><?= htmlspecialchars($ay) ?></option>
-                                <?php endforeach; ?>
+                                <?= render_academic_year_options($db, $selected_year, true, 'All Academic Years') ?>
                             </select>
                         </form>
                     </div>
