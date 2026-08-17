@@ -428,6 +428,13 @@ $a_res = $a_count_stmt->get_result();
 $a_row = $a_res ? $a_res->fetch_row() : null;
 $absent_count = (int) ($a_row[0] ?? 0);
 
+$t_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IS NOT NULL AND attendance_status != ''");
+$t_count_stmt->bind_param("i", $internship_id);
+$t_count_stmt->execute();
+$t_res = $t_count_stmt->get_result();
+$t_row = $t_res ? $t_res->fetch_row() : null;
+$total_logged_attendance_days = (int) ($t_row[0] ?? 0);
+
 // Overall internship attendance details for tooltips
 $pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
 $pd_stmt->bind_param("i", $internship_id);
@@ -647,7 +654,7 @@ $sup_eval_stmt->execute();
 $sup_res = $sup_eval_stmt->get_result();
 $wf_step5_done = (bool) ($sup_res ? $sup_res->fetch_assoc() : null);
 
-// ── FEEDBACK & GRADES (CU Instructor + Company Supervisor) ──
+// ── FEEDBACK & GRADES (Instructor + Supervisor) ──
 $instructor_eval_stmt = $db->prepare("SELECT grade, comment, instructor_comments, signature_type, signature_value, report_status, evaluated_at FROM report_evaluations WHERE student_id = ? AND week_number = ? LIMIT 1");
 $instructor_eval_stmt->bind_param("ii", $internship_id, $selected_week);
 $instructor_eval_stmt->execute();
@@ -661,10 +668,10 @@ $supervisor_eval_res = $supervisor_eval_stmt->get_result();
 $supervisor_eval = $supervisor_eval_res ? $supervisor_eval_res->fetch_assoc() : null;
 
 // Reviewer display names
-$supervisor_reviewer = $supervisor_name !== '' && $supervisor_name !== '—' ? $supervisor_name : 'Company Supervisor';
-$instructor_reviewer = $instructor_name !== '' && $instructor_name !== '—' ? $instructor_name : 'CU Instructor';
+$supervisor_reviewer = $supervisor_name !== '' && $supervisor_name !== '—' ? $supervisor_name : 'Supervisor';
+$instructor_reviewer = $instructor_name !== '' && $instructor_name !== '—' ? $instructor_name : 'Instructor';
 
-// CU Instructor grade labels
+// Instructor grade labels
 $instructor_grade_map = [
     'excellent'         => ['Excellent',         'bg-emerald-100 text-emerald-700'],
     'good'              => ['Good',              'bg-blue-100 text-blue-700'],
@@ -672,7 +679,7 @@ $instructor_grade_map = [
     'needs_improvement' => ['Needs Improvement', 'bg-red-100 text-red-700'],
 ];
 
-// Company Supervisor grade labels
+// Supervisor grade labels
 $supervisor_grade_map = [
     'A' => ['A', 'bg-emerald-100 text-emerald-700'],
     'B' => ['B', 'bg-blue-100 text-blue-700'],
@@ -750,7 +757,18 @@ if (!empty($weeks)) {
     }
 }
 $total_weeks = count($weeks);
-$attendance_rate = ($present_count + $absent_count) > 0 ? round(($present_count / ($present_count + $absent_count)) * 100) : 0;
+$total_present_days = $present_count;
+$total_expected_days = 0;
+if ($intern_start && $intern_end) {
+    $att_cursor = new DateTime($intern_start);
+    $att_end    = new DateTime($intern_end);
+    while ($att_cursor <= $att_end) {
+        if ((int) $att_cursor->format('N') <= 5) $total_expected_days++;
+        $att_cursor->modify('+1 day');
+    }
+}
+if ($total_expected_days < 1) $total_expected_days = max(1, $total_weeks * 5);
+$attendance_rate = round(($total_present_days / max(1, $total_expected_days)) * 100);
 
 // Chart data
 $weekly_hours_data = [];
@@ -1542,10 +1560,10 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                             </div>
-                            <span class="text-label font-bold <?= $attendance_rate >= 80 ? 'text-emerald-600 bg-emerald-50 border border-emerald-200' : 'text-amber-600 bg-amber-50 border border-amber-200' ?> px-2 py-0.5 rounded-full"><?= $attendance_rate >= 80 ? 'Good' : 'Watch' ?></span>
+                            <span class="text-label font-bold <?= $attendance_rate >= 75 ? 'text-emerald-600 bg-emerald-50 border border-emerald-200' : 'text-amber-600 bg-amber-50 border border-amber-200' ?> px-2 py-0.5 rounded-full"><?= $attendance_rate >= 75 ? 'Good' : 'Needs Attention' ?></span>
                         </div>
                         <p class="text-2xl font-black text-slate-800"><?= $attendance_rate ?>%</p>
-                        <p class="text-caption text-slate-400 font-medium mt-1">Overall Attendance</p>
+                        <p class="text-caption text-slate-400 font-medium mt-1"><?= $total_present_days ?> / <?= $total_expected_days ?> days attended</p>
                     </div>
                 </div>
                 <!-- Weeks Completed -->
@@ -1570,19 +1588,11 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
                         Internship Progress
                     </h3>
-                    <?php if ($intern_start && $intern_end):
-                        $start_dt = new DateTime($intern_start);
-                        $end_dt   = new DateTime($intern_end);
-                        $now_dt   = new DateTime();
-                        $total_days = $start_dt->diff($end_dt)->days;
-                        $elapsed_days = max(0, $start_dt->diff($now_dt)->days);
-                        $progress_pct = min(round(($elapsed_days / max($total_days, 1)) * 100), 100);
-                    ?>
-                    <span class="font-bold text-indigo-600"><?= $progress_pct ?>% Elapsed</span>
-                    <?php endif; ?>
+                    <?php $progress_pct = $total_weeks > 0 ? min(round(($weeks_completed / $total_weeks) * 100), 100) : 0; ?>
+                    <span class="font-bold text-indigo-600"><?= $progress_pct ?>% Completed</span>
                 </div>
                 <div class="w-full bg-slate-100 rounded-full h-3 mb-4">
-                    <div class="bg-indigo-500 rounded-full h-3 transition-all duration-700 ease-out shadow-sm" style="width: <?= $total_weeks > 0 ? min(round(($weeks_completed / $total_weeks) * 100), 100) : 0 ?>%"></div>
+                    <div class="bg-indigo-500 rounded-full h-3 transition-all duration-700 ease-out shadow-sm" style="width: <?= $progress_pct ?>%;"></div>
                 </div>
                 <div class="flex items-center justify-between text-caption">
                     <div class="flex items-center gap-4">
@@ -2334,32 +2344,80 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                     <!-- ════ FEEDBACK & GRADES ════ -->
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-                        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
-                            <h3 class="text-caption font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                                <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
+                        <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                            <h3 class="text-[11px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/></svg>
                                 Feedback &amp; Grades — Week <?= $selected_week ?>
                             </h3>
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border <?= $report_status_color ?>">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-full border <?= $report_status_color ?>">
                                 <span class="w-1.5 h-1.5 rounded-full <?= $report_status_dot ?>"></span>
                                 <?= $report_status_label ?>
                             </span>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 p-4">
 
-                            <!-- ── Company Supervisor Feedback ── -->
-                            <div class="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-5 flex flex-col">
-                                <div class="flex items-start gap-3 mb-3">
-                                    <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-16 0H3m14-4h-2m2-4h-2m-4 8v-4m-4 0H7m2 4H7"/></svg>
+                            <!-- ── Instructor Feedback ── -->
+                            <div class="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-3.5 flex flex-col">
+                                <div class="flex items-center gap-2.5 mb-2">
+                                    <div class="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
                                     </div>
                                     <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-black text-slate-800">Company Supervisor Feedback</p>
-                                        <p class="text-xs text-slate-400 font-medium"><?= htmlspecialchars($supervisor_reviewer) ?></p>
+                                        <p class="text-xs font-bold text-slate-800">Instructor Feedback</p>
+                                        <p class="text-[11px] text-slate-400 font-medium"><?= htmlspecialchars($instructor_reviewer) ?></p>
+                                    </div>
+                                    <?php if ($instructor_evaluated && !empty($instructor_eval['grade'])): ?>
+                                    <?php $ig = $instructor_eval['grade']; $igd = $instructor_grade_map[$ig] ?? [ucwords(str_replace('_', ' ', $ig)), 'bg-slate-100 text-slate-600']; ?>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold <?= $igd[1] ?> shrink-0"><?= htmlspecialchars($igd[0]) ?></span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <?php if ($instructor_evaluated): ?>
+                                <div class="flex-1 space-y-2">
+                                    <?php $inst_comment = trim($instructor_eval['comment'] ?? ''); ?>
+                                    <?php if ($inst_comment !== ''): ?>
+                                    <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($inst_comment)) ?></p>
+                                    <?php else: ?>
+                                    <p class="text-xs italic text-slate-400">No written comments provided.</p>
+                                    <?php endif; ?>
+                                    <?php if (($instructor_eval['report_status'] ?? '') === 'rejected' && !empty($instructor_eval['instructor_comments'])): ?>
+                                    <div class="bg-red-50 border border-red-100 rounded-lg p-2">
+                                        <p class="text-[11px] font-bold text-red-400 uppercase tracking-wider mb-0.5">Revision Requested</p>
+                                        <p class="text-xs text-red-600 leading-relaxed"><?= nl2br(htmlspecialchars($instructor_eval['instructor_comments'])) ?></p>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                                <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                    Evaluated <?= htmlspecialchars((new DateTime($instructor_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
+                                </p>
+                                <?php else: ?>
+                                <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
+                                    <div>
+                                        <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-1">
+                                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        </div>
+                                        <p class="text-xs font-semibold text-slate-500">Awaiting instructor evaluation…</p>
+                                        <p class="text-[11px] text-slate-400 mt-0.5">Not reviewed yet.</p>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+
+                            <!-- ── Supervisor Feedback ── -->
+                            <div class="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-3.5 flex flex-col">
+                                <div class="flex items-center gap-2.5 mb-2">
+                                    <div class="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-16 0H3m14-4h-2m2-4h-2m-4 8v-4m-4 0H7m2 4H7"/></svg>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-xs font-bold text-slate-800">Supervisor Feedback</p>
+                                        <p class="text-[11px] text-slate-400 font-medium"><?= htmlspecialchars($supervisor_reviewer) ?></p>
                                     </div>
                                     <?php if (!empty($supervisor_eval)): ?>
                                     <?php $sg = $supervisor_eval['weekly_grade'] ?? ''; $sgd = $supervisor_grade_map[$sg] ?? [$sg ?: '—', 'bg-slate-100 text-slate-600']; ?>
-                                    <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl text-sm font-black border border-slate-200 <?= $sgd[1] ?> shrink-0"><?= htmlspecialchars($sgd[0]) ?></span>
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold <?= $sgd[1] ?> shrink-0"><?= htmlspecialchars($sgd[0]) ?></span>
                                     <?php endif; ?>
                                 </div>
 
@@ -2367,71 +2425,23 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                 <div class="flex-1">
                                     <?php $sup_comments = trim($supervisor_eval['supervisor_comments'] ?? ''); ?>
                                     <?php if ($sup_comments !== ''): ?>
-                                    <p class="text-sm text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($sup_comments)) ?></p>
+                                    <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($sup_comments)) ?></p>
                                     <?php else: ?>
-                                    <p class="text-sm italic text-slate-400">No written comments provided.</p>
+                                    <p class="text-xs italic text-slate-400">No written comments provided.</p>
                                     <?php endif; ?>
                                 </div>
-                                <p class="text-caption text-slate-400 mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                     Evaluated <?= htmlspecialchars((new DateTime($supervisor_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
                                 </p>
                                 <?php else: ?>
-                                <div class="flex-1 flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 py-8 text-center">
+                                <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
                                     <div>
-                                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-lg mx-auto mb-2">
-                                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-1">
+                                            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                         </div>
-                                        <p class="text-sm font-semibold text-slate-500">Awaiting supervisor evaluation…</p>
-                                        <p class="text-xs text-slate-400 mt-1">Your company supervisor has not reviewed this week yet.</p>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-
-                            <!-- ── CU Instructor Feedback ── -->
-                            <div class="rounded-2xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-5 flex flex-col">
-                                <div class="flex items-start gap-3 mb-3">
-                                    <div class="w-10 h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm font-black text-slate-800">CU Instructor Feedback</p>
-                                        <p class="text-xs text-slate-400 font-medium"><?= htmlspecialchars($instructor_reviewer) ?></p>
-                                    </div>
-                                    <?php if ($instructor_evaluated && !empty($instructor_eval['grade'])): ?>
-                                    <?php $ig = $instructor_eval['grade']; $igd = $instructor_grade_map[$ig] ?? [ucwords(str_replace('_', ' ', $ig)), 'bg-slate-100 text-slate-600']; ?>
-                                    <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-black <?= $igd[1] ?> shrink-0"><?= htmlspecialchars($igd[0]) ?></span>
-                                    <?php endif; ?>
-                                </div>
-
-                                <?php if ($instructor_evaluated): ?>
-                                <div class="flex-1 space-y-3">
-                                    <?php $inst_comment = trim($instructor_eval['comment'] ?? ''); ?>
-                                    <?php if ($inst_comment !== ''): ?>
-                                    <p class="text-sm text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($inst_comment)) ?></p>
-                                    <?php else: ?>
-                                    <p class="text-sm italic text-slate-400">No written comments provided.</p>
-                                    <?php endif; ?>
-                                    <?php if (($instructor_eval['report_status'] ?? '') === 'rejected' && !empty($instructor_eval['instructor_comments'])): ?>
-                                    <div class="bg-red-50 border border-red-100 rounded-xl p-3">
-                                        <p class="text-label font-bold text-red-400 uppercase tracking-wider mb-1">Revision Requested</p>
-                                        <p class="text-sm text-red-600 leading-relaxed"><?= nl2br(htmlspecialchars($instructor_eval['instructor_comments'])) ?></p>
-                                    </div>
-                                    <?php endif; ?>
-                                </div>
-                                <p class="text-caption text-slate-400 mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    Evaluated <?= htmlspecialchars((new DateTime($instructor_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
-                                </p>
-                                <?php else: ?>
-                                <div class="flex-1 flex items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/60 py-8 text-center">
-                                    <div>
-                                        <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-lg mx-auto mb-2">
-                                            <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        </div>
-                                        <p class="text-sm font-semibold text-slate-500">Awaiting instructor evaluation…</p>
-                                        <p class="text-xs text-slate-400 mt-1">Your CU instructor has not reviewed this week yet.</p>
+                                        <p class="text-xs font-semibold text-slate-500">Awaiting supervisor evaluation…</p>
+                                        <p class="text-[11px] text-slate-400 mt-0.5">Not reviewed yet.</p>
                                     </div>
                                 </div>
                                 <?php endif; ?>

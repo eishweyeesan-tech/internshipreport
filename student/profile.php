@@ -21,7 +21,13 @@ $profile = $res ? $res->fetch_assoc() : null;
 if (!$profile) {
     $ins_prof = $db->prepare("INSERT INTO student_profiles (user_id, full_name) VALUES (?, ?)");
     $ins_prof->bind_param("is", $user_id, $username);
-    $ins_prof->execute();
+    try {
+        $ins_prof->execute();
+    } catch (mysqli_sql_exception $e) {
+        // user_id not found in users table — redirect to login
+        header('Location: ../logout.php');
+        exit;
+    }
     $profile_stmt->bind_param("i", $user_id);
     $profile_stmt->execute();
     $res = $profile_stmt->get_result();

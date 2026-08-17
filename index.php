@@ -21,6 +21,11 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
     }
     exit;
 }
+
+require_once __DIR__ . '/config/db.php';
+
+$stat_students   = (int)($mysqli->query("SELECT COUNT(*) AS c FROM users WHERE role = 'student'")->fetch_assoc()['c'] ?? 0);
+$stat_companies  = (int)($mysqli->query("SELECT COUNT(*) AS c FROM companies")->fetch_assoc()['c'] ?? 0);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -119,7 +124,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <p class="text-xl font-bold text-teal-700">Manage internship reports, track student progress, and simplify evaluation in one centralized system.</p>
 
                     <p class="text-lg text-slate-600 leading-relaxed max-w-xl">
-                        A centralized internship report management system for students, supervisors, and company instructors.
+                        A centralized internship report management system for students, CU supervisors, and company instructors.
                     </p>
 
                     <div class="flex items-center gap-4">
@@ -131,19 +136,19 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                         </a>
                     </div>
 
-                    <!-- Value Highlights (non-numeric — no test/demo statistics) -->
-                    <div class="flex flex-wrap items-center gap-x-8 gap-y-4 pt-4">
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-emerald-100/80 flex items-center justify-center text-emerald-700 text-base">🔒</div>
-                            <p class="text-sm font-semibold text-slate-600">Secure &amp; Private</p>
+                    <!-- Hero Inline Metrics -->
+                    <div class="flex flex-wrap items-baseline gap-x-8 gap-y-3 pt-4">
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-black text-slate-800"><?= $stat_students ?>+</span>
+                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Students</span>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-teal-100/80 flex items-center justify-center text-teal-700 text-base">📈</div>
-                            <p class="text-sm font-semibold text-slate-600">Real-time Progress Tracking</p>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-black text-slate-800"><?= $stat_companies ?>+</span>
+                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Companies</span>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <div class="w-9 h-9 rounded-xl bg-emerald-100/80 flex items-center justify-center text-emerald-700 text-base">🔔</div>
-                            <p class="text-sm font-semibold text-slate-600">Automated Alerts</p>
+                        <div class="flex items-baseline gap-2">
+                            <span class="text-2xl font-black text-slate-800">100%</span>
+                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Digital</span>
                         </div>
                     </div>
                 </div>
@@ -186,7 +191,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                             <div class="flex items-center gap-4">
                                 <div class="w-10 h-10 rounded-xl bg-teal-100 text-teal-700 flex items-center justify-center text-lg shrink-0">👨‍🏫</div>
                                 <div>
-                                    <p class="text-sm font-bold text-slate-700">Instructor Review</p>
+                                    <p class="text-sm font-bold text-slate-700">Company Instructor Review</p>
                                     <p class="text-xs text-slate-400">Reviews and approves submissions</p>
                                 </div>
                             </div>
@@ -194,7 +199,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                             <div class="flex items-center gap-4">
                                 <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg shrink-0">🏆</div>
                                 <div>
-                                    <p class="text-sm font-bold text-slate-700">Supervisor Grading</p>
+                                    <p class="text-sm font-bold text-slate-700">CU Supervisor Grading</p>
                                     <p class="text-xs text-slate-400">Assigns weekly grades with feedback</p>
                                 </div>
                             </div>
@@ -232,7 +237,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-600 to-teal-700 flex items-center justify-center text-2xl text-white shadow-lg shadow-teal-600/30 mb-6 group-hover:scale-110 transition-transform duration-300">📝</div>
                     <h3 class="text-xl font-bold text-slate-800 mb-3">Daily Log Tracking</h3>
                     <p class="text-sm text-slate-600 leading-relaxed">
-                        Students can submit daily logs with tasks performed, tools used, and skills learned. Supervisors can review in real-time.
+                        Students can submit daily logs with tasks performed, tools used, and skills learned. CU Supervisors can review in real-time.
                     </p>
                 </div>
 
@@ -248,7 +253,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 <!-- Feature 3 -->
                 <div class="group bg-gradient-to-br from-slate-50 to-white border border-slate-200/60 rounded-3xl p-8 card-hover transition-all duration-300 hover:shadow-xl hover:border-teal-200">
                     <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-600 to-emerald-600 flex items-center justify-center text-2xl text-white shadow-lg shadow-teal-600/30 mb-6 group-hover:scale-110 transition-transform duration-300">👨‍🏫</div>
-                    <h3 class="text-xl font-bold text-slate-800 mb-3">Digital Instructor Evaluation</h3>
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">Company Instructor Evaluation</h3>
                     <p class="text-sm text-slate-600 leading-relaxed">
                         Company instructors evaluate student performance through a secure shared link — no account or login required.
                     </p>
@@ -257,9 +262,9 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 <!-- Feature 4 -->
                 <div class="group bg-gradient-to-br from-slate-50 to-white border border-slate-200/60 rounded-3xl p-8 card-hover transition-all duration-300 hover:shadow-xl hover:border-amber-200">
                     <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-2xl text-white shadow-lg shadow-amber-500/30 mb-6 group-hover:scale-110 transition-transform duration-300">🎓</div>
-                    <h3 class="text-xl font-bold text-slate-800 mb-3">University Grading</h3>
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">CU Supervisor Grading</h3>
                     <p class="text-sm text-slate-600 leading-relaxed">
-                        University supervisors assign weekly grades (A-F) with detailed comments on student performance.
+                        CU supervisors assign weekly grades (A-F) with detailed comments on student performance.
                     </p>
                 </div>
 
@@ -268,7 +273,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center text-2xl text-white shadow-lg shadow-red-500/30 mb-6 group-hover:scale-110 transition-transform duration-300">⚠️</div>
                     <h3 class="text-xl font-bold text-slate-800 mb-3">Progress Alerts</h3>
                     <p class="text-sm text-slate-600 leading-relaxed">
-                        Automatic email alerts notify supervisors when students fall behind schedule on their daily logs.
+                        Automatic email alerts notify CU supervisors when students fall behind schedule on their daily logs.
                     </p>
                 </div>
 
@@ -293,7 +298,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 </span>
                 <h2 class="text-4xl font-black text-slate-800 mb-4">Built for All Roles</h2>
                 <p class="text-lg text-slate-600 max-w-2xl mx-auto">
-                    Three authenticated roles — Student, Supervisor, and Administrator — plus a company Instructor who reviews through a secure link.
+                    Three authenticated roles — Student, CU Supervisor, and Administrator — plus a company Instructor who reviews through a secure link.
                 </p>
             </div>
 
@@ -332,7 +337,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <div class="h-2 bg-gradient-to-r from-emerald-600 to-emerald-700"></div>
                     <div class="p-8">
                         <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center text-3xl text-white shadow-lg shadow-emerald-600/30 mb-6">👨‍💼</div>
-                        <h3 class="text-2xl font-bold text-slate-800 mb-3">Supervisors</h3>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-3">CU Supervisors</h3>
                         <p class="text-sm text-slate-600 mb-6 leading-relaxed">
                             Monitor student progress, assign weekly grades, and receive alerts when students need attention.
                         </p>
@@ -351,7 +356,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                             </li>
                         </ul>
                         <a href="login.php" class="block w-full text-center px-6 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition-all duration-200 cursor-pointer">
-                            Supervisor Login →
+                            CU Supervisor Login →
                         </a>
                     </div>
                 </div>
@@ -361,7 +366,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <div class="h-2 bg-gradient-to-r from-amber-500 to-amber-600"></div>
                     <div class="p-8">
                         <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center text-3xl text-white shadow-lg shadow-amber-500/30 mb-6">👨‍🏫</div>
-                        <h3 class="text-2xl font-bold text-slate-800 mb-1">Instructors</h3>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-1">Company Instructors</h3>
                         <p class="text-xs font-bold text-amber-600 uppercase tracking-wider mb-4">Company Reviewers</p>
                         <p class="text-sm text-slate-600 mb-6 leading-relaxed">
                             Review student internship reports through a secure shared link. No account or login is required.
@@ -442,7 +447,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                         Simplifying Internship Report Management
                     </h2>
                     <p class="text-lg text-slate-600 leading-relaxed">
-                        InternReport is an Internship Report Management System that brings daily report submission, weekly reports and reflections, student progress tracking, supervisor review and grading, instructor feedback through a secure shared link, notifications, and attendance tracking into one centralized platform.
+                        InternReport is an Internship Report Management System that brings daily report submission, weekly reflections, student progress tracking, CU supervisor review and grading, company instructor feedback through a secure shared link, notifications, and attendance tracking into one centralized platform.
                     </p>
                     <div class="grid grid-cols-2 gap-6 pt-4">
                         <div class="flex items-center gap-4">
@@ -478,7 +483,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                 <div class="relative">
                     <div class="bg-gradient-to-br from-teal-700 to-emerald-800 rounded-3xl p-10 text-white shadow-2xl shadow-teal-700/30">
                         <p class="text-xl font-black mb-2">One Platform, Three Connected Roles</p>
-                        <p class="text-sm text-teal-100 mb-10">Students submit. Instructors review. Supervisors grade. Everything stays connected.</p>
+                        <p class="text-sm text-teal-100 mb-10">Students submit. Company Instructors review. CU Supervisors grade. Everything stays connected.</p>
                         <div class="text-center">
                             <div class="inline-block bg-white/10 backdrop-blur-sm rounded-2xl px-10 py-6 mb-4 w-full">
                                 <div class="w-14 h-14 mx-auto rounded-2xl bg-white/20 flex items-center justify-center text-2xl mb-3">🎓</div>
@@ -489,12 +494,12 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                             <div class="flex items-center justify-center gap-4">
                                 <div class="flex-1 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-6">
                                     <div class="w-14 h-14 mx-auto rounded-2xl bg-white/20 flex items-center justify-center text-2xl mb-3">👨‍🏫</div>
-                                    <p class="font-bold text-base">Instructor</p>
+                                    <p class="font-bold text-base">Company Instructor</p>
                                     <p class="text-xs text-teal-100 mt-1">Reviews &amp; approves</p>
                                 </div>
                                 <div class="flex-1 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-6">
                                     <div class="w-14 h-14 mx-auto rounded-2xl bg-white/20 flex items-center justify-center text-2xl mb-3">🏆</div>
-                                    <p class="font-bold text-base">Supervisor</p>
+                                    <p class="font-bold text-base">CU Supervisor</p>
                                     <p class="text-xs text-teal-100 mt-1">Grades &amp; feedback</p>
                                 </div>
                             </div>
@@ -531,7 +536,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                         <span class="text-xl font-extrabold text-white tracking-tight">InternReport</span>
                     </div>
                     <p class="text-sm leading-relaxed">
-                        A centralized internship report management system for students, supervisors, instructors, and administrators.
+                        A centralized internship report management system for students, CU supervisors, company instructors, and administrators.
                     </p>
                 </div>
                 <div>
@@ -546,7 +551,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
                     <h4 class="text-white font-bold mb-4">Login</h4>
                     <ul class="space-y-2">
                         <li><a href="login.php" class="text-sm hover:text-white transition">Student Login</a></li>
-                        <li><a href="login.php" class="text-sm hover:text-white transition">Supervisor Login</a></li>
+                        <li><a href="login.php" class="text-sm hover:text-white transition">CU Supervisor Login</a></li>
                         <li><a href="login.php" class="text-sm hover:text-white transition">Admin Login</a></li>
                     </ul>
                 </div>

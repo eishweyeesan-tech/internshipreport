@@ -137,7 +137,6 @@ if (!empty($weeks)) {
 
                 <!-- Header -->
                 <div class="mb-6">
-                    <h1 class="text-xl font-bold text-slate-800 mb-1">သင်ကြားရေး</h1>
                     <p class="text-xs text-gray-400">သင့်internship report ကို တိကျစွာပြီးမြောက်အောင် အောက်ပါ လမ်းညွှန်ချက်များကို လိုက်နာပါ။</p>
                 </div>
 
@@ -154,8 +153,9 @@ if (!empty($weeks)) {
                                     <li>• အလုပ်လုပ်သည့်နေ့တိုင်း Log in ဝင်ပြီး သင့်အလုပ်များကို မှတ်တမ်းတင်ပါ။</li>
                                     <li>• <strong>အလုပ်ခေါင်းစဉ်</strong>၊ <strong>အလုပ်အသေးစိတ်</strong>နှင့် <strong>အသုံးပြုသည့်ကိရိယာများ</strong>ကို ဖြည့်ပါ။</li>
                                     <li>• သင့်အလုပ်၏ အစပိုင်းနှင့် အဆုံးအချိန်ကို မှတ်တမ်းတင်ပါ။</li>
-                                    <li>• သင့်တက်ရောက်မှုအခြေအနေကို <strong>တက်ရောက်</strong> သို့မဟုတ် <strong>မတက်ရောက်</strong> ဟု မှတ်သားပါ။</li>
-                                    <li>• ဆရာ/ဆရာမ စစ်ဆေးခြင်းမပြုမီ Log များကို ပြင်ဆင်ခြင်း သို့မဟုတ် ဖျက်ခြင်း ပြုနိုင်ပါသည်။</li>
+                                    <li>• သင့်တက်ရောက်မှုအခြေအနေကို <strong>တက်ရောက်</strong> သို့မဟုတ် <strong>ပျက်ကွက်</strong> ဟု မှတ်သားပါ။</li>
+                                    <li>• အပတ်စဉ် Reflection တင်သွင်းပြီးပါက ထိုအပတ်အတွင်းရှိ Log များသည် <strong>Read-Only</strong> ဖြစ်သွားမည်ဖြစ်ပါသည်။</li>
+                                    <li>• အပတ်စဉ် Reflection မတင်မီအထိ Log များကို ပြင်ဆင်ခြင်း သို့မဟုတ် ဖျက်ခြင်း ပြုနိုင်ပါသည်။</li>
                                 </ul>
                             </div>
                         </div>
@@ -166,28 +166,28 @@ if (!empty($weeks)) {
                         <div class="flex items-start gap-4">
                             <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-black shrink-0">2</div>
                             <div>
-                                <h3 class="text-sm font-bold text-slate-800 mb-1">အပတ်စဉ် Reflection</h3>
+                                <h3 class="text-sm font-bold text-slate-800 mb-1">အပတ်စဉ် Reflection နှင့် လက်မှတ်ထိုးခြင်း</h3>
                                 <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                    <li>• အပတ်တိုင်း၏ အဆုံးတွင် reflection တစ်ခု တင်သွင်းပါ။</li>
-                                    <li>• မေးခွန်း ၃ ခုစလုံးကို ဖြေဆိုပါ - <strong>ဘာ</strong>လုပ်ခဲ့သလဲ၊ <strong>ဘယ်လို</strong>လုပ်ခဲ့သလဲ၊ <strong>ဘာကြောင့်</strong>လုပ်ခဲ့သလဲ။</li>
+                                    <li>• အပတ်တိုင်း၏ အဆုံးတွင် Reflection တစ်ခု တင်သွင်းပါ။</li>
+                                    <li>• မေးခွန်း ၃ ခုစလုံးကို ဖြေဆိုပါ - <strong>ဘာလုပ်ခဲ့သလဲ (What)</strong>၊ <strong>ဘယ်လိုလုပ်ခဲ့သလဲ (How)</strong>၊ <strong>ဘာကြောင့်လုပ်ခဲ့သလဲ (Why)</strong>။</li>
                                     <li>• အသေးစိတ်ဖြစ်အောင် ဖော်ပြပြီး အသုံးပြုသည့်နည်းပညာများ၊ နည်းလမ်းများနှင့် အယူအဆများကို ဖော်ပြပါ။</li>
-                                    <li>• Reflection များကို သင့်ဆရာ/ဆရာမနှင့် instructor တို့က စစ်ဆေးပါသည်။</li>
+                                    <li>• <strong>ကျောင်းသားကိုယ်တိုင် Digital Signature ထိုးပြီးမှသာ</strong> အပတ်စဉ် Reflection တင်သွင်းမှု ပြီးမြောက်မည်ဖြစ်ပါသည်။</li>
+                                    <li>• တင်သွင်းပြီးပါက Company Instructor စစ်ဆေးနိုင်ရန် <strong>Magic Link</strong> ကို Copy ကူး၍ ပေးပို့နိုင်ပါသည်။</li>
                                 </ul>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 3. Supervisor Review -->
+                    <!-- 3. Review & Evaluation Process -->
                     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition">
                         <div class="flex items-start gap-4">
                             <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-black shrink-0">3</div>
                             <div>
-                                <h3 class="text-sm font-bold text-slate-800 mb-1">ဆရာ/ဆရာမ စစ်ဆေးခြင်း ဖြစ်စဉ်</h3>
+                                <h3 class="text-sm font-bold text-slate-800 mb-1">စစ်ဆေးခြင်းနှင့် အကဲဖြတ်ခြင်း လုပ်ငန်းစဉ်</h3>
                                 <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                    <li>• သင့်ဆရာ/ဆရာမက နေ့စဉ် Log နှင့် အပတ်စဉ် Reflection တိုင်းကို စစ်ဆေးပါမည်။</li>
-                                    <li>• Log များကို <strong>အတည်ပြု</strong>ခြင်း သို့မဟုတ် <strong>ပယ်ဖျက်</strong>ခြင်း ပြုနိုင်ပါသည်။</li>
-                                    <li>• ပယ်ဖျက်ခံရပါက အကြံပြုချက်အပေါ် အခြေခံ၍ Log ကို ပြင်ဆင်ပြီး ပြန်လည်တင်သွင်းပါ။</li>
-                                    <li>• စစ်ဆေးချက်အခြေအနေ update များအတွက် notification များကို ပုံမှန် စစ်ဆေးပါ။</li>
+                                    <li>• <strong>Company Instructor</strong> သည် Magic Link မှတစ်ဆင့် Weekly Reflection ကို စစ်ဆေးပြီး အမှတ်နှင့် မှတ်ချက်ပေးကာ လက်မှတ်ထိုးပေးမည်ဖြစ်ပါသည်။</li>
+                                    <li>• <strong>CU Supervisor</strong> (တက္ကသိုလ်မှ ကြီးကြပ်ဆရာ/မ) က အပတ်စဉ် အကဲဖြတ်အမှတ် (<strong>Weekly Grade: A, B, C, D, F</strong>) နှင့် အကြံပြုချက် Feedback များ ပေးအပ်မည်ဖြစ်ပါသည်။</li>
+                                    <li>• စစ်ဆေးချက် အခြေအနေများနှင့် Feedback များကို <strong>Dashboard</strong> နှင့် <strong>Notifications</strong> တွင် စစ်ဆေးနိုင်ပါသည်။</li>
                                 </ul>
                             </div>
                         </div>
@@ -228,7 +228,7 @@ if (!empty($weeks)) {
 
                 <!-- Footer Note -->
                 <div class="mt-8 text-center">
-                    <p class="text-caption text-slate-400">မည်သည့်ပြဿနာမဆို သင့်ဆရာ/ဆရာမ သို့မဟုတ် instructor ကို ဆက်သွယ်ပါ။</p>
+                    <p class="text-caption text-slate-400">မည်သည့်ပြဿနာမဆို သင့် CU Supervisor သို့မဟုတ် Company Instructor ကို ဆက်သွယ်ပါ။</p>
                 </div>
 
             </div>

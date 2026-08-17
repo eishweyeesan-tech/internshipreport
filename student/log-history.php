@@ -72,6 +72,17 @@ foreach ($all_evals as $ev) {
     $eval_by_week[$ev['week_number']] = $ev;
 }
 
+$all_sup_evals_stmt = $db->prepare("SELECT swe.*, u.username AS supervisor_name FROM supervisor_weekly_evaluations swe LEFT JOIN users u ON u.id = swe.supervisor_id WHERE swe.student_id = ? ORDER BY swe.week_number ASC");
+$all_sup_evals_stmt->bind_param("i", $internship_id);
+$all_sup_evals_stmt->execute();
+$res = $all_sup_evals_stmt->get_result();
+$all_sup_evals = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+
+$sup_eval_by_week = [];
+foreach ($all_sup_evals as $sev) {
+    $sup_eval_by_week[$sev['week_number']] = $sev;
+}
+
 // Group logs by week
 $logs_by_week = [];
 foreach ($all_logs as $log) {
@@ -388,6 +399,7 @@ $back_url = 'student-dashboard.php';
                         $week_logs = $logs_by_week[$wn] ?? [];
                         $week_ref  = $refs_by_week[$wn] ?? null;
                         $week_eval = $eval_by_week[$wn] ?? null;
+                        $week_sup_eval = $sup_eval_by_week[$wn] ?? null;
                         $week_present = 0;
                         $week_absent = 0;
                         $week_minutes = 0;
@@ -510,34 +522,120 @@ $back_url = 'student-dashboard.php';
                             </div>
                             <?php endif; ?>
 
-                            <!-- Evaluation -->
-                            <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
-                            <div class="border-t border-slate-100 pt-4">
-                                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
-                                    <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
-                                    </span> Instructor Evaluation
-                                </h3>
-                                <div class="bg-slate-50 rounded-xl p-3.5 flex items-start gap-4">
-                                    <div class="flex-1">
-                                        <div class="flex items-center gap-2 mb-1">
-                                            <?php
-                                            $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
-                                            ?>
-                                            <span class="text-xs font-medium <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
-                                            <span class="text-xs font-medium <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval['report_status'])) ?></span>
+                            <!-- Student Signature (compact inline) -->
+                            <?php if (!empty($week_eval['student_signature_value'])): ?>
+                            <div class="border-t border-slate-100 pt-3 flex items-center justify-end gap-2">
+                                <span class="text-caption text-slate-400 font-medium">Student Signature:</span>
+                                <?php if ($week_eval['student_signature_type'] === 'typed'): ?>
+                                    <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval['student_signature_value']) ?></span>
+                                <?php else: ?>
+                                    <img src="<?= htmlspecialchars($week_eval['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
+                                <?php endif; ?>
+                                <span class="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-caption font-bold shrink-0">&#10003; Signed</span>
+                            </div>
+                            <?php endif; ?>
+
+                            <!-- Evaluations & Feedback -->
+                            <?php if ($week_eval || $week_sup_eval): ?>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                <!-- Company Instructor Feedback (with integrated signature) -->
+                                <div class="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-3.5 flex flex-col">
+                                    <div class="flex items-center gap-2.5 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-16 0H3m14-4h-2m2-4h-2m-4 8v-4m-4 0H7m2 4H7"/></svg>
                                         </div>
-                                        <?php if ($week_eval['comment']): ?>
-                                            <p class="text-sm text-gray-700 leading-normal mt-1"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
-                                        <?php endif; ?>
-                                        <?php if ($week_eval['instructor_comments']): ?>
-                                            <div class="bg-red-50 border border-red-100 rounded-lg p-2.5 mt-2">
-                                                <p class="text-xs font-medium text-red-500 mb-0.5">Instructor Comments:</p>
-                                                <p class="text-sm text-red-600 leading-normal"><?= nl2br(htmlspecialchars($week_eval['instructor_comments'])) ?></p>
-                                            </div>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-xs font-bold text-slate-800">Company Instructor</p>
+                                            <p class="text-[11px] text-slate-400 font-medium">Evaluation &amp; Comments</p>
+                                        </div>
+                                        <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
+                                        <?php $ig = $week_eval['grade'] ?? ''; $igd = $gmap[$ig] ?? ['—', 'text-slate-400', 'bg-slate-50']; ?>
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold <?= $igd[1] ?> <?= $igd[2] ?> shrink-0"><?= htmlspecialchars($igd[0]) ?></span>
                                         <?php endif; ?>
                                     </div>
-                                    <span class="text-xs text-gray-400 shrink-0"><?= (new DateTime($week_eval['evaluated_at']))->format('d M Y') ?></span>
+                                    <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
+                                    <div class="flex-1 space-y-2">
+                                        <span class="inline-flex items-center text-[11px] font-bold <?= $week_eval['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded' : ($week_eval['report_status'] === 'rejected' ? 'text-red-600 bg-red-50 px-2 py-0.5 rounded' : 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded') ?>"><?= $week_eval['report_status'] === 'approved_by_instructor' ? 'Approved by Instructor' : ($week_eval['report_status'] === 'rejected' ? 'Rejected' : ucfirst(str_replace('_', ' ', $week_eval['report_status']))) ?></span>
+                                        <?php if ($week_eval['comment']): ?>
+                                        <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_eval['comment'])) ?></p>
+                                        <?php else: ?>
+                                        <p class="text-xs italic text-slate-400">No written comments provided.</p>
+                                        <?php endif; ?>
+                                        <?php if ($week_eval['instructor_comments']): ?>
+                                        <div class="bg-red-50 border border-red-100 rounded-lg p-2">
+                                            <p class="text-[11px] font-bold text-red-400 uppercase tracking-wider mb-0.5">Revision Requested</p>
+                                            <p class="text-xs text-red-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_eval['instructor_comments'])) ?></p>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+                                        <p class="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                            <?= htmlspecialchars((new DateTime($week_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
+                                        </p>
+                                        <?php if (!empty($week_eval['signature_value'])): ?>
+                                        <div class="flex items-center gap-1.5">
+                                            <?php if ($week_eval['signature_type'] === 'typed'): ?>
+                                                <span class="inline-flex items-center px-2 py-0.5 bg-white border border-slate-200 rounded max-h-[26px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 0.8rem; line-height: 1;"><?= htmlspecialchars($week_eval['signature_value']) ?></span>
+                                            <?php else: ?>
+                                                <img src="<?= htmlspecialchars($week_eval['signature_value']) ?>" alt="Instructor Signature" class="h-5 object-contain">
+                                            <?php endif; ?>
+                                            <span class="inline-flex items-center gap-0.5 text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full text-[10px] font-bold">&#10003; Signed</span>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php else: ?>
+                                    <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
+                                        <div>
+                                            <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-1">
+                                                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                            </div>
+                                            <p class="text-xs font-semibold text-slate-500">Awaiting instructor evaluation…</p>
+                                            <p class="text-[11px] text-slate-400 mt-0.5">Not reviewed yet.</p>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+
+                                <!-- CU Supervisor Feedback -->
+                                <div class="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-3.5 flex flex-col">
+                                    <div class="flex items-center gap-2.5 mb-2">
+                                        <div class="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-xs font-bold text-slate-800">CU Supervisor</p>
+                                            <p class="text-[11px] text-slate-400 font-medium"><?= htmlspecialchars($week_sup_eval['supervisor_name'] ?? '—') ?></p>
+                                        </div>
+                                        <?php if (!empty($week_sup_eval['weekly_grade'])): ?>
+                                        <?php $sg = $week_sup_eval['weekly_grade']; $sgd = ['A' => ['Grade: A', 'text-emerald-600 bg-emerald-50'], 'B' => ['Grade: B', 'text-blue-600 bg-blue-50'], 'C' => ['Grade: C', 'text-amber-600 bg-amber-50'], 'D' => ['Grade: D', 'text-orange-600 bg-orange-50'], 'F' => ['Grade: F', 'text-red-600 bg-red-50']]; $sgdi = $sgd[$sg] ?? [$sg, 'text-slate-100 bg-slate-50']; ?>
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold <?= $sgdi[1] ?> shrink-0"><?= htmlspecialchars($sgdi[0]) ?></span>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if (!empty($week_sup_eval)): ?>
+                                    <div class="flex-1">
+                                        <?php $sup_comments = trim($week_sup_eval['supervisor_comments'] ?? ''); ?>
+                                        <?php if ($sup_comments !== ''): ?>
+                                        <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($sup_comments)) ?></p>
+                                        <?php else: ?>
+                                        <p class="text-xs italic text-slate-400">No written comments provided.</p>
+                                        <?php endif; ?>
+                                    </div>
+                                    <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        <?= htmlspecialchars((new DateTime($week_sup_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
+                                    </p>
+                                    <?php else: ?>
+                                    <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
+                                        <div>
+                                            <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-1">
+                                                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                            </div>
+                                            <p class="text-xs font-semibold text-slate-500">Awaiting CU supervisor review…</p>
+                                            <p class="text-[11px] text-slate-400 mt-0.5">Not reviewed yet.</p>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <?php endif; ?>
@@ -613,6 +711,13 @@ $back_url = 'student-dashboard.php';
                                 $week_logs_m = $logs_by_week[$wn] ?? [];
                                 $week_ref_m  = $refs_by_week[$wn] ?? null;
                                 $week_eval_m = $eval_by_week[$wn] ?? null;
+                                $week_sup_eval_m = $sup_eval_by_week[$wn] ?? null;
+                                $gmap_m = [
+                                    'excellent'         => ['Excellent',         'text-emerald-600', 'bg-emerald-50'],
+                                    'good'              => ['Good',              'text-blue-600',    'bg-blue-50'],
+                                    'average'           => ['Average',           'text-amber-600',   'bg-amber-50'],
+                                    'needs_improvement' => ['Needs Improvement', 'text-red-600',     'bg-red-50'],
+                                ];
                                 $wr = $weeks[$wn];
                             ?>
                             <!-- Week within month -->
@@ -720,40 +825,120 @@ $back_url = 'student-dashboard.php';
                                 </div>
                                 <?php endif; ?>
 
-                                <!-- Evaluation -->
-                                <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
-                                <div class="border-t border-slate-100 pt-4 px-4 pb-3">
-                                    <h3 class="text-caption font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                                        <span class="w-6 h-6 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
-                                        </span> Instructor Evaluation
-                                    </h3>
-                                    <div class="bg-slate-50 rounded-xl p-3 flex items-start gap-4">
-                                        <div class="flex-1">
-                                            <div class="flex items-center gap-2 mb-1">
-                                                <?php
-                                                $gmap_m = [
-                                                    'excellent'         => ['Excellent',         'text-emerald-600', 'bg-emerald-50'],
-                                                    'good'              => ['Good',              'text-blue-600',    'bg-blue-50'],
-                                                    'average'           => ['Average',           'text-amber-600',   'bg-amber-50'],
-                                                    'needs_improvement' => ['Needs Improvement', 'text-red-600',     'bg-red-50'],
-                                                ];
-                                                $gs_m = $gmap_m[$week_eval_m['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
-                                                ?>
-                                                <span class="text-label font-bold <?= $gs_m[1] ?> <?= $gs_m[2] ?> px-2 py-0.5 rounded"><?= $gs_m[0] ?></span>
-                                                <span class="text-label font-bold <?= $week_eval_m['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50' : ($week_eval_m['report_status'] === 'rejected' ? 'text-red-600 bg-red-50' : 'text-amber-600 bg-amber-50') ?> px-2 py-0.5 rounded"><?= ucfirst(str_replace('_', ' ', $week_eval_m['report_status'])) ?></span>
+                                <!-- Student Signature (compact inline, Monthly) -->
+                                <?php if (!empty($week_eval_m['student_signature_value'])): ?>
+                                <div class="border-t border-slate-100 pt-3 px-4 flex items-center justify-end gap-2">
+                                    <span class="text-caption text-slate-400 font-medium">Student Signature:</span>
+                                    <?php if ($week_eval_m['student_signature_type'] === 'typed'): ?>
+                                        <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval_m['student_signature_value']) ?></span>
+                                    <?php else: ?>
+                                        <img src="<?= htmlspecialchars($week_eval_m['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
+                                    <?php endif; ?>
+                                    <span class="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-caption font-bold shrink-0">&#10003; Signed</span>
+                                </div>
+                                <?php endif; ?>
+
+                                <!-- Evaluations & Feedback (Monthly) -->
+                                <?php if ($week_eval_m || $week_sup_eval_m): ?>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3 px-4 pb-3">
+                                    <!-- Company Instructor Feedback (with integrated signature) -->
+                                    <div class="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-3.5 flex flex-col">
+                                        <div class="flex items-center gap-2.5 mb-2">
+                                            <div class="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-16 0H3m14-4h-2m2-4h-2m-4 8v-4m-4 0H7m2 4H7"/></svg>
                                             </div>
-                                            <?php if ($week_eval_m['comment']): ?>
-                                                <p class="text-xs text-slate-600 leading-relaxed mt-1"><?= nl2br(htmlspecialchars($week_eval_m['comment'])) ?></p>
-                                            <?php endif; ?>
-                                            <?php if ($week_eval_m['instructor_comments']): ?>
-                                                <div class="bg-red-50 border border-red-100 rounded-lg p-2 mt-2">
-                                                    <p class="text-label font-bold text-red-500 mb-0.5">Instructor Comments:</p>
-                                                    <p class="text-xs text-red-600"><?= nl2br(htmlspecialchars($week_eval_m['instructor_comments'])) ?></p>
-                                                </div>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-xs font-bold text-slate-800">Company Instructor</p>
+                                                <p class="text-[11px] text-slate-400 font-medium">Evaluation &amp; Comments</p>
+                                            </div>
+                                            <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
+                                            <?php $ig_m = $week_eval_m['grade'] ?? ''; $igd_m = $gmap_m[$ig_m] ?? ['—', 'text-slate-400', 'bg-slate-50']; ?>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold <?= $igd_m[1] ?> <?= $igd_m[2] ?> shrink-0"><?= htmlspecialchars($igd_m[0]) ?></span>
                                             <?php endif; ?>
                                         </div>
-                                        <span class="text-label text-slate-300 shrink-0"><?= (new DateTime($week_eval_m['evaluated_at']))->format('d M Y') ?></span>
+                                        <?php if ($week_eval_m && $week_eval_m['report_status'] !== 'pending'): ?>
+                                        <div class="flex-1 space-y-2">
+                                            <span class="inline-flex items-center text-[11px] font-bold <?= $week_eval_m['report_status'] === 'approved_by_instructor' ? 'text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded' : ($week_eval_m['report_status'] === 'rejected' ? 'text-red-600 bg-red-50 px-2 py-0.5 rounded' : 'text-amber-600 bg-amber-50 px-2 py-0.5 rounded') ?>"><?= $week_eval_m['report_status'] === 'approved_by_instructor' ? 'Approved by Instructor' : ($week_eval_m['report_status'] === 'rejected' ? 'Rejected' : ucfirst(str_replace('_', ' ', $week_eval_m['report_status']))) ?></span>
+                                            <?php if ($week_eval_m['comment']): ?>
+                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_eval_m['comment'])) ?></p>
+                                            <?php else: ?>
+                                            <p class="text-xs italic text-slate-400">No written comments provided.</p>
+                                            <?php endif; ?>
+                                            <?php if ($week_eval_m['instructor_comments']): ?>
+                                            <div class="bg-red-50 border border-red-100 rounded-lg p-2">
+                                                <p class="text-[11px] font-bold text-red-400 uppercase tracking-wider mb-0.5">Revision Requested</p>
+                                                <p class="text-xs text-red-600 leading-relaxed"><?= nl2br(htmlspecialchars($week_eval_m['instructor_comments'])) ?></p>
+                                            </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+                                            <p class="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                <?= htmlspecialchars((new DateTime($week_eval_m['evaluated_at']))->format('d M Y, h:i A')) ?>
+                                            </p>
+                                            <?php if (!empty($week_eval_m['signature_value'])): ?>
+                                            <div class="flex items-center gap-1.5">
+                                                <?php if ($week_eval_m['signature_type'] === 'typed'): ?>
+                                                    <span class="inline-flex items-center px-2 py-0.5 bg-white border border-slate-200 rounded max-h-[26px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 0.8rem; line-height: 1;"><?= htmlspecialchars($week_eval_m['signature_value']) ?></span>
+                                                <?php else: ?>
+                                                    <img src="<?= htmlspecialchars($week_eval_m['signature_value']) ?>" alt="Instructor Signature" class="h-5 object-contain">
+                                                <?php endif; ?>
+                                                <span class="inline-flex items-center gap-0.5 text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full text-[10px] font-bold">&#10003; Signed</span>
+                                            </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php else: ?>
+                                        <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
+                                            <div>
+                                                <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-1">
+                                                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                </div>
+                                                <p class="text-xs font-semibold text-slate-500">Awaiting instructor evaluation…</p>
+                                                <p class="text-[11px] text-slate-400 mt-0.5">Not reviewed yet.</p>
+                                            </div>
+                                        </div>
+                                        <?php endif; ?>
+                                    </div>
+
+                                    <!-- CU Supervisor Feedback (Monthly) -->
+                                    <div class="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50/70 to-white p-3.5 flex flex-col">
+                                        <div class="flex items-center gap-2.5 mb-2">
+                                            <div class="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+                                            </div>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="text-xs font-bold text-slate-800">CU Supervisor</p>
+                                                <p class="text-[11px] text-slate-400 font-medium"><?= htmlspecialchars($week_sup_eval_m['supervisor_name'] ?? '—') ?></p>
+                                            </div>
+                                            <?php if (!empty($week_sup_eval_m['weekly_grade'])): ?>
+                                            <?php $sg_m = $week_sup_eval_m['weekly_grade']; $sgd_m = ['A' => ['Grade: A', 'text-emerald-600 bg-emerald-50'], 'B' => ['Grade: B', 'text-blue-600 bg-blue-50'], 'C' => ['Grade: C', 'text-amber-600 bg-amber-50'], 'D' => ['Grade: D', 'text-orange-600 bg-orange-50'], 'F' => ['Grade: F', 'text-red-600 bg-red-50']]; $sgdi_m = $sgd_m[$sg_m] ?? [$sg_m, 'text-slate-100 bg-slate-50']; ?>
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold <?= $sgdi_m[1] ?> shrink-0"><?= htmlspecialchars($sgdi_m[0]) ?></span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if (!empty($week_sup_eval_m)): ?>
+                                        <div class="flex-1">
+                                            <?php $sup_comments_m = trim($week_sup_eval_m['supervisor_comments'] ?? ''); ?>
+                                            <?php if ($sup_comments_m !== ''): ?>
+                                            <p class="text-xs text-slate-600 leading-relaxed"><?= nl2br(htmlspecialchars($sup_comments_m)) ?></p>
+                                            <?php else: ?>
+                                            <p class="text-xs italic text-slate-400">No written comments provided.</p>
+                                            <?php endif; ?>
+                                        </div>
+                                        <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                            <?= htmlspecialchars((new DateTime($week_sup_eval_m['evaluated_at']))->format('d M Y, h:i A')) ?>
+                                        </p>
+                                        <?php else: ?>
+                                        <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
+                                            <div>
+                                                <div class="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-1">
+                                                    <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                </div>
+                                                <p class="text-xs font-semibold text-slate-500">Awaiting CU supervisor review…</p>
+                                                <p class="text-[11px] text-slate-400 mt-0.5">Not reviewed yet.</p>
+                                            </div>
+                                        </div>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                                 <?php endif; ?>
