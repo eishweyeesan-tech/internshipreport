@@ -136,17 +136,17 @@ $stat_companies  = (int)($mysqli->query("SELECT COUNT(*) AS c FROM companies")->
                         </a>
                     </div>
 
-                    <!-- Hero Inline Metrics -->
-                    <div class="flex flex-wrap items-baseline gap-x-8 gap-y-3 pt-4">
-                        <div class="flex items-baseline gap-2">
+                    <!-- Hero Metrics -->
+                    <div class="flex flex-wrap items-start gap-8 pt-4">
+                        <div class="flex flex-col items-start gap-1">
                             <span class="text-2xl font-black text-slate-800"><?= $stat_students ?>+</span>
                             <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Students</span>
                         </div>
-                        <div class="flex items-baseline gap-2">
+                        <div class="flex flex-col items-start gap-1">
                             <span class="text-2xl font-black text-slate-800"><?= $stat_companies ?>+</span>
                             <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Companies</span>
                         </div>
-                        <div class="flex items-baseline gap-2">
+                        <div class="flex flex-col items-start gap-1">
                             <span class="text-2xl font-black text-slate-800">100%</span>
                             <span class="text-xs font-bold text-slate-500 uppercase tracking-wide">Digital</span>
                         </div>
