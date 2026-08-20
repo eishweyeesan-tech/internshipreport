@@ -2,6 +2,8 @@
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/internship_progress.php';
+require_once __DIR__ . '/../includes/ui_helpers.php';
+
 
 function getWeekRange(string $internship_start_date, int $week_number): ?array
 {
@@ -69,480 +71,13 @@ $recent_notifs_q->execute();
 $res = $recent_notifs_q->get_result();
 $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$student_id = (int) ($_GET['id'] ?? 0);
+$student_id = (int) ($_GET['id'] ?? $_GET['student_id'] ?? $_GET['uid'] ?? 0);
 
-// ── No student selected: show student picker ──────────────────────
 if ($student_id <= 0) {
-    $sql = "
-        SELECT u.id AS uid, u.username, u.email,
-               sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
-               COALESCE(ls.log_count, 0) AS log_count,
-               COALESCE(ls.present_count, 0) AS present_count,
-               COALESCE(ls.total_count, 0) AS total_count,
-               ls.latest_log
-        FROM users u
-        JOIN student_profiles sp ON sp.user_id = u.id
-        LEFT JOIN (
-            SELECT internship_id,
-                   COUNT(*) AS log_count,
-                   SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_count,
-                   COUNT(*) AS total_count,
-                   MAX(log_date) AS latest_log
-            FROM daily_logs
-            GROUP BY internship_id
-        ) ls ON ls.internship_id = u.id
-        WHERE u.role = 'student' AND sp.supervisor_id = ?
-        ORDER BY sp.full_name ASC
-    ";
-    $all_stu_q = $db->prepare($sql);
-    $all_stu_q->bind_param("i", $sup_id);
-    $all_stu_q->execute();
-    $res = $all_stu_q->get_result();
-    $all_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+    header('Location: my-students.php');
+    exit;
+}
 
-    $total_assigned = count($all_students);
-    $selected_year_label = '';
-?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Select Student – InternReport</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: { 'inter': ['Inter', 'sans-serif'] },
-                    fontSize: {
-                    'micro': '0.5rem',
-                    'caption': '0.6875rem',
-                    'label': '0.8125rem',
-                    'subtitle': '0.9375rem',
-                    'body': '1rem',
-                },
-                }
-            }
-        }
-    </script>
-    <script>
-    function toggleProfileDropdown(e) {
-        e.stopPropagation();
-        var dd = document.getElementById('profile-dropdown-menu');
-        dd.classList.toggle('hidden');
-    }
-    document.addEventListener('click', function(e) {
-        var dd = document.getElementById('profile-dropdown-menu');
-        var btn = document.getElementById('profile-avatar-btn');
-        if (dd && !dd.contains(e.target) && !btn.contains(e.target)) {
-            dd.classList.add('hidden');
-        }
-    });
-    function toggleNotifDropdown() {
-        var dd = document.getElementById('notif-dropdown');
-        if (dd.classList.contains('show')) {
-            dd.classList.remove('show');
-            dd.style.opacity = '0';
-            dd.style.visibility = 'hidden';
-            dd.style.transform = 'translateY(-8px) scale(0.95)';
-        } else {
-            dd.classList.add('show');
-            dd.style.opacity = '1';
-            dd.style.visibility = 'visible';
-            dd.style.transform = 'translateY(0) scale(1)';
-        }
-    }
-    document.addEventListener('click', function(e) {
-        var wrapper = document.getElementById('notif-bell-wrapper');
-        var dd = document.getElementById('notif-dropdown');
-        if (wrapper && dd && !wrapper.contains(e.target)) {
-            dd.classList.remove('show');
-            dd.style.opacity = '0';
-            dd.style.visibility = 'hidden';
-            dd.style.transform = 'translateY(-8px) scale(0.95)';
-        }
-    });
-    function timeAgo(dateStr) {
-        var date = new Date(dateStr);
-        var now = new Date();
-        var seconds = Math.floor((now - date) / 1000);
-        if (seconds < 0) return 'Just now';
-        if (seconds < 60) return 'Just now';
-        var minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return minutes + 'm ago';
-        var hours = Math.floor(minutes / 60);
-        if (hours < 24) return hours + 'h ago';
-        var days = Math.floor(hours / 24);
-        if (days === 1) return 'Yesterday';
-        if (days < 7) return days + 'd ago';
-        return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    }
-    function updateNotifTimestamps() {
-        document.querySelectorAll('[data-notif-time]').forEach(function(el) {
-            el.textContent = timeAgo(el.getAttribute('data-notif-time'));
-        });
-    }
-    updateNotifTimestamps();
-    setInterval(updateNotifTimestamps, 60000);
-
-    function openAnnouncementModal(annId) {
-        var modal = document.getElementById('ann-detail-modal');
-        var backdrop = document.getElementById('ann-detail-backdrop');
-        var body = document.getElementById('ann-detail-body');
-        var title = document.getElementById('ann-detail-title');
-        var sender = document.getElementById('ann-detail-sender');
-        var date = document.getElementById('ann-detail-date');
-        if (!modal) return;
-        body.innerHTML = '<div class="flex items-center justify-center py-12"><div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>';
-        title.textContent = 'Loading...';
-        sender.textContent = '';
-        date.textContent = '';
-        modal.classList.remove('hidden');
-        backdrop.classList.remove('hidden');
-        requestAnimationFrame(function() { modal.style.opacity = '1'; modal.style.transform = 'scale(1)'; backdrop.style.opacity = '1'; });
-        document.body.style.overflow = 'hidden';
-        fetch('get_announcement.php?id=' + annId, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.error) { body.innerHTML = '<p class="text-sm text-red-400 text-center py-8">' + data.error + '</p>'; return; }
-            var a = data.announcement;
-            title.textContent = a.title;
-            sender.textContent = a.sender_name || 'Admin';
-            date.textContent = new Date(a.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-            body.innerHTML = '<div class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">' + a.body.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>') + '</div>';
-            updateNotifBadge(data.unread_count);
-        })
-        .catch(function() { body.innerHTML = '<p class="text-sm text-red-400 text-center py-8">Failed to load announcement.</p>'; });
-    }
-    function closeAnnouncementModal() {
-        var modal = document.getElementById('ann-detail-modal');
-        var backdrop = document.getElementById('ann-detail-backdrop');
-        if (modal && backdrop) {
-            modal.style.opacity = '0'; modal.style.transform = 'scale(0.95)'; backdrop.style.opacity = '0';
-            setTimeout(function() { modal.classList.add('hidden'); backdrop.classList.add('hidden'); }, 200);
-            document.body.style.overflow = '';
-        }
-    }
-    document.addEventListener('click', function(e) { if (e.target.id === 'ann-detail-backdrop') closeAnnouncementModal(); });
-    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeAnnouncementModal(); });
-
-    function markNotifRead(el) {
-        var notifId = el.getAttribute('data-notif-id');
-        var redirectUrl = el.getAttribute('data-redirect-url') || 'supervisor-dashboard.php';
-        var fd = new FormData();
-        fd.append('notification_id', notifId);
-        fd.append('mark_notification_read', '1');
-        fetch(window.location.pathname, {
-            method: 'POST',
-            body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); })
-          .then(function(data) { updateNotifBadge(data.unread_count); })
-          .catch(function() {});
-        var annMatch = redirectUrl.match(/announcement-detail\.php\?id=(\d+)/);
-        if (annMatch) {
-            openAnnouncementModal(annMatch[1]);
-            var dd = document.getElementById('notif-dropdown');
-            if (dd) { dd.classList.remove('show'); dd.style.opacity = '0'; dd.style.visibility = 'hidden'; dd.style.transform = 'translateY(-8px) scale(0.95)'; }
-            return;
-        }
-        window.location.href = redirectUrl;
-    }
-    function markAllNotifsRead() {
-        var fd = new FormData();
-        fd.append('mark_all_notifications_read', '1');
-        fetch(window.location.pathname, {
-            method: 'POST',
-            body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); })
-          .then(function(data) { updateNotifBadge(data.unread_count); })
-          .catch(function() {});
-    }
-    function updateNotifBadge(count) {
-        var existing = document.getElementById('notif-badge');
-        if (count > 0) {
-            if (existing) {
-                existing.textContent = count > 9 ? '9+' : count;
-            } else {
-                var bell = document.querySelector('#notif-bell-wrapper button');
-                if (bell) {
-                    var span = document.createElement('span');
-                    span.id = 'notif-badge';
-                    span.className = 'absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse';
-                    span.textContent = count > 9 ? '9+' : count;
-                    bell.appendChild(span);
-                }
-            }
-        } else if (existing) {
-            existing.remove();
-        }
-    }
-    function toggleNotifOptions(btn) {
-        var menu = btn.nextElementSibling;
-        document.querySelectorAll('.notif-options-menu').forEach(function(m) { if (m !== menu) m.classList.add('hidden'); });
-        menu.classList.toggle('hidden');
-    }
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('[onclick*="toggleNotifOptions"]')) {
-            document.querySelectorAll('.notif-options-menu').forEach(function(m) { m.classList.add('hidden'); });
-        }
-    });
-    </script>
-</head>
-<body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
-<div class="flex h-screen overflow-hidden">
-    <!-- SIDEBAR -->
-    <?php $active_page = 'students'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
-    <!-- MAIN -->
-    <div class="flex-1 flex flex-col min-h-0">
-        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-[1050]">
-            <div class="flex items-center gap-4">
-                <a href="supervisor-dashboard.php" class="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-purple-600 transition-colors duration-200 cursor-pointer">
-                    <span class="p-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-full border border-slate-100 shadow-sm transition-all duration-200">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                    </span>
-                </a>
-                <div class="w-px h-6 bg-slate-200"></div>
-                <h1 class="text-base font-bold text-slate-800">Select a Student to View</h1>
-            </div>
-            <div class="flex items-center gap-5">
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-full">
-                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span class="text-xs font-bold text-emerald-700"><?= $total_assigned ?> Assigned</span>
-                    <?php if (!empty($selected_year_label)): ?>
-                    <span class="text-sm font-bold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded font-mono"><?= htmlspecialchars($selected_year_label) ?></span>
-                    <?php endif; ?>
-                </div>
-                <div class="flex items-center gap-2 px-3 py-1.5 bg-purple-50 border border-purple-200 rounded-full">
-                    <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
-                    <span class="text-xs font-bold text-purple-700"><?= count($all_students) ?> Student<?= count($all_students) !== 1 ? 's' : '' ?></span>
-                </div>
-                <div class="flex items-center gap-3 pl-5 border-l border-slate-200 relative">
-                    <!-- Notification Bell -->
-                    <div class="relative" id="notif-bell-wrapper">
-                        <button onclick="toggleNotifDropdown()" class="relative p-2 hover:bg-white/30 rounded-xl transition cursor-pointer">
-                            <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                            <?php if ($unread_notif_count > 0): ?>
-                            <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
-                            <?php endif; ?>
-                        </button>
-                        <div id="notif-dropdown" class="absolute right-0 top-full mt-1 w-[22rem] bg-white border border-slate-200 rounded-xl shadow-xl z-[1060] overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
-                            <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-br from-blue-50/80 to-white/60">
-                                <h4 class="text-sm font-black text-slate-700">Notifications</h4>
-                                <?php if ($unread_notif_count > 0): ?>
-                                <button onclick="markAllNotifsRead()" class="text-xs font-bold text-blue-600 hover:text-blue-800 transition cursor-pointer">Mark all read</button>
-                                <?php endif; ?>
-                            </div>
-                            <div class="max-h-96 overflow-y-auto">
-                                <?php if (!empty($recent_notifications)): ?>
-                                <?php foreach ($recent_notifications as $notif): ?>
-                                <?php $notif_url = notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null); ?>
-                                <div class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="markNotifRead(this)">
-                                    <?php if ($notif['type'] === 'instructor_approved'): ?>
-                                    <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                    </div>
-                                    <?php elseif ($notif['type'] === 'instructor_rejected'): ?>
-                                    <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                                    </div>
-                                    <?php else: ?>
-                                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm shrink-0 ring-2 ring-white shadow-sm">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                                    </div>
-                                    <?php endif; ?>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="text-sm <?= !$notif['is_read'] ? 'font-bold text-slate-800' : 'font-medium text-slate-600' ?> leading-snug"><?= htmlspecialchars($notif['title']) ?></p>
-                                        <p class="text-xs text-slate-500 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
-                                        <p class="text-[11px] text-slate-400 mt-1.5" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>" data-notif-id="<?= (int)$notif['id'] ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
-                                    </div>
-                                    <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
-                                        <?php if (!$notif['is_read']): ?>
-                                        <span class="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></span>
-                                        <?php endif; ?>
-                                        <div class="relative">
-                                            <button onclick="event.stopPropagation(); toggleNotifOptions(this)" class="w-7 h-7 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition opacity-0 group-hover:opacity-100 cursor-pointer" title="More options">
-                                                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-                                            </button>
-                                            <div class="hidden absolute right-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1.5 notif-options-menu" onclick="event.stopPropagation();">
-                                                <?php if (!$notif['is_read']): ?>
-                                                <form method="POST" class="inline">
-                                                    <input type="hidden" name="notification_id" value="<?= (int)$notif['id'] ?>">
-                                                    <button type="submit" name="mark_notification_read" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition flex items-center gap-2.5 cursor-pointer">
-                                                        <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                        Mark as read
-                                                    </button>
-                                                </form>
-                                                <?php else: ?>
-                                                <div class="px-4 py-2.5 text-xs font-medium text-slate-400 flex items-center gap-2.5">
-                                                    <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                                    Already read
-                                                </div>
-                                                <?php endif; ?>
-                                                <div class="my-1 border-t border-slate-100"></div>
-                                                <button type="button" onclick="requestDeleteNotification(<?= (int)$notif['id'] ?>)" class="w-full text-left px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2.5 cursor-pointer">
-                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <?php endforeach; ?>
-                                <?php else: ?>
-                                <div class="p-10 text-center">
-                                    <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                                        <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                                    </div>
-                                    <p class="text-sm font-semibold text-slate-400">No notifications yet</p>
-                                    <p class="text-xs text-slate-300 mt-1">You'll see updates here</p>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                            <div class="border-t border-slate-100">
-                                <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold text-blue-600 hover:bg-blue-50 transition">View all notifications</a>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="relative shrink-0" id="profileDropdownContainer">
-                        <button
-                            type="button"
-                            onclick="toggleProfileDropdown(event)"
-                            id="profile-avatar-btn"
-                            class="flex items-center gap-2.5 p-1.5 hover:bg-teal-50 border border-transparent hover:border-teal-100 rounded-xl transition-all cursor-pointer group"
-                        >
-                            <?php if (!empty($_SESSION['profile_pic'])): ?>
-                            <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-teal-200 shadow-sm">
-                            <?php else: ?>
-                            <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-sm">
-                                <?= strtoupper(substr($_SESSION['username'] ?? 'S', 0, 1)) ?>
-                            </div>
-                            <?php endif; ?>
-                            <div class="text-left hidden sm:block">
-                                <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars($sup_name) ?></p>
-                                <p class="text-xs font-medium text-teal-700 capitalize">Supervisor</p>
-                            </div>
-                            <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                            </svg>
-                        </button>
-
-                        <!-- Profile Dropdown Menu -->
-                        <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-teal-100 py-1.5 z-50 divide-y divide-slate-100">
-                            <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
-                                <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> My Profile
-                            </a>
-                            <a href="profile.php#security-section" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
-                                <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Change Password
-                            </a>
-                            <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition">
-                                <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </header>
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-7xl mx-auto">
-                <div class="w-full bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
-                    <!-- Header -->
-                    <div class="pb-6 border-b border-slate-100">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h2 class="text-2xl font-bold text-slate-900 tracking-tight">Your Students</h2>
-                                <p class="text-sm text-slate-400 mt-1">Click any row to open their full dashboard.</p>
-                            </div>
-                            <span class="text-sm font-medium text-slate-400"><?= count($all_students) ?> total</span>
-                        </div>
-                    </div>
-
-                    <?php if (!empty($all_students)): ?>
-                    <!-- Feed List -->
-                    <div class="divide-y divide-slate-100">
-                        <?php foreach ($all_students as $stu):
-                            $att_rate = $stu['total_count'] > 0 ? round(($stu['present_count'] / $stu['total_count']) * 100) : 0;
-                            $initials = strtoupper(mb_substr($stu['full_name'] ?: $stu['username'], 0, 2));
-                        ?>
-                        <a href="view-student-dashboard.php?id=<?= $stu['uid'] ?>" class="flex flex-col md:flex-row md:items-center justify-between py-4 px-2 hover:bg-slate-50/70 rounded-xl transition-all duration-200 cursor-pointer group">
-                            <!-- Left: Avatar + Info -->
-                            <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 rounded-full flex items-center justify-center bg-purple-600 text-white font-semibold text-base shadow-sm shrink-0 group-hover:scale-105 transition-transform duration-200">
-                                    <?= $initials ?>
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="font-medium text-slate-900 text-base truncate group-hover:text-purple-600 transition-colors"><?= htmlspecialchars($stu['full_name'] ?: $stu['username']) ?></p>
-                                    <p class="text-sm text-slate-400 truncate"><?= htmlspecialchars($stu['email']) ?></p>
-                                </div>
-                            </div>
-                            <!-- Right: Metrics -->
-                            <div class="flex items-center gap-6 mt-3 md:mt-0 shrink-0">
-                                <div class="flex items-center gap-1.5 text-sm text-slate-600 font-medium">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                                    <?= $stu['log_count'] ?> Log<?= $stu['log_count'] !== 1 ? 's' : '' ?>
-                                </div>
-                                <?php if ($stu['total_count'] > 0): ?>
-                                <div class="flex items-center gap-1.5 text-sm font-medium <?= $att_rate >= 80 ? 'text-emerald-600' : ($att_rate >= 50 ? 'text-amber-600' : 'text-red-500') ?>">
-                                    <span class="w-1.5 h-1.5 rounded-full <?= $att_rate >= 80 ? 'bg-emerald-400' : ($att_rate >= 50 ? 'bg-amber-400' : 'bg-red-400') ?>"></span>
-                                    <?= $att_rate ?>%
-                                </div>
-                                <?php endif; ?>
-                                <?php if ($stu['latest_log']): ?>
-                                <span class="text-xs text-slate-400 hidden sm:inline"><?= (new DateTime($stu['latest_log']))->format('d M') ?></span>
-                                <?php endif; ?>
-                            </div>
-                        </a>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php else: ?>
-                    <div class="py-20 text-center">
-                        <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mx-auto mb-4">📭</div>
-                        <p class="text-base font-medium text-slate-500">No students currently assigned to you for this academic year.</p>
-                        <p class="text-sm text-slate-400 mt-1">Please contact the Admin.</p>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </main>
-    </div>
-</div>
-<!-- Announcement Detail Modal -->
-<div id="ann-detail-backdrop" class="hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-[2000] transition-opacity duration-200" style="opacity:0"></div>
-<div id="ann-detail-modal" class="hidden fixed inset-0 z-[2001] flex items-center justify-center p-4 transition-all duration-200" style="opacity:0;transform:scale(0.95)">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
-        <div class="bg-gradient-to-r from-blue-500 to-indigo-600 px-8 py-6 shrink-0">
-            <div class="flex items-start justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <span class="text-3xl">📢</span>
-                    <span class="text-xs font-bold text-blue-200 uppercase tracking-wider bg-white/20 backdrop-blur-sm px-3 py-1 rounded-full">Announcement</span>
-                </div>
-                <button onclick="closeAnnouncementModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition shrink-0 cursor-pointer">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-            </div>
-            <h1 id="ann-detail-title" class="text-xl font-black text-white leading-tight mt-4">Loading...</h1>
-            <div class="flex items-center gap-4 mt-3 text-sm text-blue-200 font-medium">
-                <span class="flex items-center gap-1.5" id="ann-detail-sender"></span>
-                <span class="flex items-center gap-1.5" id="ann-detail-date"></span>
-            </div>
-        </div>
-        <div id="ann-detail-body" class="flex-1 overflow-y-auto px-8 py-6">
-            <div class="flex items-center justify-center py-12"><div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div></div>
-        </div>
-        <div class="px-8 py-4 border-t border-slate-100 flex items-center justify-end shrink-0 bg-slate-50/80">
-            <button onclick="closeAnnouncementModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">Close</button>
-        </div>
-    </div>
-</div>
-</body>
-</html>
-<?php exit; }
 // ── Student selected: continue with normal page ───────────────────
 
 $check = $db->prepare("
@@ -916,7 +451,7 @@ if ($intern_start) {
         <!-- Top Bar -->
         <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm relative z-[1050]">
             <div class="flex items-center gap-4">
-                <a href="view-student-dashboard.php" class="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-purple-600 transition-colors duration-200 cursor-pointer">
+                <a href="my-students.php" class="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-purple-600 transition-colors duration-200 cursor-pointer" title="Back to My Students">
                     <span class="p-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-full border border-slate-100 shadow-sm transition-all duration-200">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
                     </span>
@@ -1037,11 +572,11 @@ if ($intern_start) {
                             <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-teal-200 shadow-sm">
                             <?php else: ?>
                             <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-sm">
-                                <?= strtoupper(substr($_SESSION['username'] ?? 'S', 0, 1)) ?>
+                                <?= strtoupper(substr(format_supervisor_name($_SESSION['username'] ?? 'S'), 0, 1)) ?>
                             </div>
                             <?php endif; ?>
                             <div class="text-left hidden sm:block">
-                                <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars($sup_name) ?></p>
+                                <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars(format_supervisor_name($sup_name)) ?></p>
                                 <p class="text-xs font-medium text-teal-700 capitalize">Supervisor</p>
                             </div>
                             <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -1067,8 +602,9 @@ if ($intern_start) {
         </header>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-7xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+            <div class="max-w-7xl w-full mx-auto space-y-6">
+
 
                 <!-- Student Info Bar -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-5">
@@ -1105,13 +641,14 @@ if ($intern_start) {
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
                         <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
                             <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm font-bold shrink-0">
-                                <?= strtoupper(substr($profile['supervisor_name'] ?? '', 0, 1)) ?>
+                                <?= strtoupper(substr(format_supervisor_name($profile['supervisor_name'] ?? 'S'), 0, 1)) ?>
                             </div>
                             <div class="min-w-0">
                                 <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Supervisor</p>
-                                <p class="text-xs font-bold text-slate-700 truncate"><?= htmlspecialchars($profile['supervisor_name'] ?? '—') ?></p>
+                                <p class="text-xs font-bold text-slate-700 truncate"><?= htmlspecialchars(format_supervisor_name($profile['supervisor_name'] ?? '—')) ?></p>
                             </div>
                         </div>
+
                         <div class="flex items-center gap-3 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
                             <div class="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-sm font-bold shrink-0">
                                 <?= strtoupper(substr($instructor_name, 0, 1)) ?>
@@ -1166,7 +703,7 @@ if ($intern_start) {
                     </div>
                 </div>
 
-                <!-- Week Selector -->
+                <!-- Week Selector & Actions Bar -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4">
                     <div class="flex items-center justify-between flex-wrap gap-4">
                         <div class="flex items-center gap-3">
@@ -1188,9 +725,17 @@ if ($intern_start) {
                             <span class="text-xs text-slate-400 font-medium"><?= $week_date_range ?></span>
                             <?php endif; ?>
                         </div>
-                        <a href="supervisor-review.php?student_id=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-xs font-bold rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-md shadow-purple-500/20">
-                            View & Grade
-                        </a>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <a href="supervisor-reports.php?student_id=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition shadow-xs" title="View all reports for this student">
+                                📄 View Reports
+                            </a>
+                            <a href="../view_student_history.php?uid=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition shadow-xs" title="View complete 13-week log history">
+                                📜 Full History
+                            </a>
+                            <a href="supervisor-review.php?student_id=<?= $student_id ?>&week=<?= $selected_week ?>" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg shadow-xs transition" title="Review & grade this week's report">
+                                📝 Review & Grade
+                            </a>
+                        </div>
                     </div>
                 </div>
 

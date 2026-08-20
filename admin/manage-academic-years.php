@@ -8,6 +8,7 @@ $admin_id   = (int) ($_SESSION['user_id'] ?? 0);
 $db         = $mysqli ?? $conn;
 
 ensure_academic_years_table($db);
+ensure_supervisor_assignments_table($db);
 
 // Notifications
 $unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
@@ -23,11 +24,11 @@ $recent_notifs_q->execute();
 $res = $recent_notifs_q->get_result();
 $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-// Fetch all academic years with student counts from users table
+// Fetch all academic years with student counts from users table and supervisor counts from assignments table
 $ay_rows = $db->query("
     SELECT ay.*,
            (SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND (u.academic_year_id = ay.id OR u.academic_year = ay.year_label)) AS student_count,
-           (SELECT COUNT(*) FROM users u WHERE u.role = 'supervisor' AND (u.academic_year_id = ay.id OR u.academic_year = ay.year_label)) AS supervisor_count
+           (SELECT COUNT(*) FROM supervisor_academic_assignments saa WHERE saa.academic_year_id = ay.id) AS supervisor_count
     FROM academic_years ay
     ORDER BY ay.start_date DESC, ay.year_label DESC
 ");
@@ -230,6 +231,11 @@ $selected_year_history = [];
                                     </td>
                                     <td class="px-5 py-4 text-right">
                                         <div class="flex items-center justify-end gap-2">
+                                            <button type="button"
+                                                    onclick="openYearDetailsModal(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label'], ENT_QUOTES) ?>')"
+                                                    class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1 border border-indigo-200/60">
+                                                📋 Details
+                                            </button>
                                             <?php if ($is_current): ?>
                                             <span class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-xl cursor-default">
                                                 ✓ Active Session
@@ -356,7 +362,7 @@ $selected_year_history = [];
                 Are you sure you want to archive academic year <strong id="archive_year_label_display" class="text-slate-800 font-bold"></strong>?
             </p>
             <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-700 font-medium">
-                ⚠️ This will set the year status to <strong>Archived</strong> and batch update all <strong id="archive_student_count_display">0</strong> student(s) belonging to this year to <strong>Archived</strong> status.
+                ⚠️ This will set the year status to <strong>Archived</strong> and batch update all <strong id="archive_student_count_display">0</strong> student(s) belonging to this year to <strong>Archived</strong> status. Supervisor accounts will <strong>NOT</strong> be affected — they remain permanently active.
             </div>
             <div id="archiveError" class="hidden bg-red-50 border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl"></div>
             <div class="flex justify-end gap-2 pt-2">
@@ -490,7 +496,234 @@ function showToast(type, message) {
     toast.classList.remove('hidden');
     setTimeout(function() { toast.classList.add('hidden'); }, 3000);
 }
+
+// ── Year Details Modal ───────────────────────────────────────────
+function openYearDetailsModal(yearId, yearLabel) {
+    var modal = document.getElementById('yearDetailsModal');
+    if (!modal) return;
+    document.getElementById('yearDetailsTitle').textContent = 'Year Details: ' + yearLabel;
+    document.getElementById('yearDetailsYearId').value = yearId;
+    document.getElementById('yearDetailsYearLabel').textContent = yearLabel;
+    document.getElementById('assignToYearError').classList.add('hidden');
+
+    // Fetch year details via AJAX
+    var fd = new FormData();
+    fd.append('action', 'get_year_details');
+    fd.append('academic_year_id', yearId);
+
+    fetch('api/assign_supervisor.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                document.getElementById('yearDetailsStudentCount').textContent = data.student_count || 0;
+                document.getElementById('yearDetailsSupervisorCount').textContent = data.supervisor_count || 0;
+                renderYearSupervisors(data.supervisors || []);
+            } else {
+                document.getElementById('yearDetailsStudentCount').textContent = '—';
+                document.getElementById('yearDetailsSupervisorCount').textContent = '—';
+                renderYearSupervisors([]);
+            }
+        })
+        .catch(function() {
+            document.getElementById('yearDetailsStudentCount').textContent = '—';
+            document.getElementById('yearDetailsSupervisorCount').textContent = '—';
+            renderYearSupervisors([]);
+        });
+
+    modal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+}
+
+function closeYearDetailsModal() {
+    var modal = document.getElementById('yearDetailsModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        document.body.classList.remove('overflow-hidden');
+    }
+}
+
+function renderYearSupervisors(supervisors) {
+    var listEl = document.getElementById('yearSupervisorList');
+    var emptyEl = document.getElementById('yearSupervisorEmpty');
+
+    if (!supervisors || supervisors.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        return;
+    }
+    emptyEl.classList.add('hidden');
+
+    var yearId = document.getElementById('yearDetailsYearId').value;
+    var yearLabel = document.getElementById('yearDetailsYearLabel').textContent;
+
+    var html = '';
+    supervisors.forEach(function(s) {
+        var isInactive = (s.status && s.status.toLowerCase() === 'inactive');
+        var statusPill = isInactive
+            ? '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full"><span class="w-1 h-1 rounded-full bg-red-500"></span> Inactive</span>'
+            : '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full"><span class="w-1 h-1 rounded-full bg-emerald-500"></span> Active</span>';
+
+        html += '<div class="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-3.5 hover:bg-slate-50/80 transition">';
+        html += '  <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm font-bold shrink-0">';
+        html += '    ' + (s.username.charAt(0) || 'S').toUpperCase();
+        html += '  </div>';
+        html += '  <div class="flex-1 min-w-0">';
+        html += '    <div class="flex items-center gap-2">';
+        html += '      <p class="font-bold text-sm text-slate-800">' + escHtml(s.username) + '</p>';
+        html += '      ' + statusPill;
+        html += '    </div>';
+        html += '    <p class="text-xs text-slate-500 mt-0.5">' + escHtml(s.email || '') + (s.department ? ' · ' + escHtml(s.department) : '') + '</p>';
+        html += '  </div>';
+        html += '  <div class="text-right shrink-0 flex items-center gap-2">';
+        html += '    <div>';
+        html += '      <p class="text-xs font-bold text-emerald-700">' + (s.student_count || 0) + ' student(s)</p>';
+        html += '    </div>';
+        html += '    <button onclick="removeSupFromYear(' + (s.id || 0) + ', ' + yearId + ', \'' + escAttr(yearLabel) + '\')" ';
+        html += '      class="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg border border-red-200/60 transition cursor-pointer" title="Remove from this year">✕</button>';
+        html += '  </div>';
+        html += '</div>';
+    });
+    listEl.innerHTML = html;
+}
+
+function assignSupervisorToYear(e) {
+    e.preventDefault();
+    var yearId = document.getElementById('yearDetailsYearId').value;
+    var supId = document.getElementById('assignToYearSelect').value;
+    var errDiv = document.getElementById('assignToYearError');
+    errDiv.classList.add('hidden');
+
+    if (!yearId || !supId) {
+        errDiv.textContent = 'Please select a supervisor.';
+        errDiv.classList.remove('hidden');
+        return false;
+    }
+
+    var fd = new FormData();
+    fd.append('action', 'assign');
+    fd.append('supervisor_id', supId);
+    fd.append('academic_year_id', yearId);
+
+    fetch('api/assign_supervisor.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                document.getElementById('assignToYearSelect').value = '';
+                var yearLabel = document.getElementById('yearDetailsYearLabel').textContent;
+                openYearDetailsModal(yearId, yearLabel);
+            } else {
+                errDiv.textContent = data.error || 'Failed to assign.';
+                errDiv.classList.remove('hidden');
+            }
+        })
+        .catch(function() {
+            errDiv.textContent = 'Network error. Please try again.';
+            errDiv.classList.remove('hidden');
+        });
+    return false;
+}
+
+function removeSupFromYear(supId, yearId, yearLabel) {
+    if (!confirm('Remove supervisor from ' + yearLabel + '?')) return;
+    var fd = new FormData();
+    fd.append('action', 'unassign');
+    fd.append('supervisor_id', supId);
+    fd.append('academic_year_id', yearId);
+
+    fetch('api/assign_supervisor.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var yearLabelDisp = document.getElementById('yearDetailsYearLabel').textContent;
+                openYearDetailsModal(yearId, yearLabelDisp);
+                showToast('success', data.message || 'Supervisor removed.');
+            } else {
+                showToast('error', data.error || 'Failed to remove.');
+            }
+        })
+        .catch(function() { showToast('error', 'Network error.'); });
+}
+
+function escHtml(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s || '')); return d.innerHTML; }
 </script>
+
+<!-- ══════ YEAR DETAILS MODAL ══════ -->
+<div id="yearDetailsModal" class="hidden fixed inset-0 z-[999] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeYearDetailsModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl z-10 overflow-hidden flex flex-col max-h-[90vh]">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-white to-blue-50 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg shrink-0">📅</div>
+                <div>
+                    <h3 id="yearDetailsTitle" class="text-sm font-black text-slate-800 uppercase tracking-wider">Year Details</h3>
+                    <p id="yearDetailsYearLabel" class="text-xs text-slate-500 font-medium mt-0.5">—</p>
+                </div>
+            </div>
+            <button onclick="closeYearDetailsModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer shrink-0">✕</button>
+        </div>
+
+        <!-- Body -->
+        <div class="p-6 overflow-y-auto flex-1 space-y-5" style="scrollbar-gutter: stable;">
+            <input type="hidden" id="yearDetailsYearId" value="">
+
+            <!-- Stats -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-indigo-50/60 border border-indigo-200/60 rounded-2xl p-4 text-center">
+                    <p class="text-xs font-bold text-indigo-700 uppercase tracking-wider">Students</p>
+                    <p id="yearDetailsStudentCount" class="text-2xl font-black text-indigo-800 mt-0.5">0</p>
+                </div>
+                <div class="bg-emerald-50/60 border border-emerald-200/60 rounded-2xl p-4 text-center">
+                    <p class="text-xs font-bold text-emerald-700 uppercase tracking-wider">Supervisors</p>
+                    <p id="yearDetailsSupervisorCount" class="text-2xl font-black text-emerald-800 mt-0.5">0</p>
+                </div>
+            </div>
+
+            <!-- Assign Supervisor Form -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-4">
+                <h4 class="text-xs font-black text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <span class="p-1 bg-emerald-50 text-emerald-600 rounded">➕</span> Assign Supervisor to This Year
+                </h4>
+                <form id="assignToYearForm" class="flex items-end gap-3" onsubmit="return assignSupervisorToYear(event)">
+                    <div class="flex-1">
+                        <label class="block text-xs font-bold text-slate-500 mb-1">Supervisor</label>
+                        <select id="assignToYearSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" required>
+                            <option value="">— Select Supervisor —</option>
+                            <?php
+                            $all_sup_q = $db->query("SELECT id, username, email, status FROM users WHERE role = 'supervisor' ORDER BY username ASC");
+                            $all_supervisors = $all_sup_q ? $all_sup_q->fetch_all(MYSQLI_ASSOC) : [];
+                            foreach ($all_supervisors as $asup):
+                                $is_inact = (strtolower((string)($asup['status'] ?? '')) === 'inactive');
+                            ?>
+                                <option value="<?= (int)$asup['id'] ?>"><?= htmlspecialchars($asup['username']) ?> (<?= htmlspecialchars($asup['email']) ?>)<?= $is_inact ? ' [Inactive]' : '' ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer shrink-0">
+                        ➕ Assign
+                    </button>
+                </form>
+                <div id="assignToYearError" class="hidden bg-red-50 border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl mt-3"></div>
+            </div>
+
+            <!-- Supervisors List -->
+            <div>
+                <h4 class="text-xs font-black text-slate-500 uppercase tracking-wider mb-3">👨‍🏫 Assigned Supervisors</h4>
+                <div id="yearSupervisorList" class="space-y-2"></div>
+                <div id="yearSupervisorEmpty" class="hidden p-8 text-center">
+                    <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mx-auto mb-3">👨‍🏫</div>
+                    <p class="text-sm font-semibold text-slate-500">No supervisors assigned to this year</p>
+                    <p class="text-xs text-slate-400 mt-1">Use the form above to assign supervisors.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+            <button onclick="closeYearDetailsModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">Close</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

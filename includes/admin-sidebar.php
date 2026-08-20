@@ -18,7 +18,6 @@ $nav_items = [
     ['key' => 'manage',         'href' => 'admin-dashboard.php?tab=manage',      'icon' => '👥', 'label' => 'Manage Users'],
     ['key' => 'academic-years', 'href' => 'academic-years.php',                   'icon' => '📅', 'label' => 'Academic Years'],
     ['key' => 'history',        'href' => 'admin-dashboard.php?tab=history',     'icon' => '📜', 'label' => 'Reports'],
-    ['key' => 'profile',        'href' => 'admin-profile.php',                   'icon' => '👤', 'label' => 'Profile'],
 ];
 ?>
 <!-- ─── SIDEBAR BACKDROP (MOBILE) ─── -->

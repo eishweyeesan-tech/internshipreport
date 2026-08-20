@@ -29,13 +29,14 @@ $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 // ── Type filter (supervisor-scoped) ────────────────────────────
 $type_labels = [
     ''                        => 'All notifications',
+    'report_needs_review'     => 'Ready for Review',
     'new_report_submitted'    => 'New reports',
-    'report_needs_review'     => 'Awaiting review',
     'student_behind_schedule' => 'Behind schedule',
     'internship_completed'    => 'Internships completed',
     'system_notice'           => 'System notices',
 ];
 $type_filter = $_GET['type'] ?? '';
+
 if (!array_key_exists($type_filter, $type_labels)) $type_filter = '';
 
 // ── Pagination ─────────────────────────────────────────────────
@@ -133,19 +134,21 @@ function build_query_url($overrides = []) {
     <?php $active_page = 'notifications'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
-    <div id="top" class="flex-1 flex flex-col min-h-0">
+    <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Header -->
         <?php $pageTitle = 'Notifications'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- ════ NOTIFICATIONS CONTENT ════ -->
-        <main class="flex-1 overflow-y-auto p-8">
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+            <div class="max-w-7xl w-full mx-auto space-y-6">
 
-            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                <div>
-                    <h2 class="text-xl font-extrabold text-slate-800 tracking-tight">Notifications</h2>
-                    <p class="text-xs text-slate-500 mt-1">All updates about your students' reports, schedules and internships.</p>
-                </div>
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h2 class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Notifications</h2>
+                        <p class="text-xs sm:text-sm text-slate-500 mt-1">All updates about your students' reports, schedules and internships.</p>
+                    </div>
+
                 <?php if ($unread_notif_count > 0): ?>
                 <button onclick="markAllNotifsRead()" class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 cursor-pointer">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -265,11 +268,12 @@ function build_query_url($overrides = []) {
                 <p class="text-sm font-bold text-slate-600">No <?= $type_filter ? 'matching ' : '' ?>notifications</p>
                 <p class="text-xs text-slate-400 mt-1">When something happens with your students, it will show up here.</p>
             </div>
-
             <?php endif; ?>
+            </div>
         </main>
     </div>
 </div>
+
 <?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 </html>

@@ -193,13 +193,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
             notify_user_once(
                 $db,
                 (int) $profile['supervisor_user_id'],
-                'Report Needs Review',
-                $student_name . "'s Week " . $week_number . ' report was approved by the instructor and now needs your review.',
+                'Report Ready for Supervisor Review',
+                $student_name . "'s Week " . $week_number . ' report has been reviewed and approved by the company instructor and is ready for your evaluation.',
                 'report_needs_review',
                 $week_number,
                 $student_id
             );
         }
+
 
         $eval_stmt->bind_param("ii", $student_id, $week_number);
         $eval_stmt->execute();

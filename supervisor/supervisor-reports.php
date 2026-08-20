@@ -33,6 +33,7 @@ $filter_status = $_GET['status'] ?? '';
 $allowed_statuses = ['pending', 'approved_by_instructor', 'approved_by_supervisor', 'rejected'];
 if (!in_array($filter_status, $allowed_statuses, true)) $filter_status = '';
 
+$filter_student_id = (int) ($_GET['student_id'] ?? $_GET['uid'] ?? 0);
 $filter_week = isset($_GET['week']) && $_GET['week'] !== '' ? (int) $_GET['week'] : null;
 $filter_company = trim($_GET['company'] ?? '');
 $filter_year = trim($_GET['year'] ?? ($_GET['academic_year'] ?? ''));
@@ -40,6 +41,17 @@ $search = trim($_GET['search'] ?? '');
 
 $page = (isset($_GET['page']) && (int) $_GET['page'] > 0) ? (int) $_GET['page'] : 1;
 $per_page = 12;
+
+$filtered_student_name = '';
+if ($filter_student_id > 0) {
+    $st_name_q = $db->prepare("SELECT COALESCE(sp.full_name, u.username) AS sname FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.id = ? AND sp.supervisor_id = ?");
+    $st_name_q->bind_param("ii", $filter_student_id, $sup_id);
+    $st_name_q->execute();
+    $st_res = $st_name_q->get_result();
+    if ($st_row = $st_res->fetch_assoc()) {
+        $filtered_student_name = $st_row['sname'];
+    }
+}
 
 // ── Summary counts (assigned students scope) ───────────────────
 $pending_reviews_q = $db->prepare("
@@ -132,6 +144,11 @@ $where = '';
 $types = 'i';
 $params = [$sup_id];
 
+if ($filter_student_id > 0) {
+    $where .= " AND re.student_id = ?";
+    $types .= "i";
+    $params[] = $filter_student_id;
+}
 if ($filter_status) {
     $where .= " AND re.report_status = ?";
     $types .= "s";
@@ -216,14 +233,15 @@ function build_query_url($overrides = []) {
     <?php $active_page = 'reports'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
-    <div id="top" class="flex-1 flex flex-col min-h-0">
+    <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Header -->
         <?php $pageTitle = 'University Supervisor Reports'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- ════ REPORTS CONTENT ════ -->
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-7xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+            <div class="max-w-7xl w-full mx-auto space-y-6">
+
 
                 <!-- ═══ PAGE HEADER ═══ -->
                 <div class="flex items-center justify-between flex-wrap gap-4">
@@ -233,7 +251,7 @@ function build_query_url($overrides = []) {
                     </div>
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600">📄 <?= $total_reports ?> total</span>
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-600">⏳ <?= $pending_reviews ?> awaiting review</span>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold text-blue-700">🔵 <?= $pending_reviews ?> ready for review</span>
                     </div>
                 </div>
 
@@ -242,10 +260,10 @@ function build_query_url($overrides = []) {
                     <div class="flex flex-wrap items-center gap-3">
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <a href="?<?= http_build_query(build_query_url(['status' => '', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === '' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">All</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_instructor', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'approved_by_instructor' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50' ?>">⏳ Awaiting grade</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_supervisor', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'approved_by_supervisor' ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50' ?>">✅ Graded</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'rejected', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'rejected' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-red-600 border-red-200 hover:bg-red-50' ?>">✕ Rejected</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'pending', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'pending' ? 'bg-slate-600 text-white border-slate-600' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50' ?>">Pending</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_instructor', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'approved_by_instructor' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50' ?>">🔵 Ready for Review</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_supervisor', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'approved_by_supervisor' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50' ?>">✅ Graded</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'rejected', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'rejected' ? 'bg-red-600 text-white border-red-600 shadow-xs' : 'bg-white text-red-700 border-red-200 hover:bg-red-50' ?>">✕ Rejected</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'pending', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'pending' ? 'bg-slate-700 text-white border-slate-700 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">⏳ Waiting for Instructor</a>
                         </div>
 
                         <div class="flex-1"></div>
@@ -277,12 +295,28 @@ function build_query_url($overrides = []) {
                                 <?= render_academic_year_options($db, $filter_year, true, 'All Academic Years') ?>
                             </select>
 
-                            <?php if ($filter_status || $filter_week || $filter_company || ($filter_year && $filter_year !== 'all') || $search): ?>
+                            <?php if ($filter_status || $filter_week || $filter_company || ($filter_year && $filter_year !== 'all') || $search || $filter_student_id): ?>
                             <a href="supervisor-reports.php" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all duration-200">✕ Clear</a>
                             <?php endif; ?>
                         </form>
                     </div>
                 </div>
+
+                <?php if ($filter_student_id > 0 && !empty($filtered_student_name)): ?>
+                <!-- Student Filter Indicator Banner -->
+                <div class="mb-4 p-3.5 bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200 rounded-xl flex items-center justify-between shadow-xs">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-6 h-6 rounded-md bg-teal-600 text-white flex items-center justify-center text-xs font-bold">🎓</span>
+                        <div>
+                            <span class="text-xs font-bold text-teal-800">Showing reports for:</span>
+                            <span class="text-xs font-black text-slate-800 ml-1"><?= htmlspecialchars($filtered_student_name) ?></span>
+                        </div>
+                    </div>
+                    <a href="?<?= http_build_query(build_query_url(['student_id' => null, 'uid' => null])) ?>" class="text-xs font-bold text-teal-700 hover:text-teal-900 bg-white/80 hover:bg-white border border-teal-200 px-2.5 py-1 rounded-lg transition shadow-xs">
+                        ✕ Show All Students
+                    </a>
+                </div>
+                <?php endif; ?>
 
                 <!-- ═══ REPORTS TABLE ═══ -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
@@ -301,8 +335,8 @@ function build_query_url($overrides = []) {
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 <?php foreach ($reports as $rep):
-                                    $badge = report_status_badge($rep['report_status']);
                                     $rep_student = $rep['full_name'] ?: $rep['username'];
+                                    $rep_status  = $rep['report_status'];
                                 ?>
                                 <tr class="hover:bg-slate-50/60 transition-colors duration-150">
                                     <td class="px-6 py-4">
@@ -323,30 +357,63 @@ function build_query_url($overrides = []) {
                                         <span class="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700">
                                             Week <?= (int)$rep['week_number'] ?>
                                             <?php if (!empty($rep['weekly_grade'])): ?>
-                                            <span class="text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-lg"><?= htmlspecialchars($rep['weekly_grade']) ?></span>
+                                             <span class="text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-lg"><?= htmlspecialchars($rep['weekly_grade']) ?></span>
                                             <?php endif; ?>
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold <?= $badge[1] ?> border px-2.5 py-1 rounded-lg">
-                                            <span class="w-1.5 h-1.5 rounded-full <?= report_status_dot($rep['report_status']) ?>"></span> <?= $badge[0] ?>
+                                        <?php if ($rep_status === 'approved_by_instructor'): ?>
+                                        <div class="inline-flex flex-col items-start gap-1">
+                                            <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg whitespace-nowrap">
+                                                ✅ Instructor Approved
+                                            </span>
+                                            <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md whitespace-nowrap">
+                                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                                Ready for Review
+                                            </span>
+                                        </div>
+                                        <?php elseif ($rep_status === 'approved_by_supervisor'): ?>
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                            ✅ Supervisor Approved
                                         </span>
+                                        <?php elseif ($rep_status === 'rejected'): ?>
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                            ❌ Rejected
+                                        </span>
+                                        <?php else: ?>
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                            ⏳ Waiting for Instructor
+                                        </span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="px-6 py-4">
                                         <span class="text-xs text-slate-500 font-medium"><?= htmlspecialchars((new DateTime($rep['evaluated_at']))->format('d M Y, h:i A')) ?></span>
                                     </td>
                                     <td class="px-6 py-4 text-right">
-                                        <?php if ($rep['report_status'] === 'approved_by_supervisor'): ?>
-                                        <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all duration-200">👁️ View</a>
-                                        <?php else: ?>
-                                        <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-purple-600 text-white text-xs font-bold rounded-lg hover:from-purple-600 hover:to-purple-700 transition-all duration-200 shadow-md shadow-purple-500/20">🔍 Review</a>
-                                        <?php endif; ?>
+                                        <div class="inline-flex items-center justify-end gap-1.5 flex-nowrap">
+                                            <?php if ($rep_status === 'approved_by_instructor'): ?>
+                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg transition-all duration-200 shadow-xs whitespace-nowrap">
+                                                📝 Review & Grade
+                                            </a>
+                                            <?php else: ?>
+                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all duration-200 whitespace-nowrap">
+                                                👁️ View
+                                            </a>
+                                            <?php endif; ?>
+                                            <a href="../view_student_history.php?uid=<?= (int)$rep['student_id'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all duration-200 whitespace-nowrap" title="View 13-week report history">
+                                                📜 History
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
+
 
                     <!-- Pagination -->
                     <?php if ($total_pages > 1): ?>

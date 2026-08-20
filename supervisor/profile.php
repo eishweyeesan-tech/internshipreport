@@ -222,14 +222,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     <?php $active_page = 'profile'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
-    <div id="top" class="flex-1 flex flex-col min-h-0">
+    <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Bar -->
         <?php $pageTitle = 'Supervisor Profile'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-[900px] mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+            <div class="max-w-4xl w-full mx-auto space-y-6">
+
 
                 <?php if ($msg): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
@@ -283,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                 <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Current avatar" class="w-14 h-14 rounded-full object-cover border border-slate-200">
                             <?php else: ?>
                                 <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold border border-slate-200">
-                                    <?= strtoupper($sup_name[0]) ?>
+                                    <?= strtoupper(substr(format_supervisor_name($sup_name), 0, 1)) ?>
                                 </div>
                             <?php endif; ?>
                             <div class="flex-1">
@@ -309,12 +310,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div class="p-3 bg-slate-50 rounded-xl">
                                 <p class="text-sm font-bold text-slate-500 uppercase">Full Name</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['username']) ?></p>
+                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></p>
                             </div>
                             <div class="p-3 bg-slate-50 rounded-xl">
                                 <p class="text-sm font-bold text-slate-500 uppercase">Username</p>
                                 <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['username']) ?></p>
                             </div>
+
                             <div class="p-3 bg-slate-50 rounded-xl">
                                 <p class="text-sm font-bold text-slate-500 uppercase">Email</p>
                                 <p class="text-xs font-semibold text-slate-800 mt-0.5 break-all"><?= htmlspecialchars($sup['email']) ?></p>

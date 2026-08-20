@@ -233,6 +233,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_sup_eval'])) {
         $update_status->bind_param("ii", $student_id, $week_num);
         $update_status->execute();
 
+        // Notify student that report has been graded
+        notify_user_once(
+            $db,
+            $student_id,
+            "Week {$week_num} Report Graded",
+            "Your university supervisor evaluated and graded your Week {$week_num} report with '{$grade}'.",
+            'supervisor_approved',
+            $week_num,
+            $student_id,
+            null
+        );
+
         // Re-fetch current week evaluation
         $gq = $db->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
         $gq->bind_param("ii", $student_id, $week_num);
@@ -382,13 +394,14 @@ foreach ($all_weeks_grades as $wg) {
     <?php $active_page = 'students'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
-    <div class="flex-1 flex flex-col overflow-hidden">
+    <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Bar -->
-        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-8 shrink-0 shadow-sm print:hidden">
+        <header class="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 flex items-center justify-between px-4 lg:px-8 shrink-0 shadow-sm print:hidden">
+
             <div class="flex items-center gap-4">
-                <a href="supervisor-dashboard.php" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all duration-200">
-                    ← Back
+                <a href="supervisor-reports.php" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all duration-200" title="Back to Reports">
+                    ← Back to Reports
                 </a>
                 <h1 class="text-base font-bold text-slate-800">Student Review — <?= htmlspecialchars($student_name) ?></h1>
             </div>
@@ -418,13 +431,14 @@ foreach ($all_weeks_grades as $wg) {
                             <img src="../uploads/avatars/<?= htmlspecialchars($_SESSION['profile_pic']) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-teal-200 shadow-sm">
                             <?php else: ?>
                             <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-sm">
-                                <?= strtoupper(substr($_SESSION['username'] ?? 'S', 0, 1)) ?>
+                                <?= strtoupper(substr(format_supervisor_name($_SESSION['username'] ?? 'S'), 0, 1)) ?>
                             </div>
                             <?php endif; ?>
                             <div class="text-left hidden sm:block">
-                                <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars($sup_name ?? '') ?></p>
+                                <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars(format_supervisor_name($sup_name ?? '')) ?></p>
                                 <p class="text-xs font-medium text-teal-700 capitalize">Supervisor</p>
                             </div>
+
                             <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
                             </svg>
@@ -448,8 +462,9 @@ foreach ($all_weeks_grades as $wg) {
         </header>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-7xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+            <div class="max-w-7xl w-full mx-auto space-y-6">
+
 
     <!-- ════ FLASH MESSAGE ════ -->
     <?php if ($msg === 'saved'): ?>
@@ -506,10 +521,21 @@ foreach ($all_weeks_grades as $wg) {
                         </span>
                     </div>
                     <?php endif; ?>
-            <div class="flex items-center gap-2 shrink-0 print:hidden">
-                <button type="button" onclick="window.print()" class="inline-flex items-center gap-2 px-4 py-2.5 bg-[#005f73] hover:bg-[#0a9396] text-white text-xs font-bold rounded-xl shadow-md shadow-teal-700/20 transition-all duration-200 cursor-pointer">
+                </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap shrink-0 print:hidden">
+                <a href="view-student-dashboard.php?id=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition shadow-xs">
+                    👁️ Dashboard
+                </a>
+                <a href="supervisor-reports.php?student_id=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition shadow-xs">
+                    📄 Reports
+                </a>
+                <a href="../view_student_history.php?uid=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition shadow-xs" title="View 13-week complete history">
+                    📜 History
+                </a>
+                <button type="button" onclick="window.print()" class="inline-flex items-center gap-2 px-3.5 py-2 bg-[#005f73] hover:bg-[#0a9396] text-white text-xs font-bold rounded-xl shadow-md shadow-teal-700/20 transition-all duration-200 cursor-pointer">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-                    <span>Print Report</span>
+                    <span>Print</span>
                 </button>
             </div>
         </div>
@@ -737,7 +763,8 @@ foreach ($all_weeks_grades as $wg) {
             </div>
 
             <!-- Company Instructor Feedback (read-only) -->
-            <?php if ($instructor_eval && $instructor_eval['report_status'] === 'approved_by_instructor'): ?>
+            <?php if ($instructor_eval && in_array($instructor_eval['report_status'], ['approved_by_instructor', 'approved_by_supervisor'], true)): ?>
+
             <div class="bg-white rounded-2xl border border-emerald-200/60 shadow-sm overflow-hidden">
                 <div class="px-6 py-4 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-white">
                     <h2 class="text-sm font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-2">

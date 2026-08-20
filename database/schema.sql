@@ -26,11 +26,8 @@ CREATE TABLE IF NOT EXISTS users (
     is_first_login TINYINT(1) NOT NULL DEFAULT 1,
     academic_year VARCHAR(15) DEFAULT NULL,
     academic_year_id INT DEFAULT NULL,
-    status ENUM('Active', 'Archived') NOT NULL DEFAULT 'Active',
+    status ENUM('Active', 'Inactive', 'Archived') NOT NULL DEFAULT 'Active',
     profile_pic VARCHAR(255) DEFAULT NULL,
-    github_link VARCHAR(255) DEFAULT NULL,
-    linkedin_link VARCHAR(255) DEFAULT NULL,
-    portfolio_link VARCHAR(255) DEFAULT NULL,
     last_login_at DATETIME DEFAULT NULL,
     is_warned TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -67,6 +64,19 @@ CREATE TABLE IF NOT EXISTS system_settings (
     setting_key VARCHAR(100) NOT NULL UNIQUE,
     setting_value TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Supervisor–Academic Year assignment (many-to-many)
+CREATE TABLE IF NOT EXISTS supervisor_academic_assignments (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    supervisor_id INT NOT NULL,
+    academic_year_id INT NOT NULL,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    assigned_by INT DEFAULT NULL,
+    UNIQUE KEY unique_sup_year (supervisor_id, academic_year_id),
+    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE CASCADE,
+    FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

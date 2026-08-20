@@ -193,6 +193,15 @@ function notif_action_url($notif, $role = null)
         case 'new_report_submitted':
         case 'report_needs_review':
         case 'report_submitted':
+        case 'instructor_approved':
+            if ($student_id) {
+                $url = $base . 'supervisor-review.php?student_id=' . $student_id;
+                if ($week) $url .= '&week=' . $week;
+                return $url;
+            }
+            return $base . 'supervisor-reports.php';
+
+        case 'instructor_rejected':
             if ($student_id) {
                 $url = $base . 'supervisor-review.php?student_id=' . $student_id;
                 if ($week) $url .= '&week=' . $week;
@@ -205,6 +214,7 @@ function notif_action_url($notif, $role = null)
         case 'student_behind_schedule':
         case 'internship_completed':
         case 'supervisor_approved':
+        case 'report_graded':
             if ($student_id) {
                 return $base . 'view-student-dashboard.php?id=' . $student_id;
             }
@@ -219,8 +229,11 @@ function notif_action_url($notif, $role = null)
             return $base . 'supervisor-dashboard.php';
 
         default:
-            if ($week) {
-                return $base . 'supervisor-dashboard.php?week=' . $week;
+            if ($student_id && $week) {
+                return $base . 'supervisor-review.php?student_id=' . $student_id . '&week=' . $week;
+            }
+            if ($student_id) {
+                return $base . 'view-student-dashboard.php?id=' . $student_id;
             }
             return $base . 'supervisor-dashboard.php';
     }
@@ -253,7 +266,8 @@ function notif_type_meta($type)
         case 'report_submitted':
             return ['icon' => '📄', 'classes' => 'bg-teal-100 text-teal-600'];
         case 'report_needs_review':
-            return ['icon' => '🔍', 'classes' => 'bg-amber-100 text-amber-600'];
+            return ['icon' => '📝', 'classes' => 'bg-blue-100 text-blue-600'];
+
         case 'student_behind_schedule':
             return ['icon' => '⚠️', 'classes' => 'bg-red-100 text-red-600'];
         case 'internship_completed':

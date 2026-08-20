@@ -177,14 +177,15 @@ function build_query_url($overrides = []) {
     <?php $active_page = 'companies'; include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
     <!-- ─── MAIN ─── -->
-    <div id="top" class="flex-1 flex flex-col min-h-0">
+    <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Header -->
         <?php $pageTitle = 'University Supervisor Companies'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- ════ COMPANIES CONTENT ════ -->
-        <main class="flex-1 overflow-y-auto p-8">
-            <div class="max-w-7xl mx-auto space-y-6">
+        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+            <div class="max-w-7xl w-full mx-auto space-y-6">
+
 
                 <!-- ═══ PAGE HEADER ═══ -->
                 <div class="flex items-center justify-between flex-wrap gap-4">

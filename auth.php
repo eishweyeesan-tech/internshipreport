@@ -79,7 +79,7 @@ $_SESSION['last_login_at'] = $_SESSION['last_login_at'] ?? null;
 $db = $mysqli ?? $conn ?? null;
 if (isset($_SESSION['user_id']) && $db) {
     try {
-        $_auth_stmt = $db->prepare("SELECT profile_pic, last_login_at FROM users WHERE id = ? LIMIT 1");
+        $_auth_stmt = $db->prepare("SELECT profile_pic, last_login_at, status, role FROM users WHERE id = ? LIMIT 1");
         if ($_auth_stmt) {
             $_user_id_int = (int)$_SESSION['user_id'];
             $_auth_stmt->bind_param("i", $_user_id_int);
@@ -89,6 +89,18 @@ if (isset($_SESSION['user_id']) && $db) {
             if ($_auth_user) {
                 $_SESSION['profile_pic'] = $_auth_user['profile_pic'] ?? null;
                 $_SESSION['last_login_at'] = $_auth_user['last_login_at'] ?? null;
+
+                // Invalidate session immediately if supervisor account is set to Inactive
+                if (($_auth_user['role'] ?? '') === 'supervisor' && strcasecmp(trim((string)($_auth_user['status'] ?? '')), 'Inactive') === 0) {
+                    $_auth_stmt->close();
+                    session_unset();
+                    session_destroy();
+                    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+                    $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/instructor/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
+                    $login_path = $in_sub ? '../login.php?error=inactive' : 'login.php?error=inactive';
+                    header('Location: ' . $login_path);
+                    exit;
+                }
             }
             $_auth_stmt->close();
         }
