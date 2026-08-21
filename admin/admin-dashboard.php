@@ -8,22 +8,14 @@ $db         = $mysqli ?? $conn;
 $msg = '';
 $err = '';
 
-// Default password values should be available before request handlers run.
-$def_student_pw = 'password123';
-$def_supervisor_pw = 'password123';
-$sys_settings = [];
-$res_st = $db->query("SELECT setting_key, setting_value FROM system_settings");
-if ($res_st) {
-    while ($row = $res_st->fetch_assoc()) {
-        $sys_settings[$row['setting_key']] = $row['setting_value'];
-    }
-}
-$def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
-$def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
-
 require_once __DIR__ . '/../includes/academic_year_helper.php';
 ensure_academic_years_table($db);
 ensure_supervisor_assignments_table($db);
+
+// Default password values and active academic year from academic_years table
+$default_pws = get_default_passwords($db);
+$def_student_pw = $default_pws['student'];
+$def_supervisor_pw = $default_pws['supervisor'];
 
 // ── Academic Years (from academic_years table) ────────────────
 $active_ay_rec = get_active_academic_year($db);
@@ -69,20 +61,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     $s_email         = trim($_POST['s_email'] ?? '');
     $s_company_id    = (int) ($_POST['s_company_id'] ?? 0);
     $s_supervisor_id = (int) ($_POST['s_supervisor_id'] ?? 0);
-    $s_instructor    = trim($_POST['s_instructor'] ?? '');
     $s_start         = trim($_POST['s_start_date'] ?? '');
     $s_end           = trim($_POST['s_end_date'] ?? '');
-    $s_academic      = trim($_POST['s_academic_year'] ?? '');
     $s_password      = $_POST['s_password'] ?? '';
 
-    if (empty($s_name) || empty($s_roll) || empty($s_email) || empty($s_password)) {
+    // Fetch active academic year
+    $ay_active_res = $db->query("SELECT id, year_label FROM academic_years WHERE is_current = 1 LIMIT 1");
+    $active_year_row = $ay_active_res ? $ay_active_res->fetch_assoc() : null;
+    $s_academic_id = $active_year_row ? (int) $active_year_row['id'] : 0;
+    $s_academic_label = $active_year_row ? $active_year_row['year_label'] : '';
+
+    if (empty($s_academic_id)) {
+        $err = 'No active academic year found in the system. Please activate an academic year first in Academic Year Management.';
+    } elseif (empty($s_name) || empty($s_roll) || empty($s_email) || empty($s_password)) {
         $err = 'Name, Roll No, Email, and Password are required.';
     } elseif (!filter_var($s_email, FILTER_VALIDATE_EMAIL)) {
         $err = 'Invalid email format.';
     } elseif (strlen($s_password) < 6) {
         $err = 'Password must be at least 6 characters.';
-    } elseif ($s_academic && !preg_match('/^\d{4}-\d{4}$/', $s_academic)) {
-        $err = 'Academic year must be in range format (e.g. 2024-2025).';
     } else {
         $check = $db->prepare("SELECT id FROM users WHERE email = ?");
         $check->bind_param("s", $s_email);
@@ -91,39 +87,177 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
         if ($res && $res->fetch_row()) {
             $err = 'A user with this email already exists.';
         } else {
-            // Resolve academic_year_id from the string label
-            $s_academic_id = ($s_academic && isset($ay_label_to_id[$s_academic])) ? $ay_label_to_id[$s_academic] : null;
-
-            // Composite check: same roll number + same academic year = duplicate
-            $check_dup = $db->prepare("SELECT u.id FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE (u.username = ? OR sp.student_roll = ?) AND (u.academic_year = ? OR (? IS NOT NULL AND u.academic_year_id = ?))");
-            $check_dup->bind_param("ssssi", $s_roll, $s_roll, $s_academic, $s_academic_id, $s_academic_id);
+            // Composite check: same roll number + active academic year = duplicate
+            $check_dup = $db->prepare("SELECT u.id FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE (u.username = ? OR sp.student_roll = ?) AND u.academic_year_id = ?");
+            $check_dup->bind_param("ssi", $s_roll, $s_roll, $s_academic_id);
             $check_dup->execute();
             $res = $check_dup->get_result();
             if ($res && $res->fetch_row()) {
-                $err = 'This Roll Number already exists for the selected Academic Year.';
+                $err = "This Roll Number ({$s_roll}) already exists for the current academic year ({$s_academic_label}).";
             } else {
-                // Look up company name from selected company_id
-                $company_name = '';
-                if ($s_company_id > 0) {
-                    $cn = $db->prepare("SELECT company_name FROM companies WHERE id = ?");
-                    $cn->bind_param("i", $s_company_id);
-                    $cn->execute();
-                    $res_c = $cn->get_result();
-                    $row_c = $res_c ? $res_c->fetch_row() : null;
-                    $company_name = $row_c[0] ?? '';
-                }
-
                 $hash = password_hash($s_password, PASSWORD_DEFAULT);
-                $ins_u = $db->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?, ?)");
-                $ins_u->bind_param("ssssi", $s_roll, $s_email, $hash, $s_academic, $s_academic_id);
+                $ins_u = $db->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?)");
+                $ins_u->bind_param("sssi", $s_name, $s_email, $hash, $s_academic_id);
                 $ins_u->execute();
                 $uid = (int) $db->insert_id;
 
-                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins_sp->bind_param("isssisisss", $uid, $s_name, $s_roll, $s_major, $s_company_id, $company_name, $s_supervisor_id, $s_instructor, $s_start, $s_end);
+                $comp_id = $s_company_id > 0 ? $s_company_id : null;
+                $sup_id = $s_supervisor_id > 0 ? $s_supervisor_id : null;
+                $istart = !empty($s_start) ? $s_start : null;
+                $iend   = !empty($s_end) ? $s_end : null;
+
+                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, student_roll, major, company_id, supervisor_id, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $ins_sp->bind_param("ississs", $uid, $s_roll, $s_major, $comp_id, $sup_id, $istart, $iend);
                 $ins_sp->execute();
 
-                $msg = "Student \"{$s_name}\" created. Email: {$s_email}, Password: {$s_password}";
+                $msg = "Student \"{$s_name}\" ({$s_roll}) created successfully for {$s_academic_label}. Email: {$s_email}";
+            }
+        }
+    }
+}
+
+// ── Import Students (CSV) ─────────────────────────────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_students_csv'])) {
+    // Fetch active academic year
+    $ay_active_res = $db->query("SELECT id, year_label, default_student_password FROM academic_years WHERE is_current = 1 LIMIT 1");
+    $active_year_row = $ay_active_res ? $ay_active_res->fetch_assoc() : null;
+    $active_academic_id = $active_year_row ? (int) $active_year_row['id'] : 0;
+    $active_academic_label = $active_year_row ? $active_year_row['year_label'] : '';
+    $default_pw_from_year = $active_year_row['default_student_password'] ?? 'password1234';
+
+    if (empty($active_academic_id)) {
+        $err = 'No active academic year found in the system. Please activate an academic year first before importing students.';
+    } elseif (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+        $err = 'Please select a valid CSV file to import.';
+    } else {
+        $file_tmp = $_FILES['csv_file']['tmp_name'];
+        $file_ext = strtolower(pathinfo($_FILES['csv_file']['name'], PATHINFO_EXTENSION));
+
+        if ($file_ext !== 'csv') {
+            $err = 'Only .csv files are supported for student import.';
+        } else {
+            $handle = fopen($file_tmp, 'r');
+            if (!$handle) {
+                $err = 'Unable to read the uploaded CSV file.';
+            } else {
+                $header = fgetcsv($handle);
+                $imported_count = 0;
+                $skipped_count = 0;
+                $row_errors = [];
+                $row_idx = 1;
+
+                while (($data = fgetcsv($handle)) !== false) {
+                    $row_idx++;
+                    if (empty(array_filter($data))) {
+                        continue;
+                    }
+
+                    // Columns: Full Name, Roll Number, Email, Major, Company Name/ID, Supervisor Email/Username, Start Date, End Date, Password
+                    $c_name   = trim($data[0] ?? '');
+                    $c_roll   = trim($data[1] ?? '');
+                    $c_email  = trim($data[2] ?? '');
+                    $c_major  = trim($data[3] ?? '');
+                    $c_comp   = trim($data[4] ?? '');
+                    $c_sup    = trim($data[5] ?? '');
+                    $c_start  = trim($data[6] ?? '');
+                    $c_end    = trim($data[7] ?? '');
+                    $c_pass   = trim($data[8] ?? '') ?: $default_pw_from_year;
+
+                    if (empty($c_name) || empty($c_roll) || empty($c_email)) {
+                        $skipped_count++;
+                        $row_errors[] = "Row {$row_idx}: Missing required fields (Name, Roll No, or Email).";
+                        continue;
+                    }
+
+                    if (!filter_var($c_email, FILTER_VALIDATE_EMAIL)) {
+                        $skipped_count++;
+                        $row_errors[] = "Row {$row_idx}: Invalid email ({$c_email}).";
+                        continue;
+                    }
+
+                    // Duplicate Email check
+                    $chk_em = $db->prepare("SELECT id FROM users WHERE email = ?");
+                    $chk_em->bind_param("s", $c_email);
+                    $chk_em->execute();
+                    if ($chk_em->get_result()->fetch_row()) {
+                        $skipped_count++;
+                        $row_errors[] = "Row {$row_idx}: Email ({$c_email}) already registered.";
+                        continue;
+                    }
+
+                    // Duplicate Roll check for this active academic year
+                    $chk_rl = $db->prepare("SELECT u.id FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE (u.username = ? OR sp.student_roll = ?) AND u.academic_year_id = ?");
+                    $chk_rl->bind_param("ssi", $c_roll, $c_roll, $active_academic_id);
+                    $chk_rl->execute();
+                    if ($chk_rl->get_result()->fetch_row()) {
+                        $skipped_count++;
+                        $row_errors[] = "Row {$row_idx}: Roll No ({$c_roll}) already exists for {$active_academic_label}.";
+                        continue;
+                    }
+
+                    // Resolve Company
+                    $resolved_comp_id = null;
+                    if (!empty($c_comp)) {
+                        if (is_numeric($c_comp)) {
+                            $resolved_comp_id = (int)$c_comp;
+                        } else {
+                            $cq = $db->prepare("SELECT id FROM companies WHERE company_name = ? LIMIT 1");
+                            $cq->bind_param("s", $c_comp);
+                            $cq->execute();
+                            $cres = $cq->get_result();
+                            if ($crow = $cres->fetch_assoc()) {
+                                $resolved_comp_id = (int)$crow['id'];
+                            } else {
+                                $c_ins = $db->prepare("INSERT INTO companies (company_name) VALUES (?)");
+                                $c_ins->bind_param("s", $c_comp);
+                                $c_ins->execute();
+                                $resolved_comp_id = (int)$db->insert_id;
+                            }
+                        }
+                    }
+
+                    // Resolve Supervisor
+                    $resolved_sup_id = null;
+                    if (!empty($c_sup)) {
+                        if (is_numeric($c_sup)) {
+                            $resolved_sup_id = (int)$c_sup;
+                        } else {
+                            $sq = $db->prepare("SELECT id FROM users WHERE (email = ? OR username = ?) AND role = 'supervisor' LIMIT 1");
+                            $sq->bind_param("ss", $c_sup, $c_sup);
+                            $sq->execute();
+                            $sres = $sq->get_result();
+                            if ($srow = $sres->fetch_assoc()) {
+                                $resolved_sup_id = (int)$srow['id'];
+                            }
+                        }
+                    }
+
+                    $s_start_dt = !empty($c_start) ? $c_start : null;
+                    $s_end_dt   = !empty($c_end) ? $c_end : null;
+                    $hash = password_hash($c_pass, PASSWORD_DEFAULT);
+
+                    $ins_u = $db->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?)");
+                    $ins_u->bind_param("sssi", $c_name, $c_email, $hash, $active_academic_id);
+                    $ins_u->execute();
+                    $new_uid = (int) $db->insert_id;
+
+                    $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, student_roll, major, company_id, supervisor_id, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    $ins_sp->bind_param("ississs", $new_uid, $c_roll, $c_major, $resolved_comp_id, $resolved_sup_id, $s_start_dt, $s_end_dt);
+                    $ins_sp->execute();
+
+                    $imported_count++;
+                }
+
+                fclose($handle);
+
+                if ($imported_count > 0) {
+                    $msg = "Successfully imported {$imported_count} student(s) into active academic year ({$active_academic_label}).";
+                    if ($skipped_count > 0) {
+                        $msg .= " Skipped {$skipped_count} row(s): " . implode('; ', array_slice($row_errors, 0, 3));
+                    }
+                } else {
+                    $err = "Import failed. No students were added. " . implode('; ', array_slice($row_errors, 0, 3));
+                }
             }
         }
     }
@@ -985,10 +1119,16 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="text-xs font-semibold text-slate-700 tracking-wide uppercase block mb-1.5">Academic Year *</label>
-                                        <select name="s_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:border-purple-500 focus:bg-white focus:outline-none transition-all duration-200">
-                                            <?= render_academic_year_options($db, $current_active_year_label, false) ?>
-                                        </select>
+                                        <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
+                                        <div class="relative">
+                                            <input type="text"
+                                                   value="<?= htmlspecialchars($current_active_year_label ? ($current_active_year_label . ' (Current Academic Year)') : 'No Active Academic Year') ?>"
+                                                   readonly
+                                                   disabled
+                                                   class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-indigo-700 cursor-not-allowed select-none">
+                                            <input type="hidden" name="academic_year_id" value="<?= (int)($active_ay_rec['id'] ?? 0) ?>">
+                                        </div>
+                                        <p class="text-xs text-slate-400 mt-1">Automatically bound to the active academic year.</p>
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Internship Start Date</label>
@@ -1006,6 +1146,32 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                 </div>
                                 <div class="flex justify-end pt-2">
                                     <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">🎓 Create Student</button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- ════ BULK IMPORT STUDENTS (CSV) ════ -->
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                            <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2 bg-slate-50/50">
+                                <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                    <span class="p-1 bg-emerald-50 text-emerald-600 rounded">📥</span> Import Students via CSV
+                                </h2>
+                                <span class="text-xs text-slate-500 font-semibold">Active Year: <span class="text-emerald-700 font-bold"><?= htmlspecialchars($current_active_year_label ?: 'None') ?></span></span>
+                            </div>
+                            <form method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
+                                <input type="hidden" name="import_students_csv" value="1">
+                                <input type="hidden" name="academic_year_id" value="<?= (int)($active_ay_rec['id'] ?? 0) ?>">
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                    <div class="md:col-span-2">
+                                        <label class="block text-sm font-bold text-slate-500 mb-1">Upload CSV File *</label>
+                                        <input type="file" name="csv_file" accept=".csv" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 transition file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer">
+                                        <p class="text-xs text-slate-400 mt-1">Columns: <code>Full Name, Roll Number, Email, Major, Company Name, Supervisor Email, Start Date, End Date, Password</code></p>
+                                    </div>
+                                    <div>
+                                        <button type="submit" class="w-full px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center justify-center gap-2">
+                                            <span>📥</span> Import to <?= htmlspecialchars($current_active_year_label ?: 'Current Year') ?>
+                                        </button>
+                                    </div>
                                 </div>
                             </form>
                         </div>
@@ -1850,7 +2016,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                         // Fetch latest grade for each student
                         $hist_grades = [];
                         foreach ($hist_students as $hs) {
-                            $gq = $db->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
+                            $gq = $db->prepare("SELECT instructor_grade FROM weekly_reports WHERE student_id = ? AND instructor_grade IS NOT NULL ORDER BY submitted_at DESC LIMIT 1");
                             $gq->bind_param("i", $hs['uid']);
                             $gq->execute();
                             $res = $gq->get_result();

@@ -103,16 +103,13 @@ try {
         $is_curr = 0;
     }
 
-    $ins = $db->prepare("INSERT INTO academic_years (year_label, start_date, end_date, is_current, status) VALUES (?, ?, ?, ?, ?)");
-    $ins->bind_param("sssis", $label, $start, $end, $is_curr, $status);
+    $def_stu = trim($_POST['default_student_password'] ?? '') ?: 'password1234';
+    $def_sup = trim($_POST['default_supervisor_password'] ?? '') ?: 'password1234';
+
+    $ins = $db->prepare("INSERT INTO academic_years (year_label, start_date, end_date, default_student_password, default_supervisor_password, is_current, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    $ins->bind_param("sssssis", $label, $start, $end, $def_stu, $def_sup, $is_curr, $status);
     $ins->execute();
     $new_id = $ins->insert_id;
-
-    if ($set_as_current) {
-        $setting_stmt = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('current_academic_year', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $setting_stmt->bind_param("s", $label);
-        $setting_stmt->execute();
-    }
 
     $db->commit();
 

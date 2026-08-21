@@ -15,12 +15,28 @@ if (!function_exists('ensure_academic_years_table')) {
                 year_label VARCHAR(50) NOT NULL UNIQUE,
                 start_date DATE NOT NULL,
                 end_date DATE NOT NULL,
+                default_student_password VARCHAR(255) NOT NULL DEFAULT 'password1234',
+                default_supervisor_password VARCHAR(255) NOT NULL DEFAULT 'password1234',
                 is_current TINYINT(1) NOT NULL DEFAULT 0,
                 status ENUM('Active', 'Upcoming', 'Archived') NOT NULL DEFAULT 'Upcoming',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         ";
         $db->query($create_sql);
+
+        // Auto-migration: ensure default password columns exist on older tables
+        try {
+            $col1 = $db->query("SHOW COLUMNS FROM academic_years LIKE 'default_student_password'");
+            if ($col1 && $col1->num_rows === 0) {
+                $db->query("ALTER TABLE academic_years ADD COLUMN default_student_password VARCHAR(255) NOT NULL DEFAULT 'password1234' AFTER end_date");
+            }
+            $col2 = $db->query("SHOW COLUMNS FROM academic_years LIKE 'default_supervisor_password'");
+            if ($col2 && $col2->num_rows === 0) {
+                $db->query("ALTER TABLE academic_years ADD COLUMN default_supervisor_password VARCHAR(255) NOT NULL DEFAULT 'password1234' AFTER default_student_password");
+            }
+        } catch (Throwable $e) {
+            // Silently fallback if table doesn't support or already migrated
+        }
 
         // Check if empty
         $check_res = $db->query("SELECT COUNT(*) FROM academic_years");
@@ -50,9 +66,11 @@ if (!function_exists('ensure_academic_years_table')) {
                 $end_date = $end_year . '-08-31';
                 $is_current = ($idx === 0) ? 1 : 0;
                 $status = ($idx === 0) ? 'Active' : 'Upcoming';
+                $def_stu_pw = 'password1234';
+                $def_sup_pw = 'password1234';
 
-                $stmt = $db->prepare("INSERT IGNORE INTO academic_years (year_label, start_date, end_date, is_current, status) VALUES (?, ?, ?, ?, ?)");
-                $stmt->bind_param("sssis", $label, $start_date, $end_date, $is_current, $status);
+                $stmt = $db->prepare("INSERT IGNORE INTO academic_years (year_label, start_date, end_date, default_student_password, default_supervisor_password, is_current, status) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("sssssis", $label, $start_date, $end_date, $def_stu_pw, $def_sup_pw, $is_current, $status);
                 $stmt->execute();
             }
         } else {
@@ -74,6 +92,7 @@ if (!function_exists('ensure_academic_years_table')) {
 
 if (!function_exists('get_all_academic_years')) {
     function get_all_academic_years($db) {
+        if (!$db) return [];
         ensure_academic_years_table($db);
         $res = $db->query("SELECT * FROM academic_years ORDER BY start_date DESC, year_label DESC");
         return $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
@@ -82,6 +101,7 @@ if (!function_exists('get_all_academic_years')) {
 
 if (!function_exists('get_active_academic_year')) {
     function get_active_academic_year($db) {
+        if (!$db) return null;
         ensure_academic_years_table($db);
         $res = $db->query("SELECT * FROM academic_years WHERE is_current = 1 LIMIT 1");
         if ($res && $row = $res->fetch_assoc()) {
@@ -99,7 +119,7 @@ if (!function_exists('get_active_academic_year')) {
 if (!function_exists('get_active_academic_year_label')) {
     function get_active_academic_year_label($db, $fallback = '2023-2024') {
         $active = get_active_academic_year($db);
-        return $active ? $active['year_label'] : $fallback;
+        return ($active && !empty($active['year_label'])) ? $active['year_label'] : $fallback;
     }
 }
 
@@ -108,9 +128,85 @@ if (!function_exists('get_academic_years_list')) {
         $all = get_all_academic_years($db);
         $labels = [];
         foreach ($all as $y) {
-            $labels[] = $y['year_label'];
+            if (!empty($y['year_label'])) {
+                $labels[] = $y['year_label'];
+            }
         }
         return $labels;
+    }
+}
+
+if (!function_exists('get_default_passwords')) {
+    /**
+     * Retrieve default passwords from the active academic year.
+     * Returns an associative array with both concise and verbose keys.
+     * Safe fallback values prevent fatal errors or undefined keys.
+     */
+    function get_default_passwords($db, $fallback_student = 'password1234', $fallback_supervisor = 'password1234') {
+        $active = get_active_academic_year($db);
+        $student_pw = (!empty($active['default_student_password'])) ? $active['default_student_password'] : $fallback_student;
+        $supervisor_pw = (!empty($active['default_supervisor_password'])) ? $active['default_supervisor_password'] : $fallback_supervisor;
+
+        return [
+            'student' => $student_pw,
+            'supervisor' => $supervisor_pw,
+            'default_student_password' => $student_pw,
+            'default_supervisor_password' => $supervisor_pw,
+        ];
+    }
+}
+
+if (!function_exists('get_default_student_password')) {
+    function get_default_student_password($db, $fallback = 'password1234') {
+        $passwords = get_default_passwords($db, $fallback, $fallback);
+        return $passwords['student'];
+    }
+}
+
+if (!function_exists('get_default_supervisor_password')) {
+    function get_default_supervisor_password($db, $fallback = 'password1234') {
+        $passwords = get_default_passwords($db, $fallback, $fallback);
+        return $passwords['supervisor'];
+    }
+}
+
+if (!function_exists('update_default_passwords')) {
+    /**
+     * Update default passwords in the academic_years table for the active year or a specified year ID.
+     */
+    function update_default_passwords($db, $student_pw, $supervisor_pw, $academic_year_id = null) {
+        if (!$db) return false;
+        ensure_academic_years_table($db);
+
+        $student_pw = trim((string)$student_pw);
+        $supervisor_pw = trim((string)$supervisor_pw);
+
+        if ($academic_year_id !== null && (int)$academic_year_id > 0) {
+            $stmt = $db->prepare("UPDATE academic_years SET default_student_password = ?, default_supervisor_password = ? WHERE id = ?");
+            $ay_id = (int)$academic_year_id;
+            $stmt->bind_param("ssi", $student_pw, $supervisor_pw, $ay_id);
+            return $stmt->execute();
+        }
+
+        $active = get_active_academic_year($db);
+        if ($active && !empty($active['id'])) {
+            $stmt = $db->prepare("UPDATE academic_years SET default_student_password = ?, default_supervisor_password = ? WHERE id = ?");
+            $ay_id = (int)$active['id'];
+            $stmt->bind_param("ssi", $student_pw, $supervisor_pw, $ay_id);
+            return $stmt->execute();
+        }
+
+        // Fallback: update any active record or all records if none marked active
+        $stmt = $db->prepare("UPDATE academic_years SET default_student_password = ?, default_supervisor_password = ? WHERE is_current = 1");
+        $stmt->bind_param("ss", $student_pw, $supervisor_pw);
+        $stmt->execute();
+        if ($stmt->affected_rows > 0) {
+            return true;
+        }
+
+        $stmt2 = $db->prepare("UPDATE academic_years SET default_student_password = ?, default_supervisor_password = ? ORDER BY id DESC LIMIT 1");
+        $stmt2->bind_param("ss", $student_pw, $supervisor_pw);
+        return $stmt2->execute();
     }
 }
 
@@ -350,18 +446,19 @@ if (!function_exists('get_supervisor_detailed_history')) {
             // Fetch students supervised in this year
             $stu_stmt = $db->prepare("
                 SELECT u.id, u.username, u.email, u.phone, u.status AS student_status,
-                       sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
+                       u.username AS full_name, sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, sp.job_role,
                        sp.internship_start_date, sp.internship_end_date,
-                       (SELECT COUNT(*) FROM supervisor_weekly_evaluations swe WHERE swe.student_id = u.id AND swe.supervisor_id = ?) AS weekly_eval_count,
-                       (SELECT swe2.weekly_grade FROM supervisor_weekly_evaluations swe2 WHERE swe2.student_id = u.id AND swe2.supervisor_id = ? ORDER BY swe2.week_number DESC, swe2.id DESC LIMIT 1) AS latest_weekly_grade,
-                       (SELECT COUNT(*) FROM report_evaluations re WHERE re.student_id = u.id) AS report_eval_count
+                       (SELECT COUNT(*) FROM weekly_reports wr WHERE wr.student_id = u.id AND wr.supervisor_grade IS NOT NULL) AS weekly_eval_count,
+                       (SELECT wr2.supervisor_grade FROM weekly_reports wr2 WHERE wr2.student_id = u.id AND wr2.supervisor_grade IS NOT NULL ORDER BY wr2.week_number DESC, wr2.id DESC LIMIT 1) AS latest_weekly_grade,
+                       (SELECT COUNT(*) FROM weekly_reports wr3 WHERE wr3.student_id = u.id AND wr3.status <> 'rejected') AS report_eval_count
                 FROM users u
                 JOIN student_profiles sp ON sp.user_id = u.id
+                LEFT JOIN companies c ON c.id = sp.company_id
                 WHERE sp.supervisor_id = ?
-                  AND (u.academic_year_id = ? OR u.academic_year = ?)
-                ORDER BY sp.student_roll ASC, sp.full_name ASC
+                  AND u.academic_year_id = ?
+                ORDER BY sp.student_roll ASC, u.username ASC
             ");
-            $stu_stmt->bind_param("iiiis", $supervisor_id, $supervisor_id, $supervisor_id, $year_id, $year_label);
+            $stu_stmt->bind_param("ii", $supervisor_id, $year_id);
             $stu_stmt->execute();
             $stu_res = $stu_stmt->get_result();
             $students = $stu_res ? $stu_res->fetch_all(MYSQLI_ASSOC) : [];
@@ -448,3 +545,29 @@ if (!function_exists('render_academic_year_options')) {
         return $output;
     }
 }
+
+if (!function_exists('ensure_weekly_reports_table')) {
+    function ensure_weekly_reports_table($db) {
+        if (!$db) return;
+        $db->query("
+            CREATE TABLE IF NOT EXISTS weekly_reports (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                student_id INT NOT NULL,
+                week_number INT NOT NULL,
+                what_done TEXT NOT NULL,
+                how_done TEXT NOT NULL,
+                why_done TEXT NOT NULL,
+                instructor_review_code VARCHAR(64) DEFAULT NULL UNIQUE,
+                instructor_grade ENUM('excellent', 'good', 'average', 'needs_improvement') DEFAULT NULL,
+                instructor_comments TEXT DEFAULT NULL,
+                supervisor_grade ENUM('A', 'B', 'C', 'D', 'F') DEFAULT NULL,
+                supervisor_comments TEXT DEFAULT NULL,
+                status ENUM('pending', 'approved_by_instructor', 'graded', 'rejected') NOT NULL DEFAULT 'pending',
+                submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_student_week (student_id, week_number),
+                FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+    }
+}
+

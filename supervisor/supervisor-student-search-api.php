@@ -45,26 +45,27 @@ $like        = '%' . $q . '%';
 
 $sql = "
     SELECT u.id AS uid, u.username, u.email,
-           sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role
+           u.username AS full_name, sp.student_roll, sp.major,
+           COALESCE(c.company_name, '') AS company_name, sp.job_role
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student'
       AND u.status = 'Active'
       AND sp.supervisor_id = ?
       AND (
-          sp.full_name LIKE ?
-          OR u.username LIKE ?
+          u.username LIKE ?
           OR sp.student_roll LIKE ?
-          OR sp.company_name LIKE ?
+          OR c.company_name LIKE ?
           OR sp.job_role LIKE ?
           OR u.email LIKE ?
       )
-    ORDER BY sp.full_name ASC
+    ORDER BY u.username ASC
     LIMIT ?
 ";
 
 $stmt = $db->prepare($sql);
-$stmt->bind_param("issssssi", $sup_id, $like, $like, $like, $like, $like, $like, $fetch_limit);
+$stmt->bind_param("isssssi", $sup_id, $like, $like, $like, $like, $like, $fetch_limit);
 $stmt->execute();
 $res = $stmt->get_result();
 $rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];

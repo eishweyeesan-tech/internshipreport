@@ -44,7 +44,7 @@ $per_page = 12;
 
 $filtered_student_name = '';
 if ($filter_student_id > 0) {
-    $st_name_q = $db->prepare("SELECT COALESCE(sp.full_name, u.username) AS sname FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.id = ? AND sp.supervisor_id = ?");
+    $st_name_q = $db->prepare("SELECT u.username AS sname FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.id = ? AND sp.supervisor_id = ?");
     $st_name_q->bind_param("ii", $filter_student_id, $sup_id);
     $st_name_q->execute();
     $st_res = $st_name_q->get_result();
@@ -55,16 +55,13 @@ if ($filter_student_id > 0) {
 
 // ── Summary counts (assigned students scope) ───────────────────
 $pending_reviews_q = $db->prepare("
-    SELECT COUNT(*) FROM report_evaluations re
-    WHERE re.report_status = 'approved_by_instructor'
-      AND re.student_id IN (
+    SELECT COUNT(*) FROM weekly_reports wr
+    WHERE wr.status = 'approved_by_instructor'
+      AND wr.supervisor_grade IS NULL
+      AND wr.student_id IN (
           SELECT u.id FROM users u
           JOIN student_profiles sp ON sp.user_id = u.id
           WHERE u.role = 'student' AND sp.supervisor_id = ?
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM supervisor_weekly_evaluations swe
-          WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
 $pending_reviews_q->bind_param("i", $sup_id);
@@ -74,8 +71,8 @@ $row = $res ? $res->fetch_row() : null;
 $pending_reviews = (int) ($row[0] ?? 0);
 
 $total_reports_q = $db->prepare("
-    SELECT COUNT(*) FROM report_evaluations re
-    JOIN users u ON u.id = re.student_id
+    SELECT COUNT(*) FROM weekly_reports wr
+    JOIN users u ON u.id = wr.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
 ");
@@ -93,12 +90,12 @@ $available_years = get_academic_years_list($db);
 $active_year_label = get_active_academic_year_label($db);
 
 $weeks_q = $db->prepare("
-    SELECT DISTINCT re.week_number
-    FROM report_evaluations re
-    JOIN users u ON u.id = re.student_id
+    SELECT DISTINCT wr.week_number
+    FROM weekly_reports wr
+    JOIN users u ON u.id = wr.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
-    ORDER BY re.week_number DESC
+    ORDER BY wr.week_number DESC
 ");
 $weeks_q->bind_param("i", $sup_id);
 $weeks_q->execute();
@@ -111,12 +108,13 @@ if ($res) {
 }
 
 $companies_q = $db->prepare("
-    SELECT DISTINCT sp.company_name
+    SELECT DISTINCT c.company_name
     FROM student_profiles sp
     JOIN users u ON u.id = sp.user_id
+    JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
-      AND sp.company_name IS NOT NULL AND sp.company_name != ''
-    ORDER BY sp.company_name ASC
+      AND c.company_name IS NOT NULL AND c.company_name != ''
+    ORDER BY c.company_name ASC
 ");
 $companies_q->bind_param("i", $sup_id);
 $companies_q->execute();
@@ -130,14 +128,18 @@ if ($res) {
 
 // ── Main reports query ─────────────────────────────────────────
 $base_sql = "
-    SELECT re.*, u.id AS uid, u.username, u.academic_year,
-           sp.full_name, sp.student_roll, sp.company_name,
-           swe.weekly_grade
-    FROM report_evaluations re
-    JOIN users u ON u.id = re.student_id
+    SELECT wr.id, wr.student_id, wr.week_number, wr.what_done, wr.how_done, wr.why_done,
+           wr.instructor_review_code, wr.instructor_grade, wr.instructor_comments,
+           wr.supervisor_grade, wr.supervisor_comments, wr.status AS report_status,
+           wr.submitted_at AS evaluated_at,
+           u.id AS uid, u.username, ay.year_label AS academic_year,
+           u.username AS full_name, sp.student_roll, COALESCE(c.company_name, '') AS company_name,
+           wr.supervisor_grade AS weekly_grade
+    FROM weekly_reports wr
+    JOIN users u ON u.id = wr.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
-    LEFT JOIN supervisor_weekly_evaluations swe
-           ON swe.student_id = re.student_id AND swe.week_number = re.week_number
+    LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
 ";
 $where = '';
@@ -145,40 +147,46 @@ $types = 'i';
 $params = [$sup_id];
 
 if ($filter_student_id > 0) {
-    $where .= " AND re.student_id = ?";
+    $where .= " AND wr.student_id = ?";
     $types .= "i";
     $params[] = $filter_student_id;
 }
 if ($filter_status) {
-    $where .= " AND re.report_status = ?";
-    $types .= "s";
-    $params[] = $filter_status;
+    if ($filter_status === 'approved_by_supervisor' || $filter_status === 'graded') {
+        $where .= " AND (wr.status = 'graded' OR wr.supervisor_grade IS NOT NULL)";
+    } else {
+        $where .= " AND wr.status = ?";
+        $types .= "s";
+        $params[] = $filter_status;
+    }
 }
 if ($filter_week) {
-    $where .= " AND re.week_number = ?";
+    $where .= " AND wr.week_number = ?";
     $types .= "i";
     $params[] = $filter_week;
 }
 if ($filter_company) {
-    $where .= " AND sp.company_name = ?";
+    $where .= " AND c.company_name = ?";
     $types .= "s";
     $params[] = $filter_company;
 }
 if ($filter_year && $filter_year !== 'all') {
-    $where .= " AND u.academic_year = ?";
+    $where .= " AND ay.year_label = ?";
     $types .= "s";
     $params[] = $filter_year;
 }
 if ($search) {
-    $where .= " AND (sp.full_name LIKE ? OR u.username LIKE ? OR sp.student_roll LIKE ? OR sp.company_name LIKE ?)";
+    $where .= " AND (u.username LIKE ? OR sp.student_roll LIKE ? OR c.company_name LIKE ?)";
     $like = '%' . $search . '%';
-    $types .= "ssss";
-    array_push($params, $like, $like, $like, $like);
+    $types .= "sss";
+    array_push($params, $like, $like, $like);
 }
 
-$count_sql = "SELECT COUNT(*) FROM report_evaluations re
-              JOIN users u ON u.id = re.student_id
+$count_sql = "SELECT COUNT(*) FROM weekly_reports wr
+              JOIN users u ON u.id = wr.student_id
               JOIN student_profiles sp ON sp.user_id = u.id
+              LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+              LEFT JOIN companies c ON c.id = sp.company_id
               WHERE u.role = 'student' AND sp.supervisor_id = ?" . $where;
 $count_stmt = $db->prepare($count_sql);
 $count_stmt->bind_param($types, ...$params);
@@ -190,7 +198,7 @@ $total_pages = max(1, (int) ceil($total_filtered / $per_page));
 $page = min($page, $total_pages);
 $offset = ($page - 1) * $per_page;
 
-$sql = $base_sql . $where . " ORDER BY re.evaluated_at DESC LIMIT ? OFFSET ?";
+$sql = $base_sql . $where . " ORDER BY wr.submitted_at DESC LIMIT ? OFFSET ?";
 $fetch_types = $types . "ii";
 $fetch_params = array_merge($params, [$per_page, $offset]);
 
@@ -372,7 +380,7 @@ function build_query_url($overrides = []) {
                                                 Ready for Review
                                             </span>
                                         </div>
-                                        <?php elseif ($rep_status === 'approved_by_supervisor'): ?>
+                                        <?php elseif ($rep_status === 'approved_by_supervisor' || $rep_status === 'graded'): ?>
                                         <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
                                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                             ✅ Supervisor Approved

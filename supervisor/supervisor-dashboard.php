@@ -80,14 +80,15 @@ $weekEnd   = (clone $today)->modify('sunday this week')->format('Y-m-d');
 // FETCH ASSIGNED ACTIVE STUDENTS (Dashboard Overview)
 // ══════════════════════════════════════════════════════════════════════
 $stu_detail_sql = "
-    SELECT u.id AS uid, u.username, u.email, u.academic_year, u.profile_pic,
-           sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
-           sp.internship_start_date, sp.internship_end_date,
-           sp.instructor_name, sp.instructor_email, sp.instructor_id
+    SELECT u.id AS uid, u.username, u.email, ay.year_label AS academic_year, u.profile_pic,
+           u.username AS full_name, sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, sp.job_role,
+           sp.internship_start_date, sp.internship_end_date
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
+    LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
-    ORDER BY sp.full_name ASC
+    ORDER BY u.username ASC
 ";
 $stu_detail_stmt = $db->prepare($stu_detail_sql);
 $stu_detail_stmt->bind_param("i", $sup_id);
@@ -147,7 +148,7 @@ $complete = 0;
 $progress_status = [];
 
 $report_status_cache = [];
-$rs_q = $db->prepare("SELECT report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+$rs_q = $db->prepare("SELECT status FROM weekly_reports WHERE student_id = ? AND week_number = ?");
 foreach ($all_students_detail as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
@@ -158,7 +159,7 @@ foreach ($all_students_detail as $sd) {
     $report_status_cache[$uid] = $row[0] ?? 'pending';
 }
 
-$log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+$log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
 foreach ($all_students_detail as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
@@ -170,7 +171,7 @@ foreach ($all_students_detail as $sd) {
         continue;
     }
 
-    if ($rstatus === 'approved_by_supervisor') {
+    if ($rstatus === 'graded' || $rstatus === 'approved_by_supervisor') {
         $complete++;
         $progress_status[$uid] = 'green';
         continue;
@@ -226,13 +227,10 @@ foreach ($all_students_detail as $sd) {
 // ══════════════════════════════════════════════════════════════════════
 $unreviewed = [];
 $unrev_q = $db->prepare("
-    SELECT COUNT(*) FROM report_evaluations re
-    WHERE re.student_id = ?
-      AND re.report_status = 'approved_by_instructor'
-      AND NOT EXISTS (
-          SELECT 1 FROM supervisor_weekly_evaluations swe
-          WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
-      )
+    SELECT COUNT(*) FROM weekly_reports wr
+    WHERE wr.student_id = ?
+      AND wr.status = 'approved_by_instructor'
+      AND wr.supervisor_grade IS NULL
 ");
 foreach ($all_students_detail as $s) {
     $unrev_q->bind_param("i", $s['uid']);
@@ -244,16 +242,13 @@ foreach ($all_students_detail as $s) {
 
 // Total pending reviews across assigned students
 $pending_reviews_q = $db->prepare("
-    SELECT COUNT(*) FROM report_evaluations re
-    WHERE re.report_status = 'approved_by_instructor'
-      AND re.student_id IN (
+    SELECT COUNT(*) FROM weekly_reports wr
+    WHERE wr.status = 'approved_by_instructor'
+      AND wr.supervisor_grade IS NULL
+      AND wr.student_id IN (
           SELECT u.id FROM users u
           JOIN student_profiles sp ON sp.user_id = u.id
           WHERE u.role = 'student' AND sp.supervisor_id = ?
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM supervisor_weekly_evaluations swe
-          WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
 $pending_reviews_q->bind_param("i", $sup_id);
@@ -266,14 +261,15 @@ $pending_reviews = (int) ($row[0] ?? 0);
 // RECENT REPORTS (From Assigned Students)
 // ══════════════════════════════════════════════════════════════════════
 $recent_reports_q = $db->prepare("
-    SELECT re.week_number, re.report_status, re.evaluated_at,
+    SELECT wr.week_number, wr.status AS report_status, wr.submitted_at AS evaluated_at,
            u.id AS student_id, u.username, u.profile_pic,
-           sp.full_name, sp.student_roll, sp.company_name
-    FROM report_evaluations re
-    JOIN users u ON u.id = re.student_id
+           u.username AS full_name, sp.student_roll, COALESCE(c.company_name, '') AS company_name
+    FROM weekly_reports wr
+    JOIN users u ON u.id = wr.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
-    ORDER BY re.evaluated_at DESC
+    ORDER BY wr.submitted_at DESC
     LIMIT 6
 ");
 $recent_reports_q->bind_param("i", $sup_id);
@@ -306,17 +302,15 @@ foreach ($all_students_detail as $sd) {
 
 // 2. MEDIUM PRIORITY: Reports approved by instructor awaiting supervisor grade
 $pending_task_q = $db->prepare("
-    SELECT re.week_number, re.evaluated_at, u.id AS student_id, u.username, sp.full_name, sp.company_name
-    FROM report_evaluations re
-    JOIN users u ON u.id = re.student_id
+    SELECT wr.week_number, wr.submitted_at AS evaluated_at, u.id AS student_id, u.username, u.username AS full_name, COALESCE(c.company_name, '') AS company_name
+    FROM weekly_reports wr
+    JOIN users u ON u.id = wr.student_id
     JOIN student_profiles sp ON sp.user_id = u.id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
-      AND re.report_status = 'approved_by_instructor'
-      AND NOT EXISTS (
-          SELECT 1 FROM supervisor_weekly_evaluations swe
-          WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
-      )
-    ORDER BY re.evaluated_at ASC
+      AND wr.status = 'approved_by_instructor'
+      AND wr.supervisor_grade IS NULL
+    ORDER BY wr.submitted_at ASC
     LIMIT 10
 ");
 $pending_task_q->bind_param("i", $sup_id);
@@ -333,7 +327,7 @@ if ($res) {
             'subtitle' => '✅ Approved by instructor · ' . htmlspecialchars($ptr['company_name'] ?: 'Internship Report'),
             'student_id' => (int) $ptr['student_id'],
             'action_label' => 'Review & Grade',
-            'url'      => 'supervisor-review.php?student_id=' . (int) $ptr['student_id'] . '&week=' . (int) $ptr['week_number'],
+            'url'      => 'view-student-dashboard.php?id=' . (int) $ptr['student_id'] . '&week=' . (int) $ptr['week_number'],
             'can_warn' => false,
         ];
     }
@@ -342,9 +336,9 @@ if ($res) {
 
 // 3. FINAL EVALUATIONS / IMPORTANT TASKS: Internship ended without complete weekly grading
 $final_task_q = $db->prepare("
-    SELECT u.id AS student_id, u.username, sp.full_name,
+    SELECT u.id AS student_id, u.username, u.username AS full_name,
            sp.internship_start_date, sp.internship_end_date,
-           (SELECT COUNT(*) FROM supervisor_weekly_evaluations swe WHERE swe.student_id = u.id) AS graded_weeks
+           (SELECT COUNT(*) FROM weekly_reports wr WHERE wr.student_id = u.id AND wr.supervisor_grade IS NOT NULL) AS graded_weeks
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
@@ -368,7 +362,7 @@ if ($res) {
                 'subtitle' => 'Internship concluded (' . $graded . '/' . $ftr_total . ' weeks graded)',
                 'student_id' => (int) $ftr['student_id'],
                 'action_label' => 'Evaluate',
-                'url'      => 'supervisor-review.php?student_id=' . (int) $ftr['student_id'],
+                'url'      => 'view-student-dashboard.php?id=' . (int) $ftr['student_id'],
                 'can_warn' => false,
             ];
         }
@@ -667,18 +661,18 @@ usort($tasks, function ($a, $b) {
                                                 <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Ready for Review
                                             </span>
                                         </div>
-                                        <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
+                                        <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
                                             Review & Grade →
                                         </a>
                                         <?php elseif ($is_graded): ?>
                                         <span class="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Supervisor Approved
+                                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Supervisor Approved
                                         </span>
-                                        <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
+                                        <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
                                             View →
                                         </a>
                                         <?php else: ?>
-                                        <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
+                                        <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
                                             View →
                                         </a>
                                         <?php endif; ?>

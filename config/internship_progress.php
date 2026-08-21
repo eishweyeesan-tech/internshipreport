@@ -13,7 +13,7 @@
  * blocks.
  *
  * Completed weeks are the distinct weeks for which the student submitted a
- * weekly report (a row in report_evaluations that is not 'rejected').
+ * weekly report (a row in weekly_reports that is not 'rejected').
  * A rejected report is not counted as completed because the student must
  * redo it. Multiple daily logs within a single week count as ONE completed
  * week — the unit of progress is weeks, not log entries.
@@ -102,7 +102,7 @@ if (!function_exists('internship_total_weeks')) {
     /**
      * Number of weeks the student actually completed.
      * A week counts as completed when a weekly report exists in
-     * report_evaluations (student_id = users.id) and is not 'rejected'.
+     * weekly_reports (student_id = users.id) and is not 'rejected'.
      * Distinct weeks only — daily-log volume inside a week never inflates it.
      *
      * @param mysqli  $db
@@ -112,8 +112,8 @@ if (!function_exists('internship_total_weeks')) {
     function internship_completed_weeks($db, int $student_user_id): int
     {
         $stmt = $db->prepare(
-            "SELECT COUNT(DISTINCT week_number) FROM report_evaluations
-             WHERE student_id = ? AND report_status <> 'rejected'"
+            "SELECT COUNT(DISTINCT week_number) FROM weekly_reports
+             WHERE student_id = ? AND status <> 'rejected'"
         );
         $stmt->bind_param("i", $student_user_id);
         $stmt->execute();
@@ -161,7 +161,7 @@ if (!function_exists('internship_total_weeks')) {
      * @return array{present:int, absent:int, expected:int, rate:int}
      *   rate = round(present / expected * 100), 0 when there are no records.
      */
-    function internship_attendance($db, int $internship_id, ?string $start = null, ?string $end = null): array
+    function internship_attendance($db, int $student_id, ?string $start = null, ?string $end = null): array
     {
         if ($start && $end) {
             $stmt = $db->prepare(
@@ -169,18 +169,18 @@ if (!function_exists('internship_total_weeks')) {
                     SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_cnt,
                     SUM(CASE WHEN attendance_status IN ('leave','absent') THEN 1 ELSE 0 END) AS absent_cnt
                 FROM daily_logs
-                WHERE internship_id = ? AND log_date BETWEEN ? AND ?"
+                WHERE student_id = ? AND log_date BETWEEN ? AND ?"
             );
-            $stmt->bind_param("iss", $internship_id, $start, $end);
+            $stmt->bind_param("iss", $student_id, $start, $end);
         } else {
             $stmt = $db->prepare(
                 "SELECT
                     SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_cnt,
                     SUM(CASE WHEN attendance_status IN ('leave','absent') THEN 1 ELSE 0 END) AS absent_cnt
                 FROM daily_logs
-                WHERE internship_id = ?"
+                WHERE student_id = ?"
             );
-            $stmt->bind_param("i", $internship_id);
+            $stmt->bind_param("i", $student_id);
         }
 
         $stmt->execute();

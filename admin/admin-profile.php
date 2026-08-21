@@ -29,16 +29,13 @@ try {
     $admin = $res ? $res->fetch_assoc() : null;
 }
 
-// ── Fetch system settings ────────────────────────────────────────
-$get_settings = $db->query("SELECT setting_key, setting_value FROM system_settings");
-$settings = [];
-if ($get_settings) {
-    while ($row = $get_settings->fetch_assoc()) {
-        $settings[$row['setting_key']] = $row['setting_value'];
-    }
-}
-$default_student_pw  = $settings['default_student_password'] ?? 'password123';
-$default_supervisor_pw = $settings['default_supervisor_password'] ?? 'password123';
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+ensure_academic_years_table($db);
+
+// ── Fetch default password settings from active academic year ────────
+$default_pws = get_default_passwords($db);
+$default_student_pw  = $default_pws['student'];
+$default_supervisor_pw = $default_pws['supervisor'];
 
 // ══════════════════════════════════════════════════════════════════
 // HANDLERS
@@ -117,17 +114,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_defaults'])) {
     } elseif (strlen($d_student) < 6 || strlen($d_sup) < 6) {
         $err = 'Default passwords must be at least 6 characters.';
     } else {
-        $st1 = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_student_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $st1->bind_param("s", $d_student);
-        $st1->execute();
-
-        $st2 = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_supervisor_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $st2->bind_param("s", $d_sup);
-        $st2->execute();
+        update_default_passwords($db, $d_student, $d_sup);
 
         $default_student_pw = $d_student;
         $default_supervisor_pw = $d_sup;
-        $msg = 'Default passwords updated.';
+        $msg = 'Default passwords updated successfully.';
     }
 }
 

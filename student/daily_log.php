@@ -11,10 +11,11 @@ $internship_id = $user_id;
 $db = $mysqli ?? $conn;
 
 // FETCH INTERNSHIP DATE RANGE
-$profile_stmt = $db->prepare("SELECT sp.full_name, sp.internship_start_date, sp.internship_end_date,
-    sp.company_name, sp.job_role, u.profile_pic
+$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.major, sp.job_role, sp.internship_start_date, sp.internship_end_date,
+    COALESCE(c.company_name, '') AS company_name, u.username, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE sp.user_id = ?");
 $profile_stmt->bind_param("i", $user_id);
 $profile_stmt->execute();
@@ -22,13 +23,13 @@ $res = $profile_stmt->get_result();
 $profile_row = $res ? $res->fetch_assoc() : null;
 $intern_start = $profile_row['internship_start_date'] ?? null;
 $intern_end   = $profile_row['internship_end_date'] ?? null;
-$student_name = ($profile_row['full_name'] ?? '') ?: $username;
+$student_name = ($profile_row['username'] ?? '') ?: $username;
 $profile_pic  = $profile_row['profile_pic'] ?? null;
 
 
 
 // FETCH EXISTING LOG DATES
-$log_dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ?");
+$log_dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE student_id = ?");
 $log_dates_stmt->bind_param("i", $internship_id);
 $log_dates_stmt->execute();
 $res = $log_dates_stmt->get_result();
@@ -55,7 +56,7 @@ if ($intern_start) {
 $progress_weeks_completed = 0;
 $progress_total_weeks = count($weeks);
 if (!empty($weeks)) {
-    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
         $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
         $wc_stmt->execute();
@@ -74,24 +75,20 @@ if ($selected_week < 1 || $selected_week > count($weeks)) {
 }
 
 $log_locked = false;
-$lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$lock_stmt->bind_param("ii", $internship_id, $selected_week);
-$lock_stmt->execute();
-$res = $lock_stmt->get_result();
-$lock_row = $res ? $res->fetch_assoc() : null;
-if ($lock_row && !empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
-    $log_locked = true;
-}
 $weekly_report_submitted = false;
-$ref_chk_stmt = $db->prepare("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-$ref_chk_stmt->bind_param("ii", $internship_id, $selected_week);
-$ref_chk_stmt->execute();
-$ref_chk_res = $ref_chk_stmt->get_result();
-$ref_chk_row = $ref_chk_res ? $ref_chk_res->fetch_row() : null;
-$reflection_submitted = ((int) ($ref_chk_row[0] ?? 0) > 0);
+$rep_stmt = $db->prepare("SELECT status, what_done FROM weekly_reports WHERE student_id = ? AND week_number = ?");
+$rep_stmt->bind_param("ii", $internship_id, $selected_week);
+$rep_stmt->execute();
+$res = $rep_stmt->get_result();
+$rep_row = $res ? $res->fetch_assoc() : null;
 
-if (($reflection_submitted || $log_locked) && !($lock_row && $lock_row['report_status'] === 'rejected')) {
-    $weekly_report_submitted = true;
+if ($rep_row) {
+    if ($rep_row['status'] === 'approved_by_instructor' || $rep_row['status'] === 'graded') {
+        $log_locked = true;
+    }
+    if (!empty($rep_row['what_done']) && $rep_row['status'] !== 'rejected') {
+        $weekly_report_submitted = true;
+    }
 }
 
 $error   = '';
@@ -101,13 +98,13 @@ $success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
     $add_week = (int) ($_POST['selected_week'] ?? 0);
     if ($add_week > 0) {
-        $add_lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $add_lock_stmt = $db->prepare("SELECT status FROM weekly_reports WHERE student_id = ? AND week_number = ?");
         $add_lock_stmt->bind_param("ii", $internship_id, $add_week);
         $add_lock_stmt->execute();
         $res = $add_lock_stmt->get_result();
         $add_lock_row = $res ? $res->fetch_assoc() : null;
-        if ($add_lock_row && !empty($add_lock_row['student_signature_type']) && !empty($add_lock_row['student_signature_value']) && $add_lock_row['report_status'] !== 'rejected') {
-            $error = 'This week has been signed and cannot be edited.';
+        if ($add_lock_row && ($add_lock_row['status'] === 'approved_by_instructor' || $add_lock_row['status'] === 'graded')) {
+            $error = 'This week has been approved/graded and cannot be edited.';
         }
     }
     $log_date = trim($_POST['log_date'] ?? '');
@@ -121,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
         if (!$week_range || $log_date < $week_range['start'] || $log_date > $week_range['end']) {
             $error = "Date must be between {$week_range['start']} and {$week_range['end']} (Week {$selected_week}).";
         } else {
-            $dup_stmt = $db->prepare("SELECT id FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
+            $dup_stmt = $db->prepare("SELECT id FROM daily_logs WHERE student_id = ? AND log_date = ? LIMIT 1");
             $dup_stmt->bind_param("is", $internship_id, $log_date);
             $dup_stmt->execute();
             $res = $dup_stmt->get_result();
@@ -152,7 +149,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
                 }
 
                 $ins_stmt = $db->prepare("INSERT INTO daily_logs
-                    (internship_id, log_date, attendance_status, reason_for_absence,
+                    (student_id, log_date, attendance_status, reason_for_absence,
                      task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $ins_stmt->bind_param("isssssssss",
@@ -200,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
             log_date = ?, attendance_status = ?, reason_for_absence = ?,
             task_title = ?, task_detail = ?, tasks_performed = ?,
             tools_used = ?, learnt_skills = ?, calculated_duration = ?
-            WHERE id = ? AND internship_id = ?");
+            WHERE id = ? AND student_id = ?");
         $upd_stmt->bind_param("sssssssssii",
             $log_date, $attendance_status, $reason_for_absence,
             $intended_task, $task_detail, $actual_task,
@@ -219,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_log'])) {
         if ($log_locked) {
             $error = 'This week has been signed and cannot be edited.';
         } else {
-            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND internship_id = ?");
+            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND student_id = ?");
             $del_stmt->bind_param("ii", $del_id, $internship_id);
             $del_stmt->execute();
             $success = 'Log entry deleted.';
@@ -232,7 +229,7 @@ $editing_log = null;
 $edit_att = 'present';
 if (isset($_GET['edit'])) {
     $edit_id = (int)$_GET['edit'];
-    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND internship_id = ?");
+    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND student_id = ?");
     $edit_stmt->bind_param("ii", $edit_id, $internship_id);
     $edit_stmt->execute();
     $res = $edit_stmt->get_result();
@@ -248,7 +245,7 @@ if (isset($_GET['edit'])) {
 }
 
 // TABLE DATA
-$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date ASC");
 $all_logs_stmt->bind_param("i", $internship_id);
 $all_logs_stmt->execute();
 $res = $all_logs_stmt->get_result();
@@ -289,7 +286,7 @@ if ($editing_log && !empty($editing_log['log_date'])) {
 
 $active_day_log = null;
 if (!empty($selected_date)) {
-    $adl_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
+    $adl_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date = ? LIMIT 1");
     $adl_stmt->bind_param("is", $internship_id, $selected_date);
     $adl_stmt->execute();
     $adl_res = $adl_stmt->get_result();
@@ -852,7 +849,7 @@ if (!empty($selected_date)) {
                             </thead>
                             <tbody class="divide-y divide-slate-100">
                                 <?php
-                                    $cnt_stmt = $db->prepare("SELECT COUNT(*) AS cnt FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+                                    $cnt_stmt = $db->prepare("SELECT COUNT(*) AS cnt FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
                                     foreach ($weeks as $wn => $wr):
                                         $cnt_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
                                         $cnt_stmt->execute();

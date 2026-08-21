@@ -68,7 +68,7 @@ if ($topbar_user_id > 0 && isset($db) && $db) {
                     <?php if (!empty($recent_notifications)): ?>
                     <?php foreach ($recent_notifications as $notif): ?>
                     <?php
-                        $notif_url = notif_action_url($notif, 'admin');
+                        $notif_url = !empty($notif['link']) ? $notif['link'] : notif_action_url($notif, 'admin');
                         $meta = notif_type_meta($notif['type'] ?? 'info');
                     ?>
                     <a href="<?= htmlspecialchars($notif_url) ?>" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)" class="flex items-start gap-2.5 px-3 py-3 <?= !$notif['is_read'] ? 'bg-teal-50/40' : '' ?> hover:bg-teal-50 transition-all duration-150 border-b border-slate-100 last:border-0 group cursor-pointer block no-underline">

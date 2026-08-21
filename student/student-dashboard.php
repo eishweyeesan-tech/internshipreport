@@ -24,11 +24,13 @@ if (!in_array($tab, ['overview', 'daily-log', 'weekly-report'], true)) {
 // ══════════════════════════════════════════════════════════════════════
 // FETCH INTERNSHIP DATE RANGE + PROFILE INFO
 // ══════════════════════════════════════════════════════════════════════
-$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date, sup_u.username AS supervisor_name, sp.supervisor_id, u.profile_pic,
-           sp.instructor_name, sp.instructor_email, sp.instructor_id
+$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.major, sp.job_role, sp.internship_start_date, sp.internship_end_date,
+       sup_u.username AS supervisor_name, sp.supervisor_id, u.username, u.profile_pic,
+       COALESCE(c.company_name, '') AS company_name
     FROM student_profiles sp
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     LEFT JOIN users u ON u.id = sp.user_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE sp.user_id = ?");
 $profile_stmt->bind_param("i", $user_id);
 $profile_stmt->execute();
@@ -37,12 +39,12 @@ $profile_row = $profile_res ? $profile_res->fetch_assoc() : null;
 
 $intern_start = $profile_row['internship_start_date'] ?? null;
 $intern_end   = $profile_row['internship_end_date'] ?? null;
-$student_name = ($profile_row['full_name'] ?? '') ?: $username;
+$student_name = ($profile_row['username'] ?? '') ?: $username;
 $student_roll = $profile_row['student_roll'] ?? '';
 $supervisor_name = $profile_row['supervisor_name'] ?? '—';
 $profile_pic = $profile_row['profile_pic'] ?? '';
-$instructor_name = ($profile_row['instructor_name'] ?? '') ?: '—';
-$instructor_email = $profile_row['instructor_email'] ?? '';
+$company_name = $profile_row['company_name'] ?? '';
+$instructor_name = '—';
 
 $sup_initial = mb_substr($supervisor_name, 0, 1, 'UTF-8');
 $sup_initial_display = ($sup_initial === '—' || empty($sup_initial)) ? 'S' : mb_strtoupper($sup_initial, 'UTF-8');
@@ -83,12 +85,12 @@ if (isset($_GET['week'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
     $post_week = (int) ($_POST['selected_week'] ?? 0);
     if ($post_week > 0) {
-        $lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $lock_stmt = $db->prepare("SELECT status FROM weekly_reports WHERE student_id = ? AND week_number = ?");
         $lock_stmt->bind_param("ii", $internship_id, $post_week);
         $lock_stmt->execute();
         $lock_res = $lock_stmt->get_result();
         $lock_row = $lock_res ? $lock_res->fetch_assoc() : null;
-        if ($lock_row && !empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
+        if ($lock_row && ($lock_row['status'] === 'approved_by_instructor' || $lock_row['status'] === 'graded')) {
             $message = 'log_locked';
         }
     }
@@ -137,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
                     $hours_worked   = '00:00';
                 }
                 $ins_log = $db->prepare("INSERT INTO daily_logs
-                    (internship_id, log_date, attendance_status, reason_for_absence, task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
+                    (student_id, log_date, attendance_status, reason_for_absence, task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                     attendance_status = VALUES(attendance_status),
@@ -163,7 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
 $editing_log = null;
 if (isset($_GET['edit'])) {
     $edit_id = (int) $_GET['edit'];
-    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND internship_id = ?");
+    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND student_id = ?");
     $edit_stmt->bind_param("ii", $edit_id, $internship_id);
     $edit_stmt->execute();
     $edit_res = $edit_stmt->get_result();
@@ -172,12 +174,12 @@ if (isset($_GET['edit'])) {
         $message = 'log_not_found';
     } else {
         $edit_lock_week = getInternshipWeekNumber($intern_start, $editing_log['log_date']);
-        $edit_lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $edit_lock_stmt = $db->prepare("SELECT status FROM weekly_reports WHERE student_id = ? AND week_number = ?");
         $edit_lock_stmt->bind_param("ii", $internship_id, $edit_lock_week);
         $edit_lock_stmt->execute();
         $edit_lock_res = $edit_lock_stmt->get_result();
         $edit_lock_row = $edit_lock_res ? $edit_lock_res->fetch_assoc() : null;
-        if ($edit_lock_row && !empty($edit_lock_row['student_signature_type']) && !empty($edit_lock_row['student_signature_value']) && $edit_lock_row['report_status'] !== 'rejected') {
+        if ($edit_lock_row && ($edit_lock_row['status'] === 'approved_by_instructor' || $edit_lock_row['status'] === 'graded')) {
             $editing_log = null;
             $message = 'log_locked';
         }
@@ -187,12 +189,12 @@ if (isset($_GET['edit'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
     $post_week = (int) ($_POST['selected_week'] ?? 0);
     if ($post_week > 0) {
-        $lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+        $lock_stmt = $db->prepare("SELECT status FROM weekly_reports WHERE student_id = ? AND week_number = ?");
         $lock_stmt->bind_param("ii", $internship_id, $post_week);
         $lock_stmt->execute();
         $lock_res = $lock_stmt->get_result();
         $lock_row = $lock_res ? $lock_res->fetch_assoc() : null;
-        if ($lock_row && !empty($lock_row['student_signature_type']) && !empty($lock_row['student_signature_value']) && $lock_row['report_status'] !== 'rejected') {
+        if ($lock_row && ($lock_row['status'] === 'approved_by_instructor' || $lock_row['status'] === 'graded')) {
             $message = 'log_locked';
         }
     }
@@ -245,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
                     log_date = ?, attendance_status = ?, reason_for_absence = ?,
                     task_title = ?, task_detail = ?, tasks_performed = ?,
                     tools_used = ?, learnt_skills = ?, calculated_duration = ?
-                    WHERE id = ? AND internship_id = ?");
+                    WHERE id = ? AND student_id = ?");
                 $upd_stmt->bind_param("sssssssssii",
                     $log_date, $attendance_status, $reason_for_absence,
                     $intended_task, $task_detail, $actual_task,
@@ -263,24 +265,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_log'])) {
     $del_id = (int) ($_POST['log_id'] ?? 0);
     if ($del_id) {
-        $del_check_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE id = ? AND internship_id = ?");
+        $del_check_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE id = ? AND student_id = ?");
         $del_check_stmt->bind_param("ii", $del_id, $internship_id);
         $del_check_stmt->execute();
         $del_res = $del_check_stmt->get_result();
         $del_log = $del_res ? $del_res->fetch_assoc() : null;
         if ($del_log) {
             $del_lock_week = getInternshipWeekNumber($intern_start, $del_log['log_date']);
-            $del_eval_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+            $del_eval_stmt = $db->prepare("SELECT status FROM weekly_reports WHERE student_id = ? AND week_number = ?");
             $del_eval_stmt->bind_param("ii", $internship_id, $del_lock_week);
             $del_eval_stmt->execute();
             $del_eval_res = $del_eval_stmt->get_result();
             $del_eval_row = $del_eval_res ? $del_eval_res->fetch_assoc() : null;
-            if ($del_eval_row && !empty($del_eval_row['student_signature_type']) && !empty($del_eval_row['student_signature_value']) && $del_eval_row['report_status'] !== 'rejected') {
+            if ($del_eval_row && ($del_eval_row['status'] === 'approved_by_instructor' || $del_eval_row['status'] === 'graded')) {
                 $message = 'log_locked';
             }
         }
         if (!$message) {
-            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND internship_id = ?");
+            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND student_id = ?");
             $del_stmt->bind_param("ii", $del_id, $internship_id);
             $del_stmt->execute();
             $message = 'log_deleted';
@@ -296,23 +298,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_reflection'])) {
     $why_done     = trim($_POST['why_done'] ?? '');
 
     if ($week_number > 0 && $what_done) {
-        $ref_stmt = $db->prepare("INSERT INTO weekly_reflections
-            (internship_id, week_number, what_done, how_done, why_done)
-            VALUES (?, ?, ?, ?, ?)
+        $token = bin2hex(random_bytes(32));
+        $ref_stmt = $db->prepare("INSERT INTO weekly_reports
+            (student_id, week_number, what_done, how_done, why_done, instructor_review_code, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending')
             ON DUPLICATE KEY UPDATE
             what_done = VALUES(what_done),
             how_done = VALUES(how_done),
-            why_done = VALUES(why_done)");
-        $ref_stmt->bind_param("iisss", $internship_id, $week_number, $what_done, $how_done, $why_done);
+            why_done = VALUES(why_done),
+            instructor_review_code = COALESCE(instructor_review_code, VALUES(instructor_review_code)),
+            status = IF(status = 'rejected', 'pending', status)");
+        $ref_stmt->bind_param("iissss", $internship_id, $week_number, $what_done, $how_done, $why_done, $token);
         $ref_stmt->execute();
         $message = 'reflection_saved';
+
+        if (!empty($profile_row['supervisor_id'])) {
+            require_once __DIR__ . '/../config/notify.php';
+            $sup_link = '../supervisor/view-student-dashboard.php?id=' . (int)$internship_id . '&week=' . (int)$week_number;
+            notify_user_once(
+                $db,
+                (int) $profile_row['supervisor_id'],
+                'New Report Submitted',
+                $student_name . ' has submitted Week ' . $week_number . ' report and it is awaiting review.',
+                'new_report_submitted',
+                (int) $week_number,
+                (int) $internship_id,
+                null,
+                false,
+                $sup_link
+            );
+        }
     }
 }
 
 $magic_link = '';
 
 // ── FETCH EXISTING DATA ──
-$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC");
+$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date DESC");
 $all_logs_stmt->bind_param("i", $internship_id);
 $all_logs_stmt->execute();
 $all_res = $all_logs_stmt->get_result();
@@ -320,11 +342,11 @@ $all_logs = $all_res ? $all_res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Existing log dates for duplicate prevention
 if ($editing_log) {
-    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND id != ?");
+    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE student_id = ? AND id != ?");
     $editing_log_id = (int)$editing_log['id'];
     $dates_stmt->bind_param("ii", $internship_id, $editing_log_id);
 } else {
-    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ?");
+    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE student_id = ?");
     $dates_stmt->bind_param("i", $internship_id);
 }
 $dates_stmt->execute();
@@ -348,7 +370,7 @@ if (!empty($weeks[$selected_week])) {
 if (!empty($weeks[$selected_week])) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
-    $logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
+    $logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
     $logs_stmt->bind_param("iss", $internship_id, $ws, $we);
     $logs_stmt->execute();
     $logs_res = $logs_stmt->get_result();
@@ -396,7 +418,7 @@ if ($editing_log && !empty($editing_log['log_date'])) {
 
 $active_day_log = null;
 if (!empty($selected_date)) {
-    $adl_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
+    $adl_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date = ? LIMIT 1");
     $adl_stmt->bind_param("is", $internship_id, $selected_date);
     $adl_stmt->execute();
     $adl_res = $adl_stmt->get_result();
@@ -404,31 +426,32 @@ if (!empty($selected_date)) {
 }
 
 $log_locked = false;
-$log_lock_stmt = $db->prepare("SELECT student_signature_type, student_signature_value, report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$log_lock_stmt->bind_param("ii", $internship_id, $selected_week);
-$log_lock_stmt->execute();
-$log_lock_res = $log_lock_stmt->get_result();
-$log_lock_row = $log_lock_res ? $log_lock_res->fetch_assoc() : null;
-if ($log_lock_row && !empty($log_lock_row['student_signature_type']) && !empty($log_lock_row['student_signature_value']) && $log_lock_row['report_status'] !== 'rejected') {
+$rep_stmt = $db->prepare("SELECT * FROM weekly_reports WHERE student_id = ? AND week_number = ? LIMIT 1");
+$rep_stmt->bind_param("ii", $internship_id, $selected_week);
+$rep_stmt->execute();
+$rep_res = $rep_stmt->get_result();
+$weekly_report = $rep_res ? $rep_res->fetch_assoc() : null;
+
+if ($weekly_report && ($weekly_report['status'] === 'approved_by_instructor' || $weekly_report['status'] === 'graded')) {
     $log_locked = true;
 }
 
 // Attendance counts
-$p_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
+$p_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status = 'present'");
 $p_count_stmt->bind_param("i", $internship_id);
 $p_count_stmt->execute();
 $p_res = $p_count_stmt->get_result();
 $p_row = $p_res ? $p_res->fetch_row() : null;
 $present_count = (int) ($p_row[0] ?? 0);
 
-$a_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
+$a_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave')");
 $a_count_stmt->bind_param("i", $internship_id);
 $a_count_stmt->execute();
 $a_res = $a_count_stmt->get_result();
 $a_row = $a_res ? $a_res->fetch_row() : null;
 $absent_count = (int) ($a_row[0] ?? 0);
 
-$t_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IS NOT NULL AND attendance_status != ''");
+$t_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IS NOT NULL AND attendance_status != ''");
 $t_count_stmt->bind_param("i", $internship_id);
 $t_count_stmt->execute();
 $t_res = $t_count_stmt->get_result();
@@ -436,7 +459,7 @@ $t_row = $t_res ? $t_res->fetch_row() : null;
 $total_logged_attendance_days = (int) ($t_row[0] ?? 0);
 
 // Overall internship attendance details for tooltips
-$pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
+$pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE student_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
 $pd_stmt->bind_param("i", $internship_id);
 $pd_stmt->execute();
 $pd_res = $pd_stmt->get_result();
@@ -447,7 +470,7 @@ if ($pd_res) {
     }
 }
 
-$ad_stmt = $db->prepare("SELECT log_date, reason_for_absence FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
+$ad_stmt = $db->prepare("SELECT log_date, reason_for_absence FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
 $ad_stmt->bind_param("i", $internship_id);
 $ad_stmt->execute();
 $ad_res = $ad_stmt->get_result();
@@ -455,12 +478,12 @@ $absent_logs = $ad_res ? $ad_res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Weekly Reflection unlock logic
 $weekly_log_count = 0;
-$reflection_submitted = false;
+$reflection_submitted = ($weekly_report && !empty($weekly_report['what_done']));
 $total_weekdays = 0;
 if (!empty($weeks[$selected_week])) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
-    $wls_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wls_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     $wls_stmt->bind_param("iss", $internship_id, $ws, $we);
     $wls_stmt->execute();
     $wls_res = $wls_stmt->get_result();
@@ -476,30 +499,13 @@ if (!empty($weeks[$selected_week])) {
 }
 $reflection_unlocked = $total_weekdays > 0 && $weekly_log_count >= $total_weekdays;
 
-$rc_stmt = $db->prepare("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-$rc_stmt->bind_param("ii", $internship_id, $selected_week);
-$rc_stmt->execute();
-$rc_res = $rc_stmt->get_result();
-$rc_row = $rc_res ? $rc_res->fetch_row() : null;
-$reflection_submitted = ((int) ($rc_row[0] ?? 0) > 0);
-
 // Check if instructor rejected this week's report
-$rej_stmt = $db->prepare("SELECT report_status, instructor_comments, student_signature_type, student_signature_value FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$rej_stmt->bind_param("ii", $internship_id, $selected_week);
-$rej_stmt->execute();
-$rej_res = $rej_stmt->get_result();
-$rejection = $rej_res ? $rej_res->fetch_assoc() : null;
-$is_rejected = $rejection && $rejection['report_status'] === 'rejected';
-$rejection_reason = $is_rejected ? ($rejection['instructor_comments'] ?? '') : '';
+$is_rejected = $weekly_report && $weekly_report['status'] === 'rejected';
+$rejection_reason = $is_rejected ? ($weekly_report['instructor_comments'] ?? '') : '';
+$rejection = $is_rejected ? ['report_status' => 'rejected', 'instructor_comments' => $rejection_reason] : ($weekly_report ? ['report_status' => $weekly_report['status']] : null);
 
-// Check if student has already signed for this week
-$student_signed = false;
-if ($rejection && !empty($rejection['student_signature_type']) && !empty($rejection['student_signature_value'])) {
-    $student_signed = true;
-}
-if ($is_rejected) {
-    $student_signed = false;
-}
+// Check if student has already signed / submitted for this week
+$student_signed = $reflection_submitted && !$is_rejected;
 
 // WARNING AUTO-CLEAR
 if ($is_warned && $message === 'daily_saved') {
@@ -533,7 +539,7 @@ if ($is_rejected) {
     $reflection_unlocked = true;
     $magic_link_unlocked = true;
 } else {
-    $magic_link_unlocked = $reflection_unlocked && $reflection_submitted && $student_signed;
+    $magic_link_unlocked = $reflection_unlocked && $reflection_submitted;
 }
 
 // Handle student signature POST
@@ -555,71 +561,49 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
         }
     }
 
-    if (!empty($sig_val)) {
-        $sig_stmt = $db->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, student_signature_type, student_signature_value, report_status)
-            VALUES (?, ?, 'needs_improvement', '', ?, ?, 'pending')
-            ON DUPLICATE KEY UPDATE
-            student_signature_type = VALUES(student_signature_type),
-            student_signature_value = VALUES(student_signature_value),
-            report_status = 'pending', evaluated_at = NOW()");
-        $sig_stmt->bind_param("iiss", $internship_id, $selected_week, $sig_type, $sig_val);
-        $sig_stmt->execute();
-        $message = 'signature_saved';
+    $token = bin2hex(random_bytes(32));
+    $sig_stmt = $db->prepare("UPDATE weekly_reports SET instructor_review_code = COALESCE(instructor_review_code, ?), status = 'pending' WHERE student_id = ? AND week_number = ?");
+    $sig_stmt->bind_param("sii", $token, $internship_id, $selected_week);
+    $sig_stmt->execute();
+    $message = 'signature_saved';
 
-        if (!empty($profile_row['supervisor_id'])) {
-            require_once __DIR__ . '/../config/notify.php';
-            notify_user_once(
-                $db,
-                (int) $profile_row['supervisor_id'],
-                'New Report Submitted',
-                $student_name . ' has submitted Week ' . $selected_week . ' report and it is awaiting review.',
-                'new_report_submitted',
-                (int) $selected_week,
-                (int) $internship_id
-            );
-        }
-
-        $rej_stmt->bind_param("ii", $internship_id, $selected_week);
-        $rej_stmt->execute();
-        $rej_res = $rej_stmt->get_result();
-        $rejection = $rej_res ? $rej_res->fetch_assoc() : null;
-        $is_rejected = $rejection && $rejection['report_status'] === 'rejected';
-        $student_signed = false;
-        if ($rejection && !empty($rejection['student_signature_type']) && !empty($rejection['student_signature_value'])) {
-            $student_signed = true;
-        }
-        if ($is_rejected) {
-            $student_signed = false;
-            $magic_link_unlocked = true;
-        } else {
-            $magic_link_unlocked = $reflection_unlocked && $reflection_submitted && $student_signed;
-        }
-    } else {
-        $message = 'student_sig_required';
+    if (!empty($profile_row['supervisor_id'])) {
+        require_once __DIR__ . '/../config/notify.php';
+        $sup_link = '../supervisor/view-student-dashboard.php?id=' . (int)$internship_id . '&week=' . (int)$selected_week;
+        notify_user_once(
+            $db,
+            (int) $profile_row['supervisor_id'],
+            'New Report Submitted',
+            $student_name . ' has submitted Week ' . $selected_week . ' report and it is awaiting review.',
+            'new_report_submitted',
+            (int) $selected_week,
+            (int) $internship_id,
+            null,
+            false,
+            $sup_link
+        );
     }
+
+    $rep_stmt->bind_param("ii", $internship_id, $selected_week);
+    $rep_stmt->execute();
+    $rep_res = $rep_stmt->get_result();
+    $weekly_report = $rep_res ? $rep_res->fetch_assoc() : null;
+    $student_signed = true;
+    $magic_link_unlocked = true;
 }
 
-// Fetch active magic link or generate
-$active_token_stmt = $db->prepare("SELECT token, expires_at FROM magic_links WHERE internship_id = ? AND week_number = ? AND expires_at > NOW() LIMIT 1");
-$active_token_stmt->bind_param("ii", $internship_id, $selected_week);
-$active_token_stmt->execute();
-$act_res = $active_token_stmt->get_result();
-$existing_link = $act_res ? $act_res->fetch_assoc() : null;
-
-if ($existing_link) {
+// Fetch active review link or generate
+$magic_link = '';
+if ($weekly_report && !empty($weekly_report['instructor_review_code'])) {
     $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
         . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
-        . '/instructor/view-report.php?token=' . $existing_link['token'];
+        . '/instructor/view-report.php?token=' . $weekly_report['instructor_review_code'];
 }
 
 if ($magic_link_unlocked && isset($_POST['generate_magic_link'])) {
-    $token = bin2hex(random_bytes(16));
-    $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
-
-    $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
-        VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
-    $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
+    $token = bin2hex(random_bytes(32));
+    $link_stmt = $db->prepare("UPDATE weekly_reports SET instructor_review_code = ? WHERE student_id = ? AND week_number = ?");
+    $link_stmt->bind_param("sii", $token, $internship_id, $selected_week);
     $link_stmt->execute();
 
     $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
@@ -627,45 +611,39 @@ if ($magic_link_unlocked && isset($_POST['generate_magic_link'])) {
         . '/instructor/view-report.php?token=' . $token;
 }
 
-$reflections_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ? ORDER BY week_number DESC");
-$reflections_stmt->bind_param("ii", $internship_id, $selected_week);
-$reflections_stmt->execute();
-$ref_res = $reflections_stmt->get_result();
-$weekly_refs = $ref_res ? $ref_res->fetch_all(MYSQLI_ASSOC) : [];
+$weekly_refs = ($weekly_report && !empty($weekly_report['what_done'])) ? [$weekly_report] : [];
 
 // ── WORKFLOW CHAIN ──
 $wf_step1_done = $total_weekdays > 0 && $weekly_log_count >= $total_weekdays;
 $wf_step2_done = $reflection_submitted;
 $wf_step3_done = $student_signed;
-$wf_has_link   = !empty($existing_link);
+$wf_has_link   = !empty($magic_link);
 
 $wf_step4_status = 'pending';
-if ($rejection) {
-    if ($rejection['report_status'] === 'approved_by_instructor' || $rejection['report_status'] === 'approved_by_supervisor') {
+if ($weekly_report) {
+    if ($weekly_report['status'] === 'approved_by_instructor' || $weekly_report['status'] === 'graded') {
         $wf_step4_status = 'approved';
-    } elseif ($rejection['report_status'] === 'rejected') {
+    } elseif ($weekly_report['status'] === 'rejected') {
         $wf_step4_status = 'rejected';
     }
 }
 
-$sup_eval_stmt = $db->prepare("SELECT weekly_grade FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ? LIMIT 1");
-$sup_eval_stmt->bind_param("ii", $internship_id, $selected_week);
-$sup_eval_stmt->execute();
-$sup_res = $sup_eval_stmt->get_result();
-$wf_step5_done = (bool) ($sup_res ? $sup_res->fetch_assoc() : null);
+$wf_step5_done = !empty($weekly_report['supervisor_grade']);
 
 // ── FEEDBACK & GRADES (Instructor + Supervisor) ──
-$instructor_eval_stmt = $db->prepare("SELECT grade, comment, instructor_comments, signature_type, signature_value, report_status, evaluated_at FROM report_evaluations WHERE student_id = ? AND week_number = ? LIMIT 1");
-$instructor_eval_stmt->bind_param("ii", $internship_id, $selected_week);
-$instructor_eval_stmt->execute();
-$instructor_eval_res = $instructor_eval_stmt->get_result();
-$instructor_eval = $instructor_eval_res ? $instructor_eval_res->fetch_assoc() : null;
+$instructor_eval = ($weekly_report && !empty($weekly_report['instructor_grade'])) ? [
+    'grade'               => $weekly_report['instructor_grade'],
+    'comment'             => $weekly_report['instructor_comments'],
+    'instructor_comments' => $weekly_report['instructor_comments'],
+    'report_status'       => $weekly_report['status'],
+    'evaluated_at'        => $weekly_report['submitted_at'],
+] : null;
 
-$supervisor_eval_stmt = $db->prepare("SELECT weekly_grade, supervisor_comments, supervisor_id, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ? LIMIT 1");
-$supervisor_eval_stmt->bind_param("ii", $internship_id, $selected_week);
-$supervisor_eval_stmt->execute();
-$supervisor_eval_res = $supervisor_eval_stmt->get_result();
-$supervisor_eval = $supervisor_eval_res ? $supervisor_eval_res->fetch_assoc() : null;
+$supervisor_eval = ($weekly_report && !empty($weekly_report['supervisor_grade'])) ? [
+    'weekly_grade'        => $weekly_report['supervisor_grade'],
+    'supervisor_comments' => $weekly_report['supervisor_comments'],
+    'evaluated_at'        => $weekly_report['submitted_at'],
+] : null;
 
 // Reviewer display names
 $supervisor_reviewer = $supervisor_name !== '' && $supervisor_name !== '—' ? $supervisor_name : 'Supervisor';
@@ -713,7 +691,7 @@ if ($instructor_evaluated) {
 }
 
 // ── ANALYTICS DATA ──
-$hours_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ?");
+$hours_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE student_id = ?");
 $hours_stmt->bind_param("i", $internship_id);
 $hours_stmt->execute();
 $hrs_res = $hours_stmt->get_result();
@@ -736,7 +714,7 @@ $total_mins  = $total_minutes % 60;
 
 $total_logs_count = count($all_logs);
 
-$total_ref_stmt = $db->prepare("SELECT COUNT(*) FROM weekly_reflections WHERE internship_id = ?");
+$total_ref_stmt = $db->prepare("SELECT COUNT(*) FROM weekly_reports WHERE student_id = ? AND what_done <> ''");
 $total_ref_stmt->bind_param("i", $internship_id);
 $total_ref_stmt->execute();
 $tr_res = $total_ref_stmt->get_result();
@@ -745,7 +723,7 @@ $total_reflections_count = (int) ($tr_row[0] ?? 0);
 
 $weeks_completed = 0;
 if (!empty($weeks)) {
-    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
         $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
         $wc_stmt->execute();
@@ -775,7 +753,7 @@ $weekly_hours_data = [];
 $weekly_hours_labels = [];
 if (!empty($weeks)) {
     $chart_weeks = array_slice($weeks, -8, 8, true);
-    $wh_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wh_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($chart_weeks as $cw_num => $cw_range) {
         $wh_stmt->bind_param("iss", $internship_id, $cw_range['start'], $cw_range['end']);
         $wh_stmt->execute();
@@ -792,7 +770,7 @@ if (!empty($weeks)) {
     }
 }
 
-$att_all_stmt = $db->prepare("SELECT attendance_status, COUNT(*) as cnt FROM daily_logs WHERE internship_id = ? GROUP BY attendance_status");
+$att_all_stmt = $db->prepare("SELECT attendance_status, COUNT(*) as cnt FROM daily_logs WHERE student_id = ? GROUP BY attendance_status");
 $att_all_stmt->bind_param("i", $internship_id);
 $att_all_stmt->execute();
 $att_res = $att_all_stmt->get_result();
@@ -803,31 +781,28 @@ if ($att_res) {
     }
 }
 
-$recent_act_stmt = $db->prepare("SELECT log_date, attendance_status, task_title, calculated_duration FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC LIMIT 5");
+$recent_act_stmt = $db->prepare("SELECT log_date, attendance_status, task_title, calculated_duration FROM daily_logs WHERE student_id = ? ORDER BY log_date DESC LIMIT 5");
 $recent_act_stmt->bind_param("i", $internship_id);
 $recent_act_stmt->execute();
 $act_res = $recent_act_stmt->get_result();
 $recent_activities = $act_res ? $act_res->fetch_all(MYSQLI_ASSOC) : [];
 
-$notif_eval_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 5");
+$notif_eval_stmt = $db->prepare("SELECT * FROM weekly_reports WHERE student_id = ? AND instructor_grade IS NOT NULL ORDER BY submitted_at DESC LIMIT 5");
 $notif_eval_stmt->bind_param("i", $internship_id);
 $notif_eval_stmt->execute();
 $eval_res = $notif_eval_stmt->get_result();
 $recent_evaluations = $eval_res ? $eval_res->fetch_all(MYSQLI_ASSOC) : [];
 
-$sup_eval_list_stmt = $db->prepare("SELECT * FROM supervisor_weekly_evaluations WHERE student_id = ? ORDER BY week_number DESC LIMIT 5");
+$sup_eval_list_stmt = $db->prepare("SELECT * FROM weekly_reports WHERE student_id = ? AND supervisor_grade IS NOT NULL ORDER BY week_number DESC LIMIT 5");
 $sup_eval_list_stmt->bind_param("i", $internship_id);
 $sup_eval_list_stmt->execute();
 $sup_list_res = $sup_eval_list_stmt->get_result();
 $sup_evaluations = $sup_list_res ? $sup_list_res->fetch_all(MYSQLI_ASSOC) : [];
 
 if ($magic_link_unlocked && empty($magic_link)) {
-    $token = bin2hex(random_bytes(16));
-    $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
-    $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
-        VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
-    $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
+    $token = bin2hex(random_bytes(32));
+    $link_stmt = $db->prepare("UPDATE weekly_reports SET instructor_review_code = ? WHERE student_id = ? AND week_number = ?");
+    $link_stmt->bind_param("sii", $token, $internship_id, $selected_week);
     $link_stmt->execute();
 
     $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
@@ -2136,10 +2111,12 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             <?php elseif ($student_signed): ?>
                             <div class="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-center">
                                 <p class="text-caption font-bold text-emerald-700 mb-2">Your signature has been saved.</p>
-                                <?php if ($rejection && $rejection['student_signature_type'] === 'typed'): ?>
+                                <?php if (!empty($rejection['student_signature_type']) && $rejection['student_signature_type'] === 'typed' && !empty($rejection['student_signature_value'])): ?>
                                 <p class="student-sig-preview" style="font-family:'Great Vibes',cursive; font-size:24px; color:#1e293b;"><?= htmlspecialchars($rejection['student_signature_value']) ?></p>
-                                <?php elseif ($rejection && $rejection['student_signature_type'] === 'uploaded'): ?>
+                                <?php elseif (!empty($rejection['student_signature_type']) && $rejection['student_signature_type'] === 'uploaded' && !empty($rejection['student_signature_value'])): ?>
                                 <img src="../uploads/signatures/<?= htmlspecialchars($rejection['student_signature_value']) ?>" alt="Student Signature" class="max-h-14 mx-auto object-contain">
+                                <?php else: ?>
+                                <p class="student-sig-preview" style="font-family:'Great Vibes',cursive; font-size:24px; color:#1e293b;"><?= htmlspecialchars($student_name) ?></p>
                                 <?php endif; ?>
                             </div>
 
@@ -2544,7 +2521,7 @@ function exportAsHTML() {
     content += '</tbody></table>';
     content += '<h2>Weekly Reflections</h2>';
     <?php
-    $ref_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? ORDER BY week_number ASC");
+    $ref_stmt = $db->prepare("SELECT * FROM weekly_reports WHERE student_id = ? AND what_done <> '' ORDER BY week_number ASC");
     $ref_stmt->bind_param("i", $user_id);
     $ref_stmt->execute();
     $ref_res = $ref_stmt->get_result();

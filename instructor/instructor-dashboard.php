@@ -59,37 +59,41 @@ if (isset($_GET['year']) && $_GET['year'] !== '') {
 $search_term = trim($_GET['search'] ?? '');
 
 $sql_stu = "
-    SELECT u.id AS uid, u.username, u.email, u.academic_year,
-           sp.full_name, sp.student_roll, sp.major, sp.company_name,
+    SELECT u.id AS uid, u.username, u.email, ay.year_label AS academic_year,
+           u.username AS full_name, sp.student_roll, sp.major,
+           COALESCE(c.company_name, '') AS company_name,
            sp.job_role, sp.supervisor_id,
            sup_u.username AS supervisor_name,
            sp.internship_start_date, sp.internship_end_date
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
+    LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     WHERE u.role = 'student'
-      AND (sp.instructor_id = ? OR (sp.instructor_email != '' AND sp.instructor_email = ?))
 ";
-$stu_params = [$inst_id, $inst_email];
-$stu_types  = "is";
+$stu_params = [];
+$stu_types  = "";
 
 if ($selected_year !== '' && $selected_year !== 'all') {
-    $sql_stu .= " AND u.academic_year = ?";
+    $sql_stu .= " AND ay.year_label = ?";
     $stu_params[] = $selected_year;
     $stu_types .= "s";
 }
 
 if ($search_term !== '') {
-    $sql_stu .= " AND (sp.full_name LIKE ? OR sp.student_roll LIKE ? OR u.username LIKE ? OR sp.company_name LIKE ? OR u.email LIKE ?)";
+    $sql_stu .= " AND (u.username LIKE ? OR sp.student_roll LIKE ? OR c.company_name LIKE ? OR u.email LIKE ?)";
     $like = '%' . $search_term . '%';
-    $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like;
-    $stu_types .= "sssss";
+    $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like; $stu_params[] = $like;
+    $stu_types .= "ssss";
 }
 
-$sql_stu .= " ORDER BY sp.full_name ASC";
+$sql_stu .= " ORDER BY u.username ASC";
 
 $stu_stmt = $db->prepare($sql_stu);
-$stu_stmt->bind_param($stu_types, ...$stu_params);
+if (!empty($stu_types)) {
+    $stu_stmt->bind_param($stu_types, ...$stu_params);
+}
 $stu_stmt->execute();
 $res = $stu_stmt->get_result();
 $all_students = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
@@ -132,30 +136,24 @@ foreach ($all_students as $stu) {
     }
 
     // Daily logs count for current week
-    $log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     $log_q->bind_param("iss", $uid, $sws, $swe);
     $log_q->execute();
     $res = $log_q->get_result();
     $row = $res ? $res->fetch_row() : null;
     $log_count = (int) ($row[0] ?? 0);
 
-    // Instructor evaluation status
-    $eval_q = $db->prepare("SELECT report_status, grade, evaluated_at FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+    // Weekly report status & review code
+    $eval_q = $db->prepare("SELECT status, instructor_grade, instructor_review_code, submitted_at FROM weekly_reports WHERE student_id = ? AND week_number = ?");
     $eval_q->bind_param("ii", $uid, $dw);
     $eval_q->execute();
     $res = $eval_q->get_result();
     $eval = $res ? $res->fetch_assoc() : null;
-    $eval_status = $eval ? $eval['report_status'] : 'pending';
-
-    // Magic link available?
-    $link_q = $db->prepare("SELECT token, expires_at FROM magic_links WHERE internship_id = ? AND week_number = ? AND expires_at > NOW() LIMIT 1");
-    $link_q->bind_param("ii", $uid, $dw);
-    $link_q->execute();
-    $res = $link_q->get_result();
-    $magic_link = $res ? $res->fetch_assoc() : null;
+    $eval_status = $eval ? $eval['status'] : 'pending';
+    $magic_token = $eval ? $eval['instructor_review_code'] : null;
 
     // Total logs count
-    $total_log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ?");
+    $total_log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ?");
     $total_log_q->bind_param("i", $uid);
     $total_log_q->execute();
     $res = $total_log_q->get_result();
@@ -163,7 +161,7 @@ foreach ($all_students as $stu) {
     $total_logs = (int) ($row[0] ?? 0);
 
     // Total graded weeks
-    $graded_q = $db->prepare("SELECT COUNT(*) FROM report_evaluations WHERE student_id = ? AND report_status IN ('approved_by_instructor', 'approved_by_supervisor')");
+    $graded_q = $db->prepare("SELECT COUNT(*) FROM weekly_reports WHERE student_id = ? AND status IN ('approved_by_instructor', 'graded')");
     $graded_q->bind_param("i", $uid);
     $graded_q->execute();
     $res = $graded_q->get_result();
@@ -175,8 +173,8 @@ foreach ($all_students as $stu) {
         'not_started'   => $not_started,
         'log_count'     => $log_count,
         'eval_status'   => $eval_status,
-        'has_link'      => $magic_link !== null,
-        'magic_token'   => $magic_link ? $magic_link['token'] : null,
+        'has_link'      => !empty($magic_token),
+        'magic_token'   => $magic_token,
         'total_logs'    => $total_logs,
         'graded_weeks'  => $graded_weeks,
     ];
@@ -188,7 +186,7 @@ $pending_count = 0;
 $approved_count = 0;
 $rejected_count = 0;
 foreach ($student_status as $st) {
-    if ($st['eval_status'] === 'approved_by_instructor' || $st['eval_status'] === 'approved_by_supervisor') {
+    if ($st['eval_status'] === 'approved_by_instructor' || $st['eval_status'] === 'graded') {
         $approved_count++;
     } elseif ($st['eval_status'] === 'rejected') {
         $rejected_count++;
@@ -206,13 +204,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
     $link_week = (int) ($_POST['week_number'] ?? 0);
 
     if ($link_student_id > 0 && $link_week > 0) {
-        $token = bin2hex(random_bytes(16));
-        $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
-
-        $ins_link = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
-        $ins_link->bind_param("iiss", $link_student_id, $link_week, $token, $expires_at);
+        $token = bin2hex(random_bytes(32));
+        $ins_link = $db->prepare("INSERT INTO weekly_reports
+            (student_id, week_number, what_done, how_done, why_done, instructor_review_code, status)
+            VALUES (?, ?, '', '', '', ?, 'pending')
+            ON DUPLICATE KEY UPDATE instructor_review_code = VALUES(instructor_review_code)");
+        $ins_link->bind_param("iis", $link_student_id, $link_week, $token);
         $ins_link->execute();
 
         $generated_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
@@ -369,7 +366,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_link'])) {
                             <?php if (!empty($recent_notifications)): ?>
                             <?php foreach ($recent_notifications as $notif): ?>
                             <?php
-                                $notif_url = notif_action_url($notif, 'instructor');
+                                $notif_url = !empty($notif['link']) ? $notif['link'] : notif_action_url($notif, 'instructor');
                                 $meta = notif_type_meta($notif['type'] ?? 'info');
                             ?>
                             <a href="<?= htmlspecialchars($notif_url) ?>" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)" class="flex items-start gap-2.5 px-3 py-3 <?= !$notif['is_read'] ? 'bg-teal-50/40' : '' ?> hover:bg-teal-50 transition-all duration-150 border-b border-slate-100 last:border-0 group cursor-pointer block no-underline">

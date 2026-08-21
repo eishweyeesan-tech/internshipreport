@@ -12,15 +12,20 @@ $role     = $_SESSION['role'] ?? 'student';
 $db = $mysqli ?? $conn;
 
 // Fetch or create profile row
-$profile_stmt = $db->prepare("SELECT * FROM student_profiles WHERE user_id = ?");
+$profile_stmt = $db->prepare("SELECT sp.*, u.username, u.email, u.phone, u.profile_pic, u.last_login_at,
+    COALESCE(c.company_name, '') AS company_name
+    FROM student_profiles sp
+    JOIN users u ON u.id = sp.user_id
+    LEFT JOIN companies c ON c.id = sp.company_id
+    WHERE sp.user_id = ?");
 $profile_stmt->bind_param("i", $user_id);
 $profile_stmt->execute();
 $res = $profile_stmt->get_result();
 $profile = $res ? $res->fetch_assoc() : null;
 
 if (!$profile) {
-    $ins_prof = $db->prepare("INSERT INTO student_profiles (user_id, full_name) VALUES (?, ?)");
-    $ins_prof->bind_param("is", $user_id, $username);
+    $ins_prof = $db->prepare("INSERT INTO student_profiles (user_id) VALUES (?)");
+    $ins_prof->bind_param("i", $user_id);
     try {
         $ins_prof->execute();
     } catch (mysqli_sql_exception $e) {
@@ -34,7 +39,7 @@ if (!$profile) {
     $profile = $res ? $res->fetch_assoc() : null;
 }
 
-$student_name = ($profile['full_name'] ?? '') ?: $username;
+$student_name = ($profile['username'] ?? '') ?: $username;
 $student_roll = $profile['student_roll'] ?? '';
 $intern_start = $profile['internship_start_date'] ?? null;
 $intern_end   = $profile['internship_end_date'] ?? null;
@@ -54,7 +59,7 @@ if ($intern_start) {
 $progress_weeks_completed = 0;
 $progress_total_weeks = count($weeks);
 if (!empty($weeks)) {
-    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
         $wc_stmt->bind_param("iss", $user_id, $wr['start'], $wr['end']);
         $wc_stmt->execute();
@@ -67,7 +72,7 @@ if (!empty($weeks)) {
 }
 
 // Fetch user data
-$user_stmt = $db->prepare("SELECT email, profile_pic, github_link, linkedin_link, portfolio_link, last_login_at FROM users WHERE id = ?");
+$user_stmt = $db->prepare("SELECT email, profile_pic, last_login_at FROM users WHERE id = ?");
 $user_stmt->bind_param("i", $user_id);
 $user_stmt->execute();
 $res = $user_stmt->get_result();
@@ -75,9 +80,6 @@ $user_data = $res ? $res->fetch_assoc() : [];
 
 $user_email     = $user_data['email'] ?? '';
 $profile_pic    = $user_data['profile_pic'] ?? '';
-$github_link    = $user_data['github_link'] ?? '';
-$linkedin_link  = $user_data['linkedin_link'] ?? '';
-$portfolio_link = $user_data['portfolio_link'] ?? '';
 $last_login_at  = $user_data['last_login_at'] ?? '';
 
 // Handle Profile Update
@@ -90,31 +92,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $phone             = trim($_POST['phone'] ?? '');
     $company_name      = trim($_POST['company_name'] ?? '');
     $job_role          = trim($_POST['job_role'] ?? '');
-    $instructor_name   = trim($_POST['instructor_name'] ?? '');
-    $instructor_email  = trim($_POST['instructor_email'] ?? '');
-    $instructor_phone  = trim($_POST['instructor_phone'] ?? '');
     $internship_start  = trim($_POST['internship_start_date'] ?? '');
 
     $phone_err = phone_validation_error($phone);
-    $instructor_err = phone_validation_error($instructor_phone);
     if ($phone_err !== null) {
         $profile_err = $phone_err;
-    } elseif ($instructor_err !== null) {
-        $profile_err = $instructor_err;
     } else {
-        $phone            = normalize_phone($phone);
-        $instructor_phone = normalize_phone($instructor_phone);
+        $phone = normalize_phone($phone);
+
+        // Update user's username & phone
+        $upd_u = $db->prepare("UPDATE users SET username = ?, phone = ? WHERE id = ?");
+        $disp_name = $full_name ?: $username;
+        $upd_u->bind_param("ssi", $disp_name, $phone, $user_id);
+        $upd_u->execute();
+        $_SESSION['username'] = $disp_name;
+
+        // Resolve company_id
+        $company_id = null;
+        if (!empty($company_name)) {
+            $c_chk = $db->prepare("SELECT id FROM companies WHERE company_name = ? LIMIT 1");
+            $c_chk->bind_param("s", $company_name);
+            $c_chk->execute();
+            $c_res = $c_chk->get_result();
+            if ($c_res && $c_row = $c_res->fetch_assoc()) {
+                $company_id = (int)$c_row['id'];
+            } else {
+                $c_ins = $db->prepare("INSERT INTO companies (company_name) VALUES (?)");
+                $c_ins->bind_param("s", $company_name);
+                $c_ins->execute();
+                $company_id = (int)$db->insert_id;
+            }
+        }
 
         $upd_prof = $db->prepare("UPDATE student_profiles SET
-            full_name = ?, student_roll = ?, major = ?, phone = ?,
-            company_name = ?, job_role = ?, instructor_name = ?,
-            instructor_email = ?, instructor_phone = ?, internship_start_date = ?
+            student_roll = ?, major = ?, company_id = ?, job_role = ?, internship_start_date = ?
             WHERE user_id = ?");
         $istart = $internship_start ?: null;
-        $upd_prof->bind_param("ssssssssssi",
-            $full_name, $student_roll, $major, $phone,
-            $company_name, $job_role, $instructor_name,
-            $instructor_email, $instructor_phone, $istart,
+        $upd_prof->bind_param("ssissi",
+            $student_roll, $major, $company_id, $job_role, $istart,
             $user_id
         );
         $upd_prof->execute();
@@ -195,22 +210,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
             }
         }
     }
-}
-
-// Handle Portfolio Links
-$portfolio_msg = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) {
-    $github   = trim($_POST['github_link'] ?? '');
-    $linkedin = trim($_POST['linkedin_link'] ?? '');
-    $portfolio = trim($_POST['portfolio_link'] ?? '');
-
-    $upd_links = $db->prepare("UPDATE users SET github_link = ?, linkedin_link = ?, portfolio_link = ? WHERE id = ?");
-    $upd_links->bind_param("sssi", $github, $linkedin, $portfolio, $user_id);
-    $upd_links->execute();
-    $github_link    = $github;
-    $linkedin_link  = $linkedin;
-    $portfolio_link = $portfolio;
-    $portfolio_msg  = 'Portfolio links updated successfully.';
 }
 ?>
 <!DOCTYPE html>
@@ -375,12 +374,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                 </div>
                 <?php endif; ?>
 
-                <?php if ($portfolio_msg): ?>
-                <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                    <?= htmlspecialchars($portfolio_msg) ?>
-                </div>
-                <?php endif; ?>
-
                 <!-- ════ PROFILE PICTURE UPLOAD ════ -->
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
@@ -406,35 +399,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         </div>
                         <div class="flex justify-end pt-3">
                             <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Upload Picture</button>
-                        </div>
-                    </form>
-                </div>
-
-                <!-- ════ DEVELOPER PORTFOLIO LINKS ════ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100">
-                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <svg class="w-4 h-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg> Developer Portfolio Links
-                        </h3>
-                    </div>
-                    <form method="POST" class="p-5 space-y-4">
-                        <input type="hidden" name="update_portfolio" value="1">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">GitHub Link</label>
-                                <input type="url" name="github_link" value="<?= htmlspecialchars($github_link) ?>" placeholder="https://github.com/username" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">LinkedIn Link</label>
-                                <input type="url" name="linkedin_link" value="<?= htmlspecialchars($linkedin_link) ?>" placeholder="https://linkedin.com/in/username" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                            </div>
-                            <div class="sm:col-span-2">
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Personal Portfolio Website Link</label>
-                                <input type="url" name="portfolio_link" value="<?= htmlspecialchars($portfolio_link) ?>" placeholder="https://yourportfolio.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                            </div>
-                        </div>
-                        <div class="flex justify-end pt-1">
-                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Links</button>
                         </div>
                     </form>
                 </div>
@@ -484,7 +448,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Full Name</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['full_name'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['username'] ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Student Roll No</dt>
@@ -512,7 +476,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Full Name</label>
-                                    <input type="text" name="full_name" value="<?= htmlspecialchars($profile['full_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="full_name" value="<?= htmlspecialchars($profile['username']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Student Roll No</label>
@@ -530,9 +494,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_portfolio'])) 
                             <!-- Hidden fields to preserve internship data on save -->
                             <input type="hidden" name="company_name" value="<?= htmlspecialchars($profile['company_name']) ?>">
                             <input type="hidden" name="job_role" value="<?= htmlspecialchars($profile['job_role']) ?>">
-                            <input type="hidden" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name']) ?>">
-                            <input type="hidden" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email']) ?>">
-                            <input type="hidden" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>">
                             <input type="hidden" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>">
                             <div class="flex justify-end pt-2">
                                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Changes</button>

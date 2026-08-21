@@ -33,16 +33,13 @@ $search = trim($_GET['search'] ?? '');
 
 // ── Summary counts (assigned students scope) ───────────────────
 $pending_reviews_q = $db->prepare("
-    SELECT COUNT(*) FROM report_evaluations re
-    WHERE re.report_status = 'approved_by_instructor'
-      AND re.student_id IN (
+    SELECT COUNT(*) FROM weekly_reports wr
+    WHERE wr.status = 'approved_by_instructor'
+      AND wr.supervisor_grade IS NULL
+      AND wr.student_id IN (
           SELECT u.id FROM users u
           JOIN student_profiles sp ON sp.user_id = u.id
           WHERE u.role = 'student' AND sp.supervisor_id = ?
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM supervisor_weekly_evaluations swe
-          WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
 $pending_reviews_q->bind_param("i", $sup_id);
@@ -52,10 +49,10 @@ $row = $res ? $res->fetch_row() : null;
 $pending_reviews = (int) ($row[0] ?? 0);
 
 $company_count_q = $db->prepare("
-    SELECT COUNT(DISTINCT sp.company_name) FROM users u
+    SELECT COUNT(DISTINCT sp.company_id) FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
-      AND sp.company_name IS NOT NULL AND sp.company_name != ''
+      AND sp.company_id IS NOT NULL
 ");
 $company_count_q->bind_param("i", $sup_id);
 $company_count_q->execute();
@@ -66,25 +63,26 @@ $company_count = (int) ($row[0] ?? 0);
 // ── Students grouped by company (assigned students scope) ──────
 $sql = "
     SELECT u.id AS uid, u.username,
-           sp.full_name, sp.student_roll, sp.job_role, sp.company_name,
-           c.id AS company_id, c.address, c.contact_person, c.contact_email, c.contact_phone, c.website
+       u.username AS full_name, sp.student_roll, sp.job_role,
+       COALESCE(c.company_name, '') AS company_name,
+       c.id AS company_id, c.address, c.contact_person, c.contact_email, c.contact_phone, c.website
     FROM student_profiles sp
     JOIN users u ON u.id = sp.user_id
-    LEFT JOIN companies c ON c.company_name = sp.company_name
+    JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
-      AND sp.company_name IS NOT NULL AND sp.company_name != ''
+      AND sp.company_id IS NOT NULL
 ";
 $types = "i";
 $params = [$sup_id];
 
 if ($search) {
-    $sql .= " AND (sp.company_name LIKE ? OR sp.full_name LIKE ? OR sp.job_role LIKE ? OR c.contact_person LIKE ? OR c.contact_email LIKE ?)";
+    $sql .= " AND (c.company_name LIKE ? OR u.username LIKE ? OR sp.job_role LIKE ? OR c.contact_person LIKE ? OR c.contact_email LIKE ?)";
     $like = '%' . $search . '%';
     $types .= "sssss";
     array_push($params, $like, $like, $like, $like, $like);
 }
 
-$sql .= " ORDER BY sp.company_name ASC, sp.full_name ASC";
+$sql .= " ORDER BY c.company_name ASC, u.username ASC";
 
 $companies_stmt = $db->prepare($sql);
 $companies_stmt->bind_param($types, ...$params);

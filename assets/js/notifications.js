@@ -2,19 +2,26 @@
  * Notifications Module JavaScript for InternReport System
  */
 
-function toggleNotifDropdown() {
+function toggleNotifDropdown(e) {
+    if (e && typeof e.stopPropagation === 'function') {
+        e.stopPropagation();
+    }
     var dd = document.getElementById('notif-dropdown');
     if (!dd) return;
 
-    var visible = dd.style.opacity === '1' || !dd.classList.contains('hidden');
-    if (visible && dd.style.opacity === '1') {
+    var isHidden = dd.classList.contains('hidden') || dd.style.opacity === '0' || dd.style.visibility === 'hidden';
+
+    if (!isHidden) {
         dd.style.opacity    = '0';
         dd.style.visibility = 'hidden';
         dd.style.transform  = 'translateY(-8px) scale(0.95)';
+        setTimeout(function() {
+            if (dd.style.opacity === '0') dd.classList.add('hidden');
+        }, 200);
     } else {
         dd.classList.remove('hidden');
-        dd.style.opacity    = '1';
         dd.style.visibility = 'visible';
+        dd.style.opacity    = '1';
         dd.style.transform  = 'translateY(0) scale(1)';
     }
 
@@ -29,6 +36,9 @@ document.addEventListener('click', function(e) {
         dd.style.opacity = '0';
         dd.style.visibility = 'hidden';
         dd.style.transform = 'translateY(-8px) scale(0.95)';
+        setTimeout(function() {
+            if (dd.style.opacity === '0') dd.classList.add('hidden');
+        }, 200);
     }
 });
 
@@ -38,7 +48,11 @@ function openNotifFromSidebar() {
 }
 
 function timeAgo(dateStr) {
-    var date = new Date(dateStr);
+    if (!dateStr) return '';
+    var date = new Date(dateStr.replace(/-/g, '/'));
+    if (isNaN(date.getTime())) date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+
     var now = new Date();
     var seconds = Math.floor((now - date) / 1000);
     if (seconds < 0 || seconds < 60) return 'Just now';
@@ -54,9 +68,13 @@ function timeAgo(dateStr) {
 
 function updateNotifTimestamps() {
     document.querySelectorAll('[data-notif-time]').forEach(function(el) {
-        el.textContent = timeAgo(el.getAttribute('data-notif-time'));
+        var rawTime = el.getAttribute('data-notif-time');
+        if (rawTime) {
+            el.textContent = timeAgo(rawTime);
+        }
     });
 }
+
 document.addEventListener('DOMContentLoaded', function() {
     updateNotifTimestamps();
     setInterval(updateNotifTimestamps, 60000);
@@ -64,17 +82,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
 function updateNotifBadge(count) {
     var badge = document.getElementById('notif-badge');
-    var markAllBtn = document.getElementById('notif-mark-all-btn');
-    if (!badge) return;
-    if (count > 0) {
-        badge.textContent = count > 9 ? '9+' : count;
-        badge.classList.remove('hidden');
-        badge.classList.add('flex');
-        if (markAllBtn) markAllBtn.classList.remove('hidden');
-    } else {
-        badge.classList.add('hidden');
-        badge.classList.remove('flex');
-        if (markAllBtn) markAllBtn.classList.add('hidden');
+    var pageBadge = document.getElementById('page-unread-count');
+    var markAllBtn = document.getElementById('notif-mark-all-btn') || document.getElementById('mark-all-btn');
+
+    if (pageBadge) {
+        pageBadge.textContent = count;
+    }
+
+    if (badge) {
+        if (count > 0) {
+            badge.textContent = count > 9 ? '9+' : count;
+            badge.classList.remove('hidden');
+            badge.classList.add('flex');
+            badge.style.display = '';
+        } else {
+            badge.textContent = '0';
+            badge.classList.add('hidden');
+            badge.classList.remove('flex');
+            badge.style.display = 'none';
+        }
+    }
+
+    if (markAllBtn) {
+        if (count > 0) {
+            markAllBtn.classList.remove('hidden');
+            markAllBtn.style.display = '';
+        } else {
+            markAllBtn.classList.add('hidden');
+            markAllBtn.style.display = 'none';
+        }
     }
 }
 
@@ -95,48 +131,78 @@ document.addEventListener('click', function(e) {
 });
 
 function onNotificationItemClick(e, el) {
-    e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+    }
+
     var id = el.getAttribute('data-notif-id');
-    var redirectUrl = el.getAttribute('data-redirect-url') || el.getAttribute('data-fallback-href') || window.location.pathname;
+    var redirectUrl = el.getAttribute('data-redirect-url') || el.getAttribute('data-fallback-href') || el.getAttribute('href') || '';
+
+    // If no notification ID, immediately redirect
+    if (!id || parseInt(id, 10) <= 0) {
+        if (redirectUrl && redirectUrl !== '#') {
+            window.location.href = redirectUrl;
+        }
+        return false;
+    }
+
+    // Visually mark as read immediately
+    el.classList.remove('bg-teal-50/40', 'bg-teal-50/50', 'bg-blue-50/40', 'bg-blue-50/60', 'bg-[#e7f3ff]', 'bg-indigo-50/40');
+    var unreadDot = el.querySelector('.unread-dot') || el.querySelector('span.bg-teal-500') || el.querySelector('span.bg-blue-500');
+    if (unreadDot) {
+        unreadDot.classList.remove('bg-teal-500', 'bg-blue-500');
+        unreadDot.style.opacity = '0';
+    }
 
     var fd = new FormData();
     fd.append('notification_id', id);
     fd.append('mark_notification_read', '1');
 
-    fetch(window.location.pathname, {
+    var targetUrl = window.location.href;
+
+    fetch(targetUrl, {
         method: 'POST',
         body: fd,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    }).then(function(r) { return r.json(); })
-      .then(function(data) {
-          if (data && data.unread_count !== undefined) {
-              updateNotifBadge(data.unread_count);
-          }
-      })
-      .catch(function() {})
-      .finally(function() {
-          if (redirectUrl && redirectUrl !== '#') {
-              window.location.href = redirectUrl;
-          }
-      });
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        keepalive: true
+    }).then(function(r) {
+        return r.json().catch(function() { return null; });
+    }).then(function(data) {
+        if (data && data.unread_count !== undefined) {
+            updateNotifBadge(data.unread_count);
+        }
+    }).catch(function() {
+        // Ignore fetch errors during navigation
+    }).finally(function() {
+        if (redirectUrl && redirectUrl !== '#') {
+            window.location.href = redirectUrl;
+        }
+    });
+
+    return false;
 }
 
 function markAllNotifsRead() {
     var fd = new FormData();
     fd.append('mark_all_notifications_read', '1');
-    fetch(window.location.pathname, {
+
+    fetch(window.location.href, {
         method: 'POST',
         body: fd,
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    }).then(function(r) { return r.json(); })
-      .then(function(data) {
-          updateNotifBadge(0);
-          document.querySelectorAll('#notif-dropdown [data-notif-id]').forEach(function(item) {
-              item.classList.remove('bg-[#e7f3ff]', 'bg-indigo-50/40', 'bg-blue-50/40');
-              item.querySelector('.unread-dot')?.remove();
-          });
-      })
-      .catch(function() {});
+    }).then(function(r) {
+        return r.json().catch(function() { return null; });
+    }).then(function(data) {
+        updateNotifBadge(0);
+        document.querySelectorAll('[data-notif-id]').forEach(function(item) {
+            item.classList.remove('bg-teal-50/40', 'bg-teal-50/50', 'bg-blue-50/40', 'bg-blue-50/60', 'bg-[#e7f3ff]', 'bg-indigo-50/40');
+            var dot = item.querySelector('.unread-dot') || item.querySelector('span.bg-teal-500') || item.querySelector('span.bg-blue-500');
+            if (dot) {
+                dot.classList.remove('bg-teal-500', 'bg-blue-500');
+                dot.style.opacity = '0';
+            }
+        });
+    }).catch(function() {});
 }
 
 function markAllNotificationsRead() {

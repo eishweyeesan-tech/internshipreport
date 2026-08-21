@@ -4,7 +4,6 @@
  *
  * Called via POST from admin Academic Year Management page.
  * Sets is_current = 1 and status = 'Active' for target year, resets others to is_current = 0.
- * Updates system_settings key 'current_academic_year'.
  *
  * POST params:
  *   id          – Academic year ID OR
@@ -74,11 +73,6 @@ try {
     $active_stmt = $db->prepare("UPDATE academic_years SET is_current = 1, status = 'Active' WHERE id = ?");
     $active_stmt->bind_param("i", $id);
     $active_stmt->execute();
-
-    // Update system_settings
-    $setting_stmt = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('current_academic_year', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-    $setting_stmt->bind_param("s", $target['year_label']);
-    $setting_stmt->execute();
 
     $db->commit();
 

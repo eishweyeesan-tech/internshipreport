@@ -11,17 +11,18 @@ $internship_id = $user_id;
 
 $db = $mysqli ?? $conn;
 
-$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date,
-    sp.company_name, sp.job_role, sp.supervisor_id, sp.instructor_name,
-    u.profile_pic
+$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.internship_start_date, sp.internship_end_date,
+    COALESCE(c.company_name, '') AS company_name, sp.job_role, sp.supervisor_id,
+    u.username, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE sp.user_id = ?");
 $profile_stmt->bind_param("i", $user_id);
 $profile_stmt->execute();
 $res = $profile_stmt->get_result();
 $profile_row = $res ? $res->fetch_assoc() : null;
-$student_name = (($profile_row['full_name'] ?? '') ?: $username);
+$student_name = (($profile_row['username'] ?? '') ?: $username);
 $profile_pic  = $profile_row['profile_pic'] ?? null;
 $intern_start = $profile_row['internship_start_date'] ?? null;
 $intern_end   = $profile_row['internship_end_date'] ?? null;
@@ -41,7 +42,7 @@ if ($intern_start) {
 $progress_weeks_completed = 0;
 $progress_total_weeks = count($weeks);
 if (!empty($weeks)) {
-    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
         $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
         $wc_stmt->execute();

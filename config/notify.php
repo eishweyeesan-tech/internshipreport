@@ -12,25 +12,71 @@ if (!isset($mysqli) && !isset($conn)) {
 }
 
 /**
- * Insert a notification for a recipient.
+ * Insert a notification for a recipient (supports direct link, title, message).
  *
  * @param mysqli|mixed $db           Database connection ($mysqli or $conn)
  * @param int          $user_id      Recipient user id
- * @param string       $title
- * @param string       $message
- * @param string       $type         Must be a valid `notifications.type` enum value
- * @param int|null     $related_week
- * @param int|null     $student_id Related student (for action links)
- * @param int|null     $report_id  Related report_evaluations id (optional)
+ * @param string       $title        Notification title
+ * @param string       $message      Notification message body
+ * @param string|null  $link         Direct target URL link
+ * @param string       $type         Notification type
+ * @param int|null     $related_week Related week number
+ * @param int|null     $student_id   Related student ID
+ * @param int|null     $report_id    Related report ID
  * @return int  New notification id
  */
-function notify_user($db, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null)
+function createNotification($db, $user_id, $title, $message, $link = null, $type = 'info', $related_week = null, $student_id = null, $report_id = null)
 {
-    $stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, type, related_week, student_id, report_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("isssiii", $user_id, $title, $message, $type, $related_week, $student_id, $report_id);
-    $stmt->execute();
-    return (int) $db->insert_id;
+    $user_id = (int)$user_id;
+    if ($user_id <= 0 || !$db) return 0;
+
+    $title   = trim((string)$title);
+    $message = trim((string)$message);
+    if ($title === '') $title = 'Notification';
+
+    if (empty($link)) {
+        $link = notif_action_url([
+            'type'            => $type,
+            'related_week'    => $related_week,
+            'student_id'      => $student_id,
+            'report_id'       => $report_id,
+        ]);
+    }
+
+    try {
+        $stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, link, is_read) VALUES (?, ?, ?, ?, 0)");
+        if ($stmt) {
+            $stmt->bind_param("isss", $user_id, $title, $message, $link);
+            $stmt->execute();
+            $insert_id = (int) $db->insert_id;
+            $stmt->close();
+            return $insert_id;
+        }
+    } catch (Exception $e) {
+        try {
+            $stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, link, type, related_week, student_id, report_id, is_read)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)");
+            if ($stmt) {
+                $stmt->bind_param("issssiii", $user_id, $title, $message, $link, $type, $related_week, $student_id, $report_id);
+                $stmt->execute();
+                $insert_id = (int) $db->insert_id;
+                $stmt->close();
+                return $insert_id;
+            }
+        } catch (Exception $ex) {
+            error_log("Failed to insert notification: " . $ex->getMessage());
+            return 0;
+        }
+    }
+    return 0;
+}
+
+/**
+ * Backward compatible wrapper for notify_user.
+ */
+function notify_user($db, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null, $link = null)
+{
+    return createNotification($db, $user_id, $title, $message, $link, $type, $related_week, $student_id, $report_id);
 }
 
 /**
@@ -38,37 +84,48 @@ function notify_user($db, $user_id, $title, $message, $type = 'info', $related_w
  *
  * @return int|false  New notification id, or false when a duplicate exists
  */
-function notify_user_once($db, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null, $daily = false)
+function notify_user_once($db, $user_id, $title, $message, $type = 'info', $related_week = null, $student_id = null, $report_id = null, $daily = false, $link = null)
 {
-    $sql = "SELECT id FROM notifications
-            WHERE user_id = ? AND type = ?
-              AND COALESCE(student_id, 0) = COALESCE(?, 0)
-              AND COALESCE(related_week, 0) = COALESCE(?, 0)";
+    $user_id = (int)$user_id;
+    if ($user_id <= 0 || !$db) return false;
+
+    $sql = "SELECT id FROM notifications WHERE user_id = ? AND title = ? AND message = ?";
     if ($daily) {
         $sql .= " AND DATE(created_at) = CURDATE()";
     }
     $sql .= " LIMIT 1";
 
-    $check = $db->prepare($sql);
-    $check->bind_param("isii", $user_id, $type, $student_id, $related_week);
-    $check->execute();
-    $res = $check->get_result();
-    if ($res && $res->fetch_row()) {
-        return false;
+    try {
+        $check = $db->prepare($sql);
+        if ($check) {
+            $check->bind_param("iss", $user_id, $title, $message);
+            $check->execute();
+            $res = $check->get_result();
+            if ($res && $res->fetch_row()) {
+                $check->close();
+                return false;
+            }
+            $check->close();
+        }
+    } catch (Exception $e) {
+        error_log("notify_user_once check error: " . $e->getMessage());
     }
 
-    return notify_user($db, $user_id, $title, $message, $type, $related_week, $student_id, $report_id);
+    return createNotification($db, $user_id, $title, $message, $link, $type, $related_week, $student_id, $report_id);
 }
 
 /**
  * Build the target URL for a notification row based on notification attributes and recipient role.
  *
- * @param array       $notif Array containing type, related_week, student_id, report_id, announcement_id
+ * @param array       $notif Array containing link, type, related_week, student_id, report_id, announcement_id
  * @param string|null $role  Recipient role (admin, instructor, supervisor, student)
  * @return string Relative URL to destination page
  */
 function notif_action_url($notif, $role = null)
 {
+    if (!empty($notif['link'])) {
+        return $notif['link'];
+    }
     $type       = $notif['type'] ?? 'info';
     $week       = !empty($notif['related_week']) ? (int)$notif['related_week'] : null;
     $student_id = !empty($notif['student_id']) ? (int)$notif['student_id'] : null;
@@ -195,7 +252,7 @@ function notif_action_url($notif, $role = null)
         case 'report_submitted':
         case 'instructor_approved':
             if ($student_id) {
-                $url = $base . 'supervisor-review.php?student_id=' . $student_id;
+                $url = $base . 'view-student-dashboard.php?id=' . $student_id;
                 if ($week) $url .= '&week=' . $week;
                 return $url;
             }
@@ -203,7 +260,7 @@ function notif_action_url($notif, $role = null)
 
         case 'instructor_rejected':
             if ($student_id) {
-                $url = $base . 'supervisor-review.php?student_id=' . $student_id;
+                $url = $base . 'view-student-dashboard.php?id=' . $student_id;
                 if ($week) $url .= '&week=' . $week;
                 return $url;
             }
@@ -216,7 +273,9 @@ function notif_action_url($notif, $role = null)
         case 'supervisor_approved':
         case 'report_graded':
             if ($student_id) {
-                return $base . 'view-student-dashboard.php?id=' . $student_id;
+                $url = $base . 'view-student-dashboard.php?id=' . $student_id;
+                if ($week) $url .= '&week=' . $week;
+                return $url;
             }
             return $base . 'my-students.php';
 
@@ -230,7 +289,7 @@ function notif_action_url($notif, $role = null)
 
         default:
             if ($student_id && $week) {
-                return $base . 'supervisor-review.php?student_id=' . $student_id . '&week=' . $week;
+                return $base . 'view-student-dashboard.php?id=' . $student_id . '&week=' . $week;
             }
             if ($student_id) {
                 return $base . 'view-student-dashboard.php?id=' . $student_id;

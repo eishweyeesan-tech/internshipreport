@@ -110,16 +110,13 @@ if (empty($filter_year)) $filter_year = 'all';
 
 // ── Summary counts (assigned students scope) ───────────────────
 $pending_reviews_q = $db->prepare("
-    SELECT COUNT(*) FROM report_evaluations re
-    WHERE re.report_status = 'approved_by_instructor'
-      AND re.student_id IN (
+    SELECT COUNT(*) FROM weekly_reports wr
+    WHERE wr.status = 'approved_by_instructor'
+      AND wr.supervisor_grade IS NULL
+      AND wr.student_id IN (
           SELECT u.id FROM users u
           JOIN student_profiles sp ON sp.user_id = u.id
           WHERE u.role = 'student' AND sp.supervisor_id = ?
-      )
-      AND NOT EXISTS (
-          SELECT 1 FROM supervisor_weekly_evaluations swe
-          WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
       )
 ");
 $pending_reviews_q->bind_param("i", $sup_id);
@@ -128,11 +125,7 @@ $res = $pending_reviews_q->get_result();
 $row = $res ? $res->fetch_row() : null;
 $pending_reviews = (int) ($row[0] ?? 0);
 
-$total_assigned_q = $db->prepare("
-    SELECT COUNT(*) FROM users u
-    JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
-");
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?");
 $total_assigned_q->bind_param("i", $sup_id);
 $total_assigned_q->execute();
 $res = $total_assigned_q->get_result();
@@ -142,15 +135,16 @@ $total_assigned = (int) ($row[0] ?? 0);
 // ── Fetch ALL Assigned Students for this Supervisor ─────────────
 // Fetching all allows instant, seamless real-time client search & filtering across years/statuses
 $sql = "
-    SELECT u.id AS uid, u.username, u.email, u.academic_year, u.status AS user_status, u.profile_pic, u.is_warned,
-           sp.full_name, sp.student_roll, sp.major, sp.phone,
-           sp.company_name, sp.job_role,
-           sp.instructor_name, sp.instructor_email, sp.instructor_phone,
+    SELECT u.id AS uid, u.username, u.email, u.phone, ay.year_label AS academic_year, u.status AS user_status, u.profile_pic, u.is_warned,
+           u.username AS full_name, sp.student_roll, sp.major,
+           COALESCE(c.company_name, '') AS company_name, sp.job_role,
            sp.internship_start_date, sp.internship_end_date
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
+    LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
-    ORDER BY u.academic_year DESC, sp.student_roll ASC, sp.full_name ASC
+    ORDER BY ay.year_label DESC, sp.student_roll ASC, u.username ASC
 ";
 $students_stmt = $db->prepare($sql);
 $students_stmt->bind_param("i", $sup_id);
@@ -165,12 +159,12 @@ if (!empty($all_students)) {
     $in_placeholders = implode(',', array_fill(0, count($ids), '?'));
     $att_types = str_repeat("i", count($ids));
     $att_q = $db->prepare("
-        SELECT dl.internship_id,
+        SELECT dl.student_id,
                SUM(CASE WHEN dl.attendance_status = 'present' THEN 1 ELSE 0 END) AS present_count,
                COUNT(*) AS total_count
         FROM daily_logs dl
-        WHERE dl.internship_id IN ($in_placeholders)
-        GROUP BY dl.internship_id
+        WHERE dl.student_id IN ($in_placeholders)
+        GROUP BY dl.student_id
     ");
     $att_q->bind_param($att_types, ...$ids);
     $att_q->execute();
@@ -190,7 +184,7 @@ if (!empty($all_students)) {
     $in_placeholders = implode(',', array_fill(0, count($ids), '?'));
     $rg_types = str_repeat("i", count($ids));
 
-    $rc_q = $db->prepare("SELECT student_id, COUNT(*) AS cnt FROM report_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
+    $rc_q = $db->prepare("SELECT student_id, COUNT(*) AS cnt FROM weekly_reports WHERE student_id IN ($in_placeholders) GROUP BY student_id");
     $rc_q->bind_param($rg_types, ...$ids);
     $rc_q->execute();
     $res = $rc_q->get_result();
@@ -200,7 +194,7 @@ if (!empty($all_students)) {
         }
     }
 
-    $gc_q = $db->prepare("SELECT student_id, COUNT(*) AS cnt FROM supervisor_weekly_evaluations WHERE student_id IN ($in_placeholders) GROUP BY student_id");
+    $gc_q = $db->prepare("SELECT student_id, COUNT(*) AS cnt FROM weekly_reports WHERE student_id IN ($in_placeholders) AND supervisor_grade IS NOT NULL GROUP BY student_id");
     $gc_q->bind_param($rg_types, ...$ids);
     $gc_q->execute();
     $res = $gc_q->get_result();
@@ -218,13 +212,10 @@ if (!empty($all_students)) {
     $in_placeholders = implode(',', array_fill(0, count($ids), '?'));
     $p_types = str_repeat("i", count($ids));
     $pq = $db->prepare("
-        SELECT re.student_id, re.week_number FROM report_evaluations re
-        WHERE re.report_status = 'approved_by_instructor'
-          AND re.student_id IN ($in_placeholders)
-          AND NOT EXISTS (
-              SELECT 1 FROM supervisor_weekly_evaluations swe
-              WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
-          )
+        SELECT wr.student_id, wr.week_number FROM weekly_reports wr
+        WHERE wr.status = 'approved_by_instructor'
+          AND wr.supervisor_grade IS NULL
+          AND wr.student_id IN ($in_placeholders)
     ");
     $pq->bind_param($p_types, ...$ids);
     $pq->execute();
@@ -267,7 +258,7 @@ foreach ($all_students as $sd) {
 
 $progress_status = [];
 $report_status_cache = [];
-$rs_q = $db->prepare("SELECT report_status FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+$rs_q = $db->prepare("SELECT status FROM weekly_reports WHERE student_id = ? AND week_number = ?");
 foreach ($all_students as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
@@ -278,7 +269,7 @@ foreach ($all_students as $sd) {
     $report_status_cache[$uid] = $row[0] ?? 'pending';
 }
 
-$log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+$log_q = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
 foreach ($all_students as $sd) {
     $uid = $sd['uid'];
     $dw = $student_dynamic_week[$uid] ?? 1;
@@ -289,7 +280,7 @@ foreach ($all_students as $sd) {
         $progress_status[$uid] = 'none';
         continue;
     }
-    if ($rstatus === 'approved_by_supervisor') {
+    if ($rstatus === 'approved_by_supervisor' || $rstatus === 'graded') {
         $progress_status[$uid] = 'green';
         continue;
     }
@@ -512,31 +503,20 @@ function build_query_url($overrides = []) {
                 </div>
 
                 <!-- ═══ STUDENTS TABLE ═══ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full max-w-full">
-                    <div class="overflow-x-auto w-full max-w-full">
-                        <table class="w-full text-left text-xs sm:text-sm table-fixed min-w-[960px]" id="studentsTable">
-                            <colgroup>
-                                <col style="width: 18%;">
-                                <col style="width: 8%;">
-                                <col style="width: 10%;">
-                                <col style="width: 12%;">
-                                <col style="width: 10%;">
-                                <col style="width: 11%;">
-                                <col style="width: 7%;">
-                                <col style="width: 9%;">
-                                <col style="width: 15%;">
-                            </colgroup>
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
+                    <div class="w-full overflow-x-auto pb-4">
+                        <table class="w-full text-left text-xs sm:text-sm min-w-[1100px]" id="studentsTable">
                             <thead>
                                 <tr class="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
-                                    <th class="px-4 py-3 text-left">Student</th>
-                                    <th class="px-3 py-3 text-left whitespace-nowrap">Roll No.</th>
-                                    <th class="px-3 py-3 text-left whitespace-nowrap">Academic Year</th>
-                                    <th class="px-3 py-3 text-left">Company</th>
-                                    <th class="px-3 py-3 text-left">Role</th>
-                                    <th class="px-3 py-3 text-left">Progress</th>
-                                    <th class="px-3 py-3 text-center whitespace-nowrap">Reports</th>
-                                    <th class="px-3 py-3 text-left whitespace-nowrap">Status</th>
-                                    <th class="px-4 py-3 text-right whitespace-nowrap">Action</th>
+                                    <th class="px-4 py-3 text-left min-w-[200px]">Student</th>
+                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[90px]">Roll No.</th>
+                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[120px]">Academic Year</th>
+                                    <th class="px-3 py-3 text-left min-w-[140px]">Company</th>
+                                    <th class="px-3 py-3 text-left min-w-[120px]">Role</th>
+                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[130px]">Progress</th>
+                                    <th class="px-3 py-3 text-center whitespace-nowrap min-w-[80px]">Reports</th>
+                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[140px]">Status</th>
+                                    <th class="px-4 py-3 text-right whitespace-nowrap min-w-[200px]">Action</th>
                                 </tr>
                             </thead>
 
@@ -578,7 +558,7 @@ function build_query_url($overrides = []) {
                                     data-status="<?= $status ?>">
 
                                     <!-- 1. Student -->
-                                    <td class="px-4 py-3 overflow-hidden">
+                                    <td class="px-4 py-3">
                                         <a href="view-student-dashboard.php?id=<?= $uid ?>" class="flex items-center gap-2.5 group min-w-0">
                                             <?php if (!empty($s['profile_pic'])): ?>
                                             <img src="../uploads/avatars/<?= htmlspecialchars($s['profile_pic']) ?>" alt="Avatar" class="w-8 h-8 rounded-xl object-cover ring-1 ring-slate-200 shadow-xs shrink-0">
@@ -595,28 +575,28 @@ function build_query_url($overrides = []) {
                                     </td>
 
                                     <!-- 2. Roll Number -->
-                                    <td class="px-3 py-3 whitespace-nowrap overflow-hidden">
+                                    <td class="px-3 py-3 whitespace-nowrap">
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
                                             <?= htmlspecialchars($roll) ?>
                                         </span>
                                     </td>
 
                                     <!-- 3. Academic Year -->
-                                    <td class="px-3 py-3 whitespace-nowrap overflow-hidden">
+                                    <td class="px-3 py-3 whitespace-nowrap">
                                         <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/60 whitespace-nowrap">
                                             <?= htmlspecialchars($ay) ?>
                                         </span>
                                     </td>
 
                                     <!-- 4. Company -->
-                                    <td class="px-3 py-3 overflow-hidden">
+                                    <td class="px-3 py-3">
                                         <span class="text-slate-700 font-medium text-xs block truncate" title="<?= htmlspecialchars($s['company_name'] ?? '') ?>">
                                             <?= htmlspecialchars($s['company_name'] ?: '—') ?>
                                         </span>
                                     </td>
 
                                     <!-- 5. Role -->
-                                    <td class="px-3 py-3 overflow-hidden">
+                                    <td class="px-3 py-3">
                                         <div class="text-xs text-slate-700 font-medium">
                                             <p class="truncate" title="<?= htmlspecialchars($s['job_role'] ?? '') ?>"><?= htmlspecialchars($s['job_role'] ?: '—') ?></p>
                                             <?php if (!empty($s['major'])): ?>
@@ -626,20 +606,20 @@ function build_query_url($overrides = []) {
                                     </td>
 
                                     <!-- 6. Progress -->
-                                    <td class="px-3 py-3 overflow-hidden">
+                                    <td class="px-3 py-3 whitespace-nowrap">
                                         <div class="flex items-center gap-2">
-                                            <div class="flex-1 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                            <div class="w-20 bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                                 <div class="h-1.5 rounded-full bg-gradient-to-r <?= progress_bar_color($att_pct) ?> transition-all duration-500" style="width: <?= $att_pct ?>%"></div>
                                             </div>
                                             <span class="text-[11px] font-bold text-slate-700 shrink-0"><?= $att_pct ?>%</span>
                                         </div>
-                                        <p class="text-[10px] text-slate-400 mt-0.5 truncate">
+                                        <p class="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">
                                             <?= $not_started ? 'Not started' : 'Week ' . (int) ($student_progress[$uid]['completed'] ?? 0) . '/' . (int) ($student_progress[$uid]['total'] ?? 0) ?>
                                         </p>
                                     </td>
 
                                     <!-- 7. Reports -->
-                                    <td class="px-3 py-3 text-center whitespace-nowrap overflow-hidden">
+                                    <td class="px-3 py-3 text-center whitespace-nowrap">
                                         <div class="inline-flex flex-col items-center">
                                             <a href="supervisor-reports.php?student_id=<?= $uid ?>" class="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-indigo-600 px-2 py-0.5 rounded-lg transition" title="View reports for <?= htmlspecialchars($name) ?>">
                                                 📄 <?= $r_count ?>
@@ -651,7 +631,7 @@ function build_query_url($overrides = []) {
                                     </td>
 
                                     <!-- 8. Status -->
-                                    <td class="px-3 py-3 whitespace-nowrap overflow-hidden">
+                                    <td class="px-3 py-3 whitespace-nowrap">
                                         <span class="inline-flex items-center gap-1.5 text-xs font-bold <?= $label[1] ?> px-2.5 py-1 rounded-lg border whitespace-nowrap">
                                             <span class="w-2 h-2 rounded-full <?= $dot ?>"></span>
                                             <?= $label[0] ?>
@@ -659,17 +639,16 @@ function build_query_url($overrides = []) {
                                     </td>
 
                                     <!-- 9. Action -->
-                                    <td class="px-4 py-3 text-right whitespace-nowrap overflow-hidden">
+                                    <td class="px-4 py-3 text-right whitespace-nowrap">
                                         <div class="inline-flex items-center justify-end gap-1.5 flex-nowrap">
-                                            <!-- View Button -->
-                                            <a href="view-student-dashboard.php?id=<?= $uid ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition shrink-0" title="View student details">
-                                                👁️ View
-                                            </a>
-
-                                            <!-- Grade Button (if report pending) -->
+                                            <!-- Unified View & Grade / View Details Button -->
                                             <?php if ($pending_week): ?>
-                                            <a href="supervisor-review.php?student_id=<?= $uid ?>&week=<?= (int)$pending_week ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition shadow-xs shrink-0" title="Grade pending report">
-                                                📩 Grade
+                                            <a href="view-student-dashboard.php?id=<?= $uid ?>&week=<?= (int)$pending_week ?>" class="inline-flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all shrink-0" title="Review & grade pending report">
+                                                <i class="fa-regular fa-eye mr-1.5"></i> View &amp; Grade
+                                            </a>
+                                            <?php else: ?>
+                                            <a href="view-student-dashboard.php?id=<?= $uid ?>" class="inline-flex items-center px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all shrink-0" title="View student dashboard & details">
+                                                <i class="fa-regular fa-eye mr-1.5"></i> View Details
                                             </a>
                                             <?php endif; ?>
 

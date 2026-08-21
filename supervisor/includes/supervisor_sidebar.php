@@ -14,9 +14,11 @@
 
 if (!isset($active_page)) $active_page = 'dashboard';
 
-if (!isset($unread_notif_count) && isset($db, $_SESSION['user_id'])) {
+$db_sb = $db ?? $mysqli ?? $conn ?? $GLOBALS['db'] ?? $GLOBALS['mysqli'] ?? $GLOBALS['conn'] ?? null;
+
+if (!isset($unread_notif_count) && isset($_SESSION['user_id']) && $db_sb) {
     $sup_id_sb = (int) $_SESSION['user_id'];
-    $unread_notif_q_sb = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+    $unread_notif_q_sb = $db_sb->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
     if ($unread_notif_q_sb) {
         $unread_notif_q_sb->bind_param("i", $sup_id_sb);
         $unread_notif_q_sb->execute();
@@ -26,19 +28,16 @@ if (!isset($unread_notif_count) && isset($db, $_SESSION['user_id'])) {
     }
 }
 
-if (!isset($pending_reviews) && isset($db, $_SESSION['user_id'])) {
+if (!isset($pending_reviews) && isset($_SESSION['user_id']) && $db_sb) {
     $sup_id_sb = (int) $_SESSION['user_id'];
-    $pending_q_sb = $db->prepare("
-        SELECT COUNT(*) FROM report_evaluations re
-        WHERE re.report_status = 'approved_by_instructor'
-          AND re.student_id IN (
+    $pending_q_sb = $db_sb->prepare("
+        SELECT COUNT(*) FROM weekly_reports wr
+        WHERE wr.status = 'approved_by_instructor'
+          AND wr.supervisor_grade IS NULL
+          AND wr.student_id IN (
               SELECT u.id FROM users u
               JOIN student_profiles sp ON sp.user_id = u.id
               WHERE u.role = 'student' AND sp.supervisor_id = ?
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM supervisor_weekly_evaluations swe
-              WHERE swe.student_id = re.student_id AND swe.week_number = re.week_number
           )
     ");
     if ($pending_q_sb) {
@@ -50,8 +49,8 @@ if (!isset($pending_reviews) && isset($db, $_SESSION['user_id'])) {
     }
 }
 
-$unread_notif_count = (int) ($unread_notif_count ?? 0);
-$pending_reviews    = (int) ($pending_reviews ?? 0);
+$unread_notif_count = max(0, (int) ($unread_notif_count ?? 0));
+$pending_reviews    = max(0, (int) ($pending_reviews ?? 0));
 
 $nav_items = [
     ['key' => 'dashboard',     'href' => 'supervisor-dashboard.php', 'icon' => '📊', 'label' => 'Dashboard',     'badge' => 0, 'badge_color' => ''],

@@ -47,11 +47,6 @@ $offset   = ($page - 1) * $per_page;
 $base_where  = "n.user_id = ?";
 $types       = "i";
 $base_params = [$sup_id];
-if ($type_filter !== '') {
-    $base_where  .= " AND n.type = ?";
-    $types       .= "s";
-    $base_params[] = $type_filter;
-}
 
 $count_stmt = $db->prepare("SELECT COUNT(*) FROM notifications n WHERE {$base_where}");
 $count_stmt->bind_param($types, ...$base_params);
@@ -63,13 +58,8 @@ $total_pages  = max(1, (int) ceil($total_notifs / $per_page));
 if ($page > $total_pages) { $page = $total_pages; $offset = ($page - 1) * $per_page; }
 
 $list_sql = "
-    SELECT n.id, n.title, n.message, n.type, n.related_week, n.student_id, n.report_id,
-           n.is_read, n.created_at,
-           su.username AS student_username, su.profile_pic,
-           sp.full_name AS student_name
+    SELECT n.id, n.title, n.message, n.link, n.is_read, n.created_at
     FROM notifications n
-    LEFT JOIN users su ON su.id = n.student_id
-    LEFT JOIN student_profiles sp ON sp.user_id = n.student_id
     WHERE {$base_where}
     ORDER BY n.created_at DESC
     LIMIT ? OFFSET ?
@@ -173,30 +163,17 @@ function build_query_url($overrides = []) {
             <div id="notif-list" class="bg-white/80 backdrop-blur-xl border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden">
                 <?php foreach ($notifications as $notif): ?>
                 <?php
-                    $meta        = notif_type_meta($notif['type']);
-                    $notif_url   = notif_action_url($notif);
-                    $student_pic = !empty($notif['student_id']) && !empty($notif['profile_pic']) ? '../uploads/avatars/' . htmlspecialchars($notif['profile_pic']) : null;
-                    $student_show = $notif['student_name'] ?: ($notif['student_username'] ?: null);
+                    $notif_url = !empty($notif['link']) ? $notif['link'] : 'supervisor-dashboard.php';
                 ?>
                 <div class="flex items-start gap-4 px-6 py-4 <?= !$notif['is_read'] ? 'bg-[#e7f3ff]' : '' ?> hover:bg-slate-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)">
-                    <?php if ($student_pic): ?>
-                    <img src="<?= $student_pic ?>" alt="" class="w-11 h-11 rounded-full object-cover ring-2 ring-white shadow-sm shrink-0">
-                    <?php else: ?>
-                    <div class="w-11 h-11 rounded-full <?= $meta['classes'] ?> flex items-center justify-center text-base shrink-0 ring-2 ring-white shadow-sm">
-                        <span><?= $meta['icon'] ?></span>
+                    <div class="w-11 h-11 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-base shrink-0 ring-2 ring-white shadow-sm">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                     </div>
-                    <?php endif; ?>
 
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 flex-wrap">
                             <p class="text-sm <?= !$notif['is_read'] ? 'font-bold text-slate-800' : 'font-semibold text-slate-700' ?> leading-snug"><?= htmlspecialchars($notif['title']) ?></p>
-                            <?php if ($notif['related_week']): ?>
-                            <span class="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">Week <?= (int)$notif['related_week'] ?></span>
-                            <?php endif; ?>
                         </div>
-                        <?php if ($student_show): ?>
-                        <p class="text-xs font-semibold text-slate-500 mt-0.5">👤 <?= htmlspecialchars($student_show) ?></p>
-                        <?php endif; ?>
                         <p class="text-xs text-slate-500 mt-1 leading-relaxed"><?= htmlspecialchars($notif['message']) ?></p>
                         <p class="text-[11px] text-slate-400 mt-1.5 flex items-center gap-2" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>">
                             <span><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></span>

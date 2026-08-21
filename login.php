@@ -72,16 +72,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Active Academic Year Standard
         require_once __DIR__ . '/includes/academic_year_helper.php';
         ensure_academic_years_table($db);
-        $current_active_year = get_active_academic_year_label($db, '2023-2024');
 
         if ($user && password_verify($password, $user['password'])) {
             $user_status = trim((string) ($user['status'] ?? 'Active'));
-            $user_academic_year = trim((string) ($user['academic_year'] ?? ''));
 
             // Restrict student access if status != Active OR academic_year != current active year
             if ($user['role'] === 'student') {
                 $is_archived_status = (strtolower($user_status) !== 'active');
-                $is_past_academic_year = ($user_academic_year !== '' && $user_academic_year !== $current_active_year);
+                $is_past_academic_year = false;
+                if (!empty($user['academic_year_id'])) {
+                    $ay_chk = $db->prepare("SELECT is_current, status FROM academic_years WHERE id = ?");
+                    $ay_chk->bind_param("i", $user['academic_year_id']);
+                    $ay_chk->execute();
+                    $ay_res = $ay_chk->get_result();
+                    if ($ay_row = $ay_res->fetch_assoc()) {
+                        if ((int)$ay_row['is_current'] !== 1 && strtoupper($ay_row['status']) !== 'ACTIVE') {
+                            $is_past_academic_year = true;
+                        }
+                    }
+                }
 
                 if ($is_archived_status || $is_past_academic_year) {
                     $error = 'သင်၏ အကောင့်မှာ ပညာသင်နှစ် ပြီးဆုံး၍ Archive လုပ်ထားပြီးဖြစ်သောကြောင့် Login ဝင်ရောက်ခွင့် မရှိတော့ပါ။';

@@ -1,5 +1,5 @@
 -- ============================================================
--- InternReport Management System — Clean Core Database Schema
+-- InternReport Management System — Clean Core Database Schema (8 Core Tables)
 -- File: database/schema.sql
 -- ============================================================
 
@@ -9,32 +9,20 @@ USE intern_report_db;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- ============================================================
--- 1. INDEPENDENT TABLES
--- ============================================================
-
--- Unified Users table (admins, students, supervisors, instructors)
-CREATE TABLE IF NOT EXISTS users (
+-- 1. Academic Years
+CREATE TABLE IF NOT EXISTS academic_years (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(100) NOT NULL,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    phone VARCHAR(30) DEFAULT NULL,
-    department VARCHAR(100) DEFAULT NULL,
-    position VARCHAR(100) DEFAULT NULL,
-    password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'student', 'supervisor', 'instructor') NOT NULL DEFAULT 'student',
-    is_first_login TINYINT(1) NOT NULL DEFAULT 1,
-    academic_year VARCHAR(15) DEFAULT NULL,
-    academic_year_id INT DEFAULT NULL,
-    status ENUM('Active', 'Inactive', 'Archived') NOT NULL DEFAULT 'Active',
-    profile_pic VARCHAR(255) DEFAULT NULL,
-    last_login_at DATETIME DEFAULT NULL,
-    is_warned TINYINT(1) DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_username_year (username, academic_year)
+    year_label VARCHAR(50) NOT NULL UNIQUE,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    default_student_password VARCHAR(255) NOT NULL DEFAULT 'password1234',
+    default_supervisor_password VARCHAR(255) NOT NULL DEFAULT 'password1234',
+    is_current TINYINT(1) NOT NULL DEFAULT 0,
+    status ENUM('Active', 'Upcoming', 'Archived') NOT NULL DEFAULT 'Upcoming',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Companies table
+-- 2. Companies
 CREATE TABLE IF NOT EXISTS companies (
     id INT AUTO_INCREMENT PRIMARY KEY,
     company_name VARCHAR(150) NOT NULL UNIQUE,
@@ -47,26 +35,27 @@ CREATE TABLE IF NOT EXISTS companies (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Academic Years table
-CREATE TABLE IF NOT EXISTS academic_years (
+-- 3. Users (Unified)
+CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    year_label VARCHAR(50) NOT NULL UNIQUE,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    is_current TINYINT(1) NOT NULL DEFAULT 0,
-    status ENUM('Active', 'Upcoming', 'Archived') NOT NULL DEFAULT 'Upcoming',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    username VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    phone VARCHAR(30) DEFAULT NULL,
+    department VARCHAR(100) DEFAULT NULL,
+    position VARCHAR(100) DEFAULT NULL,
+    password VARCHAR(255) NOT NULL,
+    role ENUM('admin', 'student', 'supervisor', 'instructor') NOT NULL DEFAULT 'student',
+    is_first_login TINYINT(1) NOT NULL DEFAULT 1,
+    academic_year_id INT DEFAULT NULL,
+    status ENUM('Active', 'Inactive', 'Archived') NOT NULL DEFAULT 'Active',
+    profile_pic VARCHAR(255) DEFAULT NULL,
+    last_login_at DATETIME DEFAULT NULL,
+    is_warned TINYINT(1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- System settings
-CREATE TABLE IF NOT EXISTS system_settings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    setting_key VARCHAR(100) NOT NULL UNIQUE,
-    setting_value TEXT NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Supervisor–Academic Year assignment (many-to-many)
+-- 4. Supervisor Academic Assignments
 CREATE TABLE IF NOT EXISTS supervisor_academic_assignments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     supervisor_id INT NOT NULL,
@@ -79,44 +68,28 @@ CREATE TABLE IF NOT EXISTS supervisor_academic_assignments (
     FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
--- 2. STUDENT & SUPERVISOR PROFILE TABLES
--- ============================================================
-
--- Student profiles table
+-- 5. Student Profiles
 CREATE TABLE IF NOT EXISTS student_profiles (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL UNIQUE,
     supervisor_id INT DEFAULT NULL,
-    instructor_id INT DEFAULT NULL,
     company_id INT DEFAULT NULL,
-    full_name VARCHAR(150) DEFAULT '',
     student_roll VARCHAR(50) DEFAULT '',
     major VARCHAR(100) DEFAULT '',
-    phone VARCHAR(30) DEFAULT '',
-    company_name VARCHAR(150) DEFAULT '',
     job_role VARCHAR(100) DEFAULT '',
-    instructor_name VARCHAR(150) DEFAULT '',
-    instructor_email VARCHAR(100) DEFAULT '',
-    instructor_phone VARCHAR(30) DEFAULT '',
     internship_start_date DATE DEFAULT NULL,
     internship_end_date DATE DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (instructor_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
--- 3. INTERNSHIP LOGGING & REFLECTION TABLES
--- ============================================================
-
--- Daily logs table
+-- 6. Daily Logs
 CREATE TABLE IF NOT EXISTS daily_logs (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    internship_id INT NOT NULL,
+    student_id INT NOT NULL,
     log_date DATE NOT NULL,
     attendance_status ENUM('present', 'leave', 'absent') NOT NULL DEFAULT 'present',
     reason_for_absence TEXT DEFAULT NULL,
@@ -131,116 +104,49 @@ CREATE TABLE IF NOT EXISTS daily_logs (
     end_time VARCHAR(5) NOT NULL DEFAULT '17:00',
     calculated_duration VARCHAR(20) NOT NULL DEFAULT '00:00',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_log (internship_id, log_date),
-    FOREIGN KEY (internship_id) REFERENCES users(id) ON DELETE CASCADE
+    UNIQUE KEY unique_log (student_id, log_date),
+    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Weekly reflections table
-CREATE TABLE IF NOT EXISTS weekly_reflections (
+-- 7. Weekly Reports & Evaluations (Consolidated)
+CREATE TABLE IF NOT EXISTS weekly_reports (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    internship_id INT NOT NULL,
+    student_id INT NOT NULL,
     week_number INT NOT NULL,
     what_done TEXT NOT NULL,
     how_done TEXT NOT NULL,
     why_done TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_week (internship_id, week_number),
-    FOREIGN KEY (internship_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ============================================================
--- 4. LINK & EVALUATION TABLES
--- ============================================================
-
--- Magic links for students
-CREATE TABLE IF NOT EXISTS magic_links (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    internship_id INT NOT NULL,
-    week_number INT NOT NULL,
-    token VARCHAR(64) NOT NULL UNIQUE,
-    expires_at DATETIME NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_week_link (internship_id, week_number),
-    FOREIGN KEY (internship_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- Report evaluations (instructor grading & approval)
-CREATE TABLE IF NOT EXISTS report_evaluations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_id INT NOT NULL,
-    week_number INT NOT NULL,
-    grade ENUM('excellent', 'good', 'average', 'needs_improvement') NOT NULL DEFAULT 'good',
-    comment TEXT NOT NULL,
+    instructor_review_code VARCHAR(64) DEFAULT NULL UNIQUE,
+    instructor_grade ENUM('excellent', 'good', 'average', 'needs_improvement') DEFAULT NULL,
     instructor_comments TEXT DEFAULT NULL,
-    signature_type ENUM('typed', 'uploaded') DEFAULT NULL,
-    signature_value VARCHAR(500) DEFAULT NULL,
-    student_signature_type ENUM('typed', 'uploaded') DEFAULT NULL,
-    student_signature_value VARCHAR(500) DEFAULT NULL,
-    report_status ENUM('pending', 'approved_by_instructor', 'approved_by_supervisor', 'rejected') NOT NULL DEFAULT 'pending',
-    evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_eval (student_id, week_number),
+    supervisor_grade ENUM('A', 'B', 'C', 'D', 'F') DEFAULT NULL,
+    supervisor_comments TEXT DEFAULT NULL,
+    status ENUM('pending', 'approved_by_instructor', 'graded', 'rejected') NOT NULL DEFAULT 'pending',
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_student_week (student_id, week_number),
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Supervisor weekly evaluations (university grading)
-CREATE TABLE IF NOT EXISTS supervisor_weekly_evaluations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    student_id INT NOT NULL,
-    week_number INT NOT NULL,
-    supervisor_id INT NOT NULL,
-    weekly_grade ENUM('A', 'B', 'C', 'D', 'F') NOT NULL,
-    supervisor_comments TEXT DEFAULT NULL,
-    evaluated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_weekly_eval (student_id, week_number),
-    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ============================================================
--- 5. NOTIFICATION TABLES
--- ============================================================
-
--- Notifications table
+-- 8. Notifications
 CREATE TABLE IF NOT EXISTS notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    title VARCHAR(200) NOT NULL,
+    title VARCHAR(150) NOT NULL,
     message TEXT NOT NULL,
-    type ENUM(
-        'instructor_approved',
-        'instructor_rejected',
-        'supervisor_approved',
-        'new_report_submitted',
-        'report_needs_review',
-        'student_behind_schedule',
-        'internship_completed',
-        'system_notice',
-        'info'
-    ) NOT NULL DEFAULT 'info',
-    related_week INT DEFAULT NULL,
-    student_id INT DEFAULT NULL,
-    report_id INT DEFAULT NULL,
+    link VARCHAR(255) DEFAULT NULL,
     is_read TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_notif_user_read (user_id, is_read),
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- SEED DATA
 -- ============================================================
 
--- Default system settings
-INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES
-('default_student_password', 'password1234'),
-('default_supervisor_password', 'password1234'),
-('current_academic_year', '2023-2024');
-
 -- Default academic years
-INSERT IGNORE INTO academic_years (year_label, start_date, end_date, is_current, status) VALUES
-('2023-2024', '2023-09-01', '2024-08-31', 1, 'Active'),
-('2024-2025', '2024-09-01', '2025-08-31', 0, 'Upcoming');
+INSERT IGNORE INTO academic_years (year_label, start_date, end_date, default_student_password, default_supervisor_password, is_current, status) VALUES
+('2023-2024', '2023-09-01', '2024-08-31', 'password1234', 'password1234', 1, 'Active'),
+('2024-2025', '2024-09-01', '2025-08-31', 'password1234', 'password1234', 0, 'Upcoming');
 
 -- Default admin account (password: "password")
 INSERT IGNORE INTO users (username, email, password, role, is_first_login) VALUES

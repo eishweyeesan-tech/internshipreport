@@ -14,8 +14,7 @@ if (!$token || !preg_match('/^[a-f0-9]{32,64}$/i', $token)) {
     render_error('Invalid Link', 'No valid token provided in the URL.', '✕');
 }
 
-// Temporarily disabled expiry check for testing: removed "AND (expires_at IS NULL OR expires_at > NOW())"
-$stmt = $db->prepare("SELECT internship_id AS student_id, week_number, expires_at FROM magic_links WHERE token = ? LIMIT 1");
+$stmt = $db->prepare("SELECT student_id, week_number FROM weekly_reports WHERE instructor_review_code = ? LIMIT 1");
 $stmt->bind_param("s", $token);
 $stmt->execute();
 $res = $stmt->get_result();
@@ -30,13 +29,22 @@ $student_id  = (int) $link['student_id'];
 $week_number = (int) $link['week_number'];
 
 // ── Fetch Student Profile ────────────────────────────────────────
-$profile_stmt = $db->prepare("SELECT sp.*, u.username, u.email, sup.id AS supervisor_user_id, sup.username AS supervisor_name, sup.email AS supervisor_email FROM student_profiles sp JOIN users u ON u.id = sp.user_id LEFT JOIN users sup ON sup.id = sp.supervisor_id WHERE sp.user_id = ?");
+$profile_stmt = $db->prepare("
+    SELECT sp.*, u.username, u.email, u.phone,
+           COALESCE(c.company_name, '') AS company_name,
+           sup.id AS supervisor_user_id, sup.username AS supervisor_name, sup.email AS supervisor_email
+    FROM student_profiles sp
+    JOIN users u ON u.id = sp.user_id
+    LEFT JOIN companies c ON c.id = sp.company_id
+    LEFT JOIN users sup ON sup.id = sp.supervisor_id
+    WHERE sp.user_id = ?
+");
 $profile_stmt->bind_param("i", $student_id);
 $profile_stmt->execute();
 $res = $profile_stmt->get_result();
 $profile = $res ? $res->fetch_assoc() : [];
 
-$student_name = ($profile['full_name'] ?? '') ?: ($profile['username'] ?? 'Student');
+$student_name = ($profile['username'] ?? 'Student');
 $student_roll = $profile['student_roll'] ?? '';
 $company_name = $profile['company_name'] ?? '';
 $intern_start = $profile['internship_start_date'] ?? null;
@@ -62,7 +70,7 @@ if ($intern_start) {
         $week_end = (clone $week_start_date)->modify('+6 days')->format('Y-m-d');
     }
 } else {
-    $first_log = $db->prepare("SELECT MIN(log_date) FROM daily_logs WHERE internship_id = ?");
+    $first_log = $db->prepare("SELECT MIN(log_date) FROM daily_logs WHERE student_id = ?");
     $first_log->bind_param("i", $student_id);
     $first_log->execute();
     $res = $first_log->get_result();
@@ -77,25 +85,32 @@ if ($intern_start) {
 }
 
 // ── Fetch Daily Logs for This Week ───────────────────────────────
-$daily_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date ASC");
+$daily_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date ASC");
 $daily_stmt->bind_param("iss", $student_id, $week_start, $week_end);
 $daily_stmt->execute();
 $res = $daily_stmt->get_result();
 $daily_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-// ── Fetch Weekly Reflection ──────────────────────────────────────
-$ref_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-$ref_stmt->bind_param("ii", $student_id, $week_number);
-$ref_stmt->execute();
-$res = $ref_stmt->get_result();
-$reflection = $res ? $res->fetch_assoc() : null;
+// ── Fetch Weekly Reflection & Report ─────────────────────────────
+$rep_stmt = $db->prepare("SELECT * FROM weekly_reports WHERE student_id = ? AND week_number = ? LIMIT 1");
+$rep_stmt->bind_param("ii", $student_id, $week_number);
+$rep_stmt->execute();
+$res = $rep_stmt->get_result();
+$weekly_report = $res ? $res->fetch_assoc() : null;
 
-// ── Fetch Existing Evaluation ────────────────────────────────────
-$eval_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$eval_stmt->bind_param("ii", $student_id, $week_number);
-$eval_stmt->execute();
-$res = $eval_stmt->get_result();
-$evaluation = $res ? $res->fetch_assoc() : null;
+$reflection = $weekly_report ? [
+    'what_done' => $weekly_report['what_done'],
+    'how_done'  => $weekly_report['how_done'],
+    'why_done'  => $weekly_report['why_done'],
+] : null;
+
+$evaluation = ($weekly_report && !empty($weekly_report['instructor_grade'])) ? [
+    'grade'               => $weekly_report['instructor_grade'],
+    'comment'             => $weekly_report['instructor_comments'],
+    'instructor_comments' => $weekly_report['instructor_comments'],
+    'report_status'       => $weekly_report['status'],
+    'evaluated_at'        => $weekly_report['submitted_at'],
+] : null;
 
 // ── Handle Rejection ─────────────────────────────────────────────
 $eval_msg = '';
@@ -105,28 +120,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_report'])) {
     if (empty($reject_reason)) {
         $eval_msg = 'reject_empty';
     } else {
-        $rej = $db->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, instructor_comments, report_status)
-            VALUES (?, ?, 'needs_improvement', '', ?, 'rejected')
-            ON DUPLICATE KEY UPDATE
-            instructor_comments = VALUES(instructor_comments),
-            report_status = 'rejected',
-            signature_type = NULL, signature_value = NULL,
-            evaluated_at = NOW()");
-        $rej->bind_param("iis", $student_id, $week_number, $reject_reason);
+        $rej = $db->prepare("UPDATE weekly_reports SET
+            instructor_grade = 'needs_improvement',
+            instructor_comments = ?,
+            status = 'rejected'
+            WHERE student_id = ? AND week_number = ?");
+        $rej->bind_param("sii", $reject_reason, $student_id, $week_number);
         $rej->execute();
 
         // Insert notification for the student
+        require_once __DIR__ . '/../config/notify.php';
         $instructor_label = ($profile['instructor_name'] ?? '') ?: 'Your instructor';
-        $notif_stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_rejected', ?)");
         $notif_title = 'Report Rejected by Instructor';
         $notif_msg = $instructor_label . ' has rejected your Week ' . $week_number . ' report. Reason: ' . $reject_reason;
-        $notif_stmt->bind_param("issi", $student_id, $notif_title, $notif_msg, $week_number);
-        $notif_stmt->execute();
+        $student_link = '../student/student-dashboard.php?week=' . (int)$week_number;
+        createNotification($db, $student_id, $notif_title, $notif_msg, $student_link, 'instructor_rejected', $week_number, $student_id);
 
-        $eval_stmt->bind_param("ii", $student_id, $week_number);
-        $eval_stmt->execute();
-        $res = $eval_stmt->get_result();
-        $evaluation = $res ? $res->fetch_assoc() : null;
+        $rep_stmt->bind_param("ii", $student_id, $week_number);
+        $rep_stmt->execute();
+        $res = $rep_stmt->get_result();
+        $weekly_report = $res ? $res->fetch_assoc() : null;
+        $evaluation = ($weekly_report && !empty($weekly_report['instructor_grade'])) ? [
+            'grade'               => $weekly_report['instructor_grade'],
+            'comment'             => $weekly_report['instructor_comments'],
+            'instructor_comments' => $weekly_report['instructor_comments'],
+            'report_status'       => $weekly_report['status'],
+            'evaluated_at'        => $weekly_report['submitted_at'],
+        ] : null;
         $eval_msg = 'rejected';
     }
 }
@@ -170,26 +190,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     if (!empty($missing_fields)) {
         $eval_msg = 'error_missing:' . implode(', ', $missing_fields);
     } else {
-        $upsert = $db->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, signature_type, signature_value, report_status)
-            VALUES (?, ?, ?, ?, ?, ?, 'approved_by_instructor')
-            ON DUPLICATE KEY UPDATE
-            grade = VALUES(grade), comment = VALUES(comment),
-            signature_type = VALUES(signature_type), signature_value = VALUES(signature_value),
-            report_status = 'approved_by_instructor', evaluated_at = NOW()");
-        $upsert->bind_param("iissss", $student_id, $week_number, $grade, $comment, $signature_type, $sig_val);
+        $upsert = $db->prepare("UPDATE weekly_reports SET
+            instructor_grade = ?,
+            instructor_comments = ?,
+            status = 'approved_by_instructor'
+            WHERE student_id = ? AND week_number = ?");
+        $upsert->bind_param("ssii", $grade, $comment, $student_id, $week_number);
         $upsert->execute();
 
         // Insert notification for the student
+        require_once __DIR__ . '/../config/notify.php';
         $instructor_label = ($profile['instructor_name'] ?? '') ?: 'Your instructor';
-        $notif_stmt = $db->prepare("INSERT INTO notifications (user_id, title, message, type, related_week) VALUES (?, ?, ?, 'instructor_approved', ?)");
         $notif_title = 'Report Approved by Instructor';
         $notif_msg = $instructor_label . ' has signed and approved your Week ' . $week_number . ' report with grade "' . ucfirst(str_replace('_', ' ', $grade)) . '".';
-        $notif_stmt->bind_param("issi", $student_id, $notif_title, $notif_msg, $week_number);
-        $notif_stmt->execute();
+        $student_link = '../student/student-dashboard.php?week=' . (int)$week_number;
+        createNotification($db, $student_id, $notif_title, $notif_msg, $student_link, 'instructor_approved', $week_number, $student_id);
 
         // Notify assigned supervisor
         if (!empty($profile['supervisor_user_id'])) {
-            require_once __DIR__ . '/../config/notify.php';
+            $sup_link = '../supervisor/view-student-dashboard.php?id=' . (int)$student_id . '&week=' . (int)$week_number;
             notify_user_once(
                 $db,
                 (int) $profile['supervisor_user_id'],
@@ -197,15 +216,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
                 $student_name . "'s Week " . $week_number . ' report has been reviewed and approved by the company instructor and is ready for your evaluation.',
                 'report_needs_review',
                 $week_number,
-                $student_id
+                $student_id,
+                null,
+                false,
+                $sup_link
             );
         }
 
-
-        $eval_stmt->bind_param("ii", $student_id, $week_number);
-        $eval_stmt->execute();
-        $res = $eval_stmt->get_result();
-        $evaluation = $res ? $res->fetch_assoc() : null;
+        $rep_stmt->bind_param("ii", $student_id, $week_number);
+        $rep_stmt->execute();
+        $res = $rep_stmt->get_result();
+        $weekly_report = $res ? $res->fetch_assoc() : null;
+        $evaluation = ($weekly_report && !empty($weekly_report['instructor_grade'])) ? [
+            'grade'               => $weekly_report['instructor_grade'],
+            'comment'             => $weekly_report['instructor_comments'],
+            'instructor_comments' => $weekly_report['instructor_comments'],
+            'report_status'       => $weekly_report['status'],
+            'evaluated_at'        => $weekly_report['submitted_at'],
+        ] : null;
         $eval_msg = 'saved';
     }
 }

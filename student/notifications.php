@@ -10,7 +10,7 @@ $username = $_SESSION['username'];
 $db = $mysqli ?? $conn;
 
 // Fetch Student Profile (for top bar)
-$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, u.profile_pic
+$profile_stmt = $db->prepare("SELECT sp.student_roll, u.username, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
     WHERE sp.user_id = ?");
@@ -19,7 +19,7 @@ $profile_stmt->execute();
 $res = $profile_stmt->get_result();
 $profile_row = $res ? $res->fetch_assoc() : null;
 
-$student_name = (($profile_row['full_name'] ?? '') ?: $username);
+$student_name = (($profile_row['username'] ?? '') ?: $username);
 $student_roll = $profile_row['student_roll'] ?? '';
 $profile_pic  = $profile_row['profile_pic'] ?? '';
 
@@ -230,10 +230,10 @@ if (!function_exists('student_notif_meta')) {
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <?php foreach ($notifications as $notif): ?>
                 <?php
-                    $meta      = student_notif_meta($notif['type']);
-                    $notif_url = student_notif_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null);
+                    $meta      = student_notif_meta($notif['type'] ?? 'info');
+                    $notif_url = !empty($notif['link']) ? $notif['link'] : student_notif_url($notif['type'] ?? 'info', $notif['related_week'] ?? null, $notif['announcement_id'] ?? null);
                 ?>
-                <div onclick="onNotificationItemClick(event, this)" data-notif-id="<?= (int)$notif['id'] ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>"
+                <div onclick="onNotificationItemClick(event, this)" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>"
                      class="flex items-start gap-4 px-5 py-4 cursor-pointer transition-all duration-150 border-b border-slate-100 last:border-0 <?= !$notif['is_read'] ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-slate-50' ?>">
                     <div class="w-9 h-9 rounded-xl <?= $meta['classes'] ?> flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?= $meta['icon'] ?>"/></svg>
@@ -275,5 +275,6 @@ if (!function_exists('student_notif_meta')) {
     </div>
 </div>
 
+<script src="../assets/js/notifications.js"></script>
 </body>
 </html>

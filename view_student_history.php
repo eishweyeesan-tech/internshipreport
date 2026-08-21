@@ -23,12 +23,15 @@ if ($uid <= 0) {
 
 // ── Fetch Student Profile ────────────────────────────────────────
 $profile_stmt = $db->prepare("
-    SELECT u.id, u.username, u.email, u.academic_year, u.created_at, u.profile_pic,
-           sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
-           sp.instructor_name, sp.internship_start_date, sp.internship_end_date, sp.company_id,
+    SELECT u.id, u.username, u.email, ay.year_label AS academic_year, u.created_at, u.profile_pic,
+           u.username AS full_name, sp.student_roll, sp.major,
+           COALESCE(c.company_name, '') AS company_name, sp.job_role,
+           sp.internship_start_date, sp.internship_end_date, sp.company_id,
            sup_u.username AS supervisor_name
     FROM users u
     LEFT JOIN student_profiles sp ON sp.user_id = u.id
+    LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     WHERE u.id = ? AND u.role = 'student'
 ");
@@ -43,7 +46,7 @@ if (!$student) {
     exit;
 }
 
-$student_name     = ($student['full_name'] ?: $student['username']);
+$student_name     = ($student['username'] ?? 'Student');
 $student_roll     = $student['student_roll'] ?? '';
 $intern_start     = $student['internship_start_date'] ?? null;
 $intern_end       = $student['internship_end_date'] ?? null;
@@ -73,7 +76,7 @@ if ($intern_start) {
 
 // Fallback: If no internship_start_date, compute from daily_logs dates
 if (empty($weeks)) {
-    $all_dates = $db->prepare("SELECT DISTINCT log_date FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+    $all_dates = $db->prepare("SELECT DISTINCT log_date FROM daily_logs WHERE student_id = ? ORDER BY log_date ASC");
     $all_dates->bind_param("i", $uid);
     $all_dates->execute();
     $res = $all_dates->get_result();
@@ -98,38 +101,52 @@ if (empty($weeks)) {
 }
 
 // ── Fetch all data ───────────────────────────────────────────────
-$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date ASC");
+$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date ASC");
 $all_logs_stmt->bind_param("i", $uid);
 $all_logs_stmt->execute();
 $res = $all_logs_stmt->get_result();
 $all_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$all_refs_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? ORDER BY week_number ASC");
-$all_refs_stmt->bind_param("i", $uid);
-$all_refs_stmt->execute();
-$res = $all_refs_stmt->get_result();
-$all_refs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+$all_reports_stmt = $db->prepare("SELECT wr.*, sup.username AS supervisor_name FROM weekly_reports wr LEFT JOIN student_profiles sp ON sp.user_id = wr.student_id LEFT JOIN users sup ON sup.id = sp.supervisor_id WHERE wr.student_id = ? ORDER BY wr.week_number ASC");
+$all_reports_stmt->bind_param("i", $uid);
+$all_reports_stmt->execute();
+$res = $all_reports_stmt->get_result();
+$all_reports = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
-$all_evals_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? ORDER BY week_number ASC");
-$all_evals_stmt->bind_param("i", $uid);
-$all_evals_stmt->execute();
-$res = $all_evals_stmt->get_result();
-$all_evals = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-
+$all_refs = [];
 $eval_by_week = [];
-foreach ($all_evals as $ev) {
-    $eval_by_week[$ev['week_number']] = $ev;
-}
-
-$all_sup_evals_stmt = $db->prepare("SELECT swe.*, u.username AS supervisor_name FROM supervisor_weekly_evaluations swe LEFT JOIN users u ON u.id = swe.supervisor_id WHERE swe.student_id = ? ORDER BY swe.week_number ASC");
-$all_sup_evals_stmt->bind_param("i", $uid);
-$all_sup_evals_stmt->execute();
-$res = $all_sup_evals_stmt->get_result();
-$all_sup_evals = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
-
 $sup_eval_by_week = [];
-foreach ($all_sup_evals as $sev) {
-    $sup_eval_by_week[$sev['week_number']] = $sev;
+$refs_by_week = [];
+
+foreach ($all_reports as $r) {
+    $wn = (int) $r['week_number'];
+    if (!empty($r['what_done'])) {
+        $ref_item = [
+            'week_number' => $wn,
+            'what_done'   => $r['what_done'],
+            'how_done'    => $r['how_done'],
+            'why_done'    => $r['why_done'],
+            'created_at'  => $r['submitted_at'],
+        ];
+        $all_refs[] = $ref_item;
+        $refs_by_week[$wn] = $ref_item;
+    }
+    $eval_by_week[$wn] = [
+        'week_number'         => $wn,
+        'grade'               => $r['instructor_grade'],
+        'comment'             => $r['instructor_comments'],
+        'instructor_comments' => $r['instructor_comments'],
+        'report_status'       => $r['status'],
+        'evaluated_at'        => $r['submitted_at'],
+    ];
+    if (!empty($r['supervisor_grade'])) {
+        $sup_eval_by_week[$wn] = [
+            'week_number'         => $wn,
+            'weekly_grade'        => $r['supervisor_grade'],
+            'supervisor_comments' => $r['supervisor_comments'],
+            'supervisor_name'     => $r['supervisor_name'],
+        ];
+    }
 }
 
 // Group logs by week
@@ -146,22 +163,17 @@ foreach ($all_logs as $log) {
     }
 }
 
-$refs_by_week = [];
-foreach ($all_refs as $ref) {
-    $refs_by_week[$ref['week_number']] = $ref;
-}
-
 // ── Stats ────────────────────────────────────────────────────────
 $total_logs_count = count($all_logs);
 
-$present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
+$present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status = 'present'");
 $present_stmt->bind_param("i", $uid);
 $present_stmt->execute();
 $res = $present_stmt->get_result();
 $p_row = $res ? $res->fetch_row() : null;
 $total_present = (int) ($p_row[0] ?? 0);
 
-$absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
+$absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave')");
 $absent_stmt->bind_param("i", $uid);
 $absent_stmt->execute();
 $res = $absent_stmt->get_result();
@@ -173,7 +185,7 @@ $total_reflections = count($all_refs);
 
 $progress_weeks_completed = 0;
 if (!empty($weeks)) {
-    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
         $wc_stmt->bind_param("iss", $uid, $wr['start'], $wr['end']);
         $wc_stmt->execute();
@@ -568,7 +580,7 @@ $sgd = [
                     <?php if (!empty($week_eval['student_signature_value'])): ?>
                     <div class="border-t border-slate-100 pt-3 flex items-center justify-end gap-2">
                         <span class="text-caption text-slate-400 font-medium">Student Signature:</span>
-                        <?php if ($week_eval['student_signature_type'] === 'typed'): ?>
+                        <?php if (!empty($week_eval['student_signature_type']) && $week_eval['student_signature_type'] === 'typed'): ?>
                             <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval['student_signature_value']) ?></span>
                         <?php else: ?>
                             <img src="<?= htmlspecialchars($week_eval['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
@@ -866,7 +878,7 @@ $sgd = [
                         <?php if (!empty($week_eval_m['student_signature_value'])): ?>
                         <div class="border-t border-slate-100 pt-3 px-4 flex items-center justify-end gap-2">
                             <span class="text-caption text-slate-400 font-medium">Student Signature:</span>
-                            <?php if ($week_eval_m['student_signature_type'] === 'typed'): ?>
+                            <?php if (!empty($week_eval_m['student_signature_type']) && $week_eval_m['student_signature_type'] === 'typed'): ?>
                                 <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval_m['student_signature_value']) ?></span>
                             <?php else: ?>
                                 <img src="<?= htmlspecialchars($week_eval_m['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">

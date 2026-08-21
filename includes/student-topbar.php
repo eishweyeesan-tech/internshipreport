@@ -120,7 +120,7 @@ if (!function_exists('student_notif_url')) {
                             }
                         ?>
                         <?php
-                            $_notif_href = notif_action_url($_notif, 'student');
+                            $_notif_href = !empty($_notif['link']) ? $_notif['link'] : notif_action_url($_notif, 'student');
                         ?>
                         <a href="<?= htmlspecialchars($_notif_href) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-teal-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_notif['is_read'] ? 'bg-teal-50/40' : '' ?>" onclick="return onNotificationItemClick(event, this)" data-notif-id="<?= (int)$_notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($_notif_href) ?>" data-fallback-href="<?= htmlspecialchars($_notif_href) ?>">
                             <?php if (!$_notif['is_read']): ?>

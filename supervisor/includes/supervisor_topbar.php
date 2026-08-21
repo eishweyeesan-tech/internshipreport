@@ -12,6 +12,8 @@
  */
 
 require_once __DIR__ . '/../../includes/ui_helpers.php';
+require_once __DIR__ . '/../../config/notify.php';
+require_once __DIR__ . '/../../includes/notification_actions.php';
 
 $topbar_sup_id = (int)($_SESSION['user_id'] ?? 0);
 $topbar_sup_pic = $_SESSION['profile_pic'] ?? '';
@@ -19,8 +21,35 @@ $topbar_sup_email = $_SESSION['email'] ?? '';
 $topbar_sup_raw_name = $sup_name ?? ($_SESSION['username'] ?? 'Supervisor');
 $topbar_sup_name = function_exists('format_supervisor_name') ? format_supervisor_name($topbar_sup_raw_name) : $topbar_sup_raw_name;
 
-
 if ($topbar_sup_id > 0 && isset($db) && $db) {
+    handle_notification_ajax_actions($db, $topbar_sup_id);
+
+    if (!isset($unread_notif_count)) {
+        $_unr = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        if ($_unr) {
+            $_unr->bind_param("i", $topbar_sup_id);
+            $_unr->execute();
+            $_res = $_unr->get_result();
+            $_row = $_res ? $_res->fetch_row() : null;
+            $unread_notif_count = (int)($_row[0] ?? 0);
+            $_unr->close();
+        } else {
+            $unread_notif_count = 0;
+        }
+    }
+    if (!isset($recent_notifications)) {
+        $_rnr = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 15");
+        if ($_rnr) {
+            $_rnr->bind_param("i", $topbar_sup_id);
+            $_rnr->execute();
+            $_res = $_rnr->get_result();
+            $recent_notifications = $_res ? $_res->fetch_all(MYSQLI_ASSOC) : [];
+            $_rnr->close();
+        } else {
+            $recent_notifications = [];
+        }
+    }
+
     if (empty($topbar_sup_pic) || empty($topbar_sup_email)) {
         $_uinfo = $db->prepare("SELECT email, profile_pic FROM users WHERE id = ?");
         if ($_uinfo) {
@@ -31,6 +60,7 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
                 if (empty($topbar_sup_pic)) $topbar_sup_pic = $row['profile_pic'] ?? '';
                 if (empty($topbar_sup_email)) $topbar_sup_email = $row['email'] ?? '';
             }
+            $_uinfo->close();
         }
     }
 }
@@ -59,9 +89,9 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
     </div>
 
     <div class="flex items-center gap-4 shrink-0 h-full justify-end">
-        <?php if (!empty($show_topbar_pending) && isset($pending_reviews) && $pending_reviews !== null): ?>
+        <?php if (!empty($show_topbar_pending) && !empty($pending_reviews) && $pending_reviews > 0): ?>
         <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full shadow-xs">
-            <span class="w-2 h-2 rounded-full bg-amber-500 <?= $pending_reviews > 0 ? 'animate-pulse' : '' ?>"></span>
+            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
             <span class="text-xs font-bold text-amber-700"><?= $pending_reviews ?> pending review<?= $pending_reviews !== 1 ? 's' : '' ?></span>
         </div>
         <?php endif; ?>
@@ -86,7 +116,9 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
                 <div class="max-h-80 overflow-y-auto">
                     <?php if (!empty($recent_notifications)): ?>
                     <?php foreach ($recent_notifications as $notif): ?>
-                    <?php $notif_url = function_exists('notif_redirect_url') ? notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null) : 'supervisor-reports.php'; ?>
+                    <?php 
+                        $notif_url = !empty($notif['link']) ? $notif['link'] : (function_exists('notif_action_url') ? notif_action_url($notif, 'supervisor') : (function_exists('notif_redirect_url') ? notif_redirect_url($notif['type'] ?? 'info', $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null) : 'supervisor-reports.php'));
+                    ?>
                     <a href="<?= htmlspecialchars($notif_url) ?>" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)" class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-teal-50/50' : '' ?> hover:bg-teal-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer block no-underline">
                         <?php if ($notif['type'] === 'instructor_approved'): ?>
                         <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm mt-0.5">
@@ -245,4 +277,5 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
         </div>
     </div>
 </header>
+<script src="../assets/js/notifications.js"></script>
 
