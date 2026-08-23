@@ -2,15 +2,19 @@
  * Notifications Module JavaScript for InternReport System
  */
 
-function toggleNotifDropdown() {
+function toggleNotifDropdown(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+
     var dd = document.getElementById('notif-dropdown');
     if (!dd) return;
 
-    var visible = dd.style.opacity === '1' || !dd.classList.contains('hidden');
-    if (visible && dd.style.opacity === '1') {
+    var isHidden = dd.classList.contains('hidden') || dd.style.visibility === 'hidden' || dd.style.opacity === '0';
+    if (!isHidden) {
         dd.style.opacity    = '0';
         dd.style.visibility = 'hidden';
         dd.style.transform  = 'translateY(-8px) scale(0.95)';
+        dd.classList.add('hidden');
     } else {
         dd.classList.remove('hidden');
         dd.style.opacity    = '1';
@@ -29,6 +33,7 @@ document.addEventListener('click', function(e) {
         dd.style.opacity = '0';
         dd.style.visibility = 'hidden';
         dd.style.transform = 'translateY(-8px) scale(0.95)';
+        dd.classList.add('hidden');
     }
 });
 
@@ -169,8 +174,8 @@ function markAllNotifsRead() {
     }).then(function(r) { return r.json(); })
       .then(function(data) {
           updateNotifBadge(0);
-          document.querySelectorAll('#notif-dropdown [data-notif-id]').forEach(function(item) {
-              item.classList.remove('bg-[#e7f3ff]', 'bg-indigo-50/40', 'bg-blue-50/40');
+          document.querySelectorAll('#notif-dropdown [data-notif-id], #notif-list a').forEach(function(item) {
+              item.classList.remove('bg-[#e7f3ff]', 'bg-indigo-50/40', 'bg-blue-50/40', 'bg-teal-50/40', 'bg-teal-50/50');
               item.querySelector('.unread-dot')?.remove();
           });
       })
@@ -179,4 +184,12 @@ function markAllNotifsRead() {
 
 function markAllNotificationsRead() {
     markAllNotifsRead();
+}
+
+function markAllSupervisorNotificationsRead() {
+    markAllNotifsRead();
+}
+
+function onSupervisorNotifClick(e, el) {
+    return onNotificationItemClick(e, el);
 }

@@ -1,30 +1,11 @@
 <?php
 // topbar.php – Shared admin top navigation bar
-require_once __DIR__ . '/../config/notify.php';
-require_once __DIR__ . '/notification_actions.php';
-
 $topbar_user_id = (int)($_SESSION['user_id'] ?? 0);
 $topbar_pic = $_SESSION['profile_pic'] ?? '';
 $topbar_email = $_SESSION['email'] ?? '';
 $topbar_display_name = $admin_name ?? ($_SESSION['username'] ?? 'Admin');
 
 if ($topbar_user_id > 0 && isset($db) && $db) {
-    handle_notification_ajax_actions($db, $topbar_user_id);
-    if (!isset($unread_notif_count)) {
-        $_unr = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-        $_unr->bind_param("i", $topbar_user_id);
-        $_unr->execute();
-        $_res = $_unr->get_result();
-        $_row = $_res ? $_res->fetch_row() : null;
-        $unread_notif_count = (int)($_row[0] ?? 0);
-    }
-    if (!isset($recent_notifications)) {
-        $_rnr = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 15");
-        $_rnr->bind_param("i", $topbar_user_id);
-        $_rnr->execute();
-        $_res = $_rnr->get_result();
-        $recent_notifications = $_res ? $_res->fetch_all(MYSQLI_ASSOC) : [];
-    }
     if (empty($topbar_pic) || empty($topbar_email)) {
         $_uinfo = $db->prepare("SELECT email, profile_pic FROM users WHERE id = ?");
         if ($_uinfo) {
@@ -47,58 +28,6 @@ if ($topbar_user_id > 0 && isset($db) && $db) {
         <h1 class="text-base font-bold text-slate-800"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></h1>
     </div>
     <div class="flex items-center gap-4 shrink-0 h-full justify-end">
-
-        <!-- Notification Bell -->
-        <div class="relative" id="notif-bell-wrapper">
-            <button onclick="toggleNotifDropdown()" class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition cursor-pointer" aria-label="Notifications">
-                <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                <?php if (($unread_notif_count ?? 0) > 0): ?>
-                <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
-                <?php endif; ?>
-            </button>
-            <!-- Notification Dropdown -->
-            <div id="notif-dropdown" class="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
-                <div class="p-3 border-b border-slate-100 flex items-center justify-between bg-teal-50/60">
-                    <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Notifications</h4>
-                    <?php if (($unread_notif_count ?? 0) > 0): ?>
-                    <button onclick="markAllNotifsRead()" id="notif-mark-all-btn" class="text-label font-bold text-teal-700 hover:text-teal-900 hover:bg-teal-100/60 px-2 py-1 rounded transition cursor-pointer">Mark all read</button>
-                    <?php endif; ?>
-                </div>
-                <div class="max-h-80 overflow-y-auto">
-                    <?php if (!empty($recent_notifications)): ?>
-                    <?php foreach ($recent_notifications as $notif): ?>
-                    <?php
-                        $notif_url = notif_action_url($notif, 'admin');
-                        $meta = notif_type_meta($notif['type'] ?? 'info');
-                    ?>
-                    <a href="<?= htmlspecialchars($notif_url) ?>" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)" class="flex items-start gap-2.5 px-3 py-3 <?= !$notif['is_read'] ? 'bg-teal-50/40' : '' ?> hover:bg-teal-50 transition-all duration-150 border-b border-slate-100 last:border-0 group cursor-pointer block no-underline">
-                        <?php if (!$notif['is_read']): ?>
-                        <span class="w-2 h-2 bg-teal-500 rounded-full flex-shrink-0 mt-2"></span>
-                        <?php else: ?>
-                        <span class="w-2 h-2 flex-shrink-0 mt-2"></span>
-                        <?php endif; ?>
-                        <div class="w-8 h-8 rounded-full <?= $meta['classes'] ?> flex items-center justify-center text-xs shrink-0 mt-0.5 shadow-sm">
-                            <?= $meta['icon'] ?>
-                        </div>
-                        <div class="min-w-0 flex-1">
-                            <p class="text-caption font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-500' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
-                            <p class="text-label text-slate-400 mt-0.5 leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"><?= htmlspecialchars($notif['message']) ?></p>
-                            <p class="text-caption text-slate-300 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
-                        </div>
-                    </a>
-                    <?php endforeach; ?>
-                    <?php else: ?>
-                    <div class="p-8 text-center">
-                        <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                            <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                        </div>
-                        <p class="text-xs font-semibold text-slate-400">No notifications yet</p>
-                        <p class="text-label text-slate-300 mt-1">You'll see updates here</p>
-                    </div>
-                    <?php endif; ?>
-                </div>
-            </div>
-        </div>
 
         <!-- Profile Dropdown -->
         <div class="relative shrink-0" id="profileDropdownContainer">
@@ -190,4 +119,3 @@ if ($topbar_user_id > 0 && isset($db) && $db) {
 </header>
 
 <script src="../assets/js/main.js"></script>
-<script src="../assets/js/notifications.js"></script>

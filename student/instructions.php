@@ -59,7 +59,7 @@ if (!empty($weeks)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>သင်ကြားရေး - ကျောင်းသား Dashboard</title>
+    <title>အသုံးပြုနည်း လမ်းညွှန်ချက်များ - Instructions | InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -167,7 +167,7 @@ if (!empty($weeks)) {
                 </a>
                 <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
                     <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 01-2 2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg> Log History
                 </a>
                 <a href="instructions.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200" data-section="instructions">
@@ -194,108 +194,190 @@ if (!empty($weeks)) {
         <div class="flex-1 flex flex-col min-h-0">
 
             <!-- Top Bar -->
-            <?php $pageTitle = 'Instruction';
+            <?php $pageTitle = 'Instructions';
             $show_back_link = true;
             include '../includes/student-topbar.php'; ?>
 
             <!-- Content -->
             <main class="flex-1 overflow-y-auto p-6 md:p-8 no-print">
-                <div class="max-w-7xl mx-auto w-full">
+                <div class="max-w-5xl mx-auto w-full space-y-6">
 
-                    <!-- Header -->
-                    <div class="mb-6">
-                        <p class="text-xs text-gray-400">သင့်internship report ကို တိကျစွာပြီးမြောက်အောင် အောက်ပါ လမ်းညွှန်ချက်များကို လိုက်နာပါ။</p>
+                    <!-- Header Banner -->
+                    <div class="bg-gradient-to-r from-teal-800 to-cyan-900 rounded-3xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden">
+                        <div class="relative z-10">
+                            <div class="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-md rounded-full text-xs font-semibold text-teal-100 mb-3 border border-white/10">
+                                <span>📖</span> Student Internship Guide &amp; Workflow
+                            </div>
+                            <h1 class="text-lg sm:text-2xl font-black tracking-tight">အလုပ်သင်မှတ်တမ်း စနစ်အသုံးပြုနည်း လမ်းညွှန်ချက်များ</h1>
+                            <p class="text-xs sm:text-sm text-teal-100/90 mt-2 max-w-2xl leading-relaxed">
+                                သင့် Internship ကာလတစ်လျှောက် နေ့စဉ်လုပ်ငန်းမှတ်တမ်း (Daily Logs)၊ အပတ်စဉ်သုံးသပ်ချက် (Weekly Reflection) နှင့် တရားဝင် အစီရင်ခံစာ (Official Report) များကို စနစ်တကျ မှတ်တမ်းတင်နိုင်ရန် အောက်ပါလုပ်ငန်းစဉ်များကို လိုက်နာဆောင်ရွက်ပါ။
+                            </p>
+                        </div>
+                        <div class="absolute -right-6 -bottom-8 opacity-10 pointer-events-none text-9xl">📑</div>
                     </div>
 
-                    <!-- Instructions Cards -->
+                    <!-- Steps Timeline / Cards -->
                     <div class="space-y-5">
 
-                        <!-- 1. Daily Log -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition">
+                        <!-- 1. Profile & Signature Setup -->
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 hover:shadow-md transition">
                             <div class="flex items-start gap-4">
-                                <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg font-black shrink-0">1</div>
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-800 mb-1">နေ့စဉ် Log တင်ခြင်း</h3>
-                                    <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                        <li>• အလုပ်လုပ်သည့်နေ့တိုင်း Log in ဝင်ပြီး သင့်အလုပ်များကို မှတ်တမ်းတင်ပါ။</li>
-                                        <li>• <strong>အလုပ်ခေါင်းစဉ်</strong>၊ <strong>အလုပ်အသေးစိတ်</strong>နှင့် <strong>အသုံးပြုသည့်ကိရိယာများ</strong>ကို ဖြည့်ပါ။</li>
-                                        <li>• သင့်အလုပ်၏ အစပိုင်းနှင့် အဆုံးအချိန်ကို မှတ်တမ်းတင်ပါ။</li>
-                                        <li>• သင့်တက်ရောက်မှုအခြေအနေကို <strong>တက်ရောက်</strong> သို့မဟုတ် <strong>ပျက်ကွက်</strong> ဟု မှတ်သားပါ။</li>
-                                        <li>• အပတ်စဉ် Reflection တင်သွင်းပြီးပါက ထိုအပတ်အတွင်းရှိ Log များသည် <strong>Read-Only</strong> ဖြစ်သွားမည်ဖြစ်ပါသည်။</li>
-                                        <li>• အပတ်စဉ် Reflection မတင်မီအထိ Log များကို ပြင်ဆင်ခြင်း သို့မဟုတ် ဖျက်ခြင်း ပြုနိုင်ပါသည်။</li>
+                                <div class="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center text-base font-black shrink-0">1</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                                        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                            <span>👤</span> Profile နှင့် Digital Signature ကြိုတင်ပြင်ဆင်ခြင်း
+                                        </h2>
+                                        <span class="text-[11px] font-semibold text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">First Step / ပထမအဆင့်</span>
+                                    </div>
+                                    <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Profile အချက်အလက်များ:</strong> Roll No၊ Major၊ Company Name၊ Job Role၊ Company Instructor အမည်နှင့် Email တို့ကို <a href="profile.php" class="text-indigo-600 underline font-semibold hover:text-indigo-800">Profile စာမျက်နှာ</a> တွင် ပြည့်စုံစွာ ဖြည့်သွင်းထားပါ။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Digital Signature:</strong> အပတ်စဉ် Report တင်သွင်းရာတွင် အသုံးပြုရန် မိမိ၏ လက်မှတ်ကို <strong>Type (စာလုံးပုံစံ)</strong> သို့မဟုတ် <strong>Upload / Draw (လက်ရေးပုံစံ)</strong> ဖြင့် Profile တွင် ကြိုတင် သိမ်းဆည်းထားနိုင်ပါသည်။</span>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 2. Weekly Reflection -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition">
+                        <!-- 2. Daily Log Entry -->
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 hover:shadow-md transition">
                             <div class="flex items-start gap-4">
-                                <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-lg font-black shrink-0">2</div>
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-800 mb-1">အပတ်စဉ် Reflection နှင့် လက်မှတ်ထိုးခြင်း</h3>
-                                    <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                        <li>• အပတ်တိုင်း၏ အဆုံးတွင် Reflection တစ်ခု တင်သွင်းပါ။</li>
-                                        <li>• မေးခွန်း ၃ ခုစလုံးကို ဖြေဆိုပါ - <strong>ဘာလုပ်ခဲ့သလဲ (What)</strong>၊ <strong>ဘယ်လိုလုပ်ခဲ့သလဲ (How)</strong>၊ <strong>ဘာကြောင့်လုပ်ခဲ့သလဲ (Why)</strong>။</li>
-                                        <li>• အသေးစိတ်ဖြစ်အောင် ဖော်ပြပြီး အသုံးပြုသည့်နည်းပညာများ၊ နည်းလမ်းများနှင့် အယူအဆများကို ဖော်ပြပါ။</li>
-                                        <li>• <strong>ကျောင်းသားကိုယ်တိုင် Digital Signature ထိုးပြီးမှသာ</strong> အပတ်စဉ် Reflection တင်သွင်းမှု ပြီးမြောက်မည်ဖြစ်ပါသည်။</li>
-                                        <li>• တင်သွင်းပြီးပါက Company Instructor စစ်ဆေးနိုင်ရန် <strong>Magic Link</strong> ကို Copy ကူး၍ ပေးပို့နိုင်ပါသည်။</li>
+                                <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center text-base font-black shrink-0">2</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                                        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                            <span>📅</span> နေ့စဉ် လုပ်ငန်းမှတ်တမ်း ရေးသွင်းခြင်း (Daily Work Log)
+                                        </h2>
+                                        <span class="text-[11px] font-semibold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200">Daily Task / နေ့စဉ်လုပ်ဆောင်ရန်</span>
+                                    </div>
+                                    <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Attendance Status:</strong> အလုပ်ဆင်းသည့်နေ့တိုင်း တက်ရောက်မှုအခြေအနေ (<strong>Present / Absent / Public Holiday</strong>) ကို မှန်ကန်စွာ ရွေးချယ်ပါ။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Present ဖြစ်ပါက:</strong> စတင်ချိန်/ပြီးဆုံးချိန် (Start/End Time)၊ <strong>ဆောင်ရွက်မည့်လုပ်ငန်း (Task Title)</strong>၊ <strong>အမှန်တကယ် လုပ်ဆောင်ခဲ့သော လုပ်ငန်းစဉ်များ (Actual Tasks Performed)</strong>၊ <strong>အသုံးပြုသော ကိရိယာ/နည်းပညာများ (Tools Used)</strong> နှင့် <strong>လေ့လာသိရှိသော အသိပညာ (Learnt Skills)</strong> တို့ကို ရှင်းလင်းစွာ ဖြည့်သွင်းပါ။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Absent / Leave ဖြစ်ပါက:</strong> ခွင့်ယူ/ပျက်ကွက်ရသည့် အကြောင်းအရင်း (Reason for Absence) ကို ထည့်သွင်းပါ။ (အများပြည်သူရုံးပိတ်ရက်ဖြစ်ပါက Public Holiday အကြောင်းအရာ ဖော်ပြနိုင်ပါသည်)။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>ပြင်ဆင်ခွင့် (Edit Mode):</strong> အပတ်စဉ် Reflection မတင်သွင်းရသေးမီ အချိန်အထိ နေ့စဉ် Log များကို Edit ပြန်လည် ပြင်ဆင်နိုင်ပါသည်။</span>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 3. Review & Evaluation Process -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition">
+                        <!-- 3. Weekly Reflection & Signature Submission -->
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 hover:shadow-md transition">
                             <div class="flex items-start gap-4">
-                                <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-black shrink-0">3</div>
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-800 mb-1">စစ်ဆေးခြင်းနှင့် အကဲဖြတ်ခြင်း လုပ်ငန်းစဉ်</h3>
-                                    <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                        <li>• <strong>Company Instructor</strong> သည် Magic Link မှတစ်ဆင့် Weekly Reflection ကို စစ်ဆေးပြီး အမှတ်နှင့် မှတ်ချက်ပေးကာ လက်မှတ်ထိုးပေးမည်ဖြစ်ပါသည်။</li>
-                                        <li>• <strong>CU Supervisor</strong> (တက္ကသိုလ်မှ ကြီးကြပ်ဆရာ/မ) က အပတ်စဉ် အကဲဖြတ်အမှတ် (<strong>Weekly Grade: A, B, C, D, F</strong>) နှင့် အကြံပြုချက် Feedback များ ပေးအပ်မည်ဖြစ်ပါသည်။</li>
-                                        <li>• စစ်ဆေးချက် အခြေအနေများနှင့် Feedback များကို <strong>Dashboard</strong> နှင့် <strong>Notifications</strong> တွင် စစ်ဆေးနိုင်ပါသည်။</li>
+                                <div class="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center text-base font-black shrink-0">3</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                                        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                            <span>💡</span> အပတ်စဉ် သုံးသပ်ချက်နှင့် လက်မှတ်ရေးထိုး တင်သွင်းခြင်း (Weekly Reflection)
+                                        </h2>
+                                        <span class="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">Weekly Task / အပတ်စဉ်လုပ်ဆောင်ရန်</span>
+                                    </div>
+                                    <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Reflection မေးခွန်း ၃ ခု:</strong> အပတ်စဉ်ပြီးဆုံးတိုင်း မေးခွန်း ၃ ခုဖြစ်သော <strong>1. What was done? (ဘာတွေလုပ်ဆောင်ခဲ့သလဲ)</strong>၊ <strong>2. How was it done? (ဘယ်လိုနည်းစနစ်များဖြင့် ဆောင်ရွက်ခဲ့သလဲ)</strong> နှင့် <strong>3. Why was it done? (ဘာကြောင့် ဤနည်းလမ်းကို ရွေးချယ်ဆောင်ရွက်ခဲ့သလဲ)</strong> တို့ကို ပြည့်စုံစွာ ဖြေဆိုရပါမည်။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>ကျောင်းသားလက်မှတ် (Student Digital Signature):</strong> Weekly Reflection အောက်ခြေတွင် မိမိ၏ Signature ကို ရေးထိုးပြီးမှသာ အပတ်စဉ် အစီရင်ခံစာကို Submit ပြုလုပ်နိုင်မည် ဖြစ်ပါသည်။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Locked (Read-Only Mode):</strong> Reflection တင်သွင်းပြီးပါက ထိုအပတ်အတွင်းရှိ Daily Logs များနှင့် Reflection အချက်အလက်များသည် <strong>Locked (Read-Only)</strong> ဖြစ်သွားမည် ဖြစ်ပါသည်။</span>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 4. Profile -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition">
+                        <!-- 4. Review & Evaluation by Instructors & Supervisors -->
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 hover:shadow-md transition">
                             <div class="flex items-start gap-4">
-                                <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-lg font-black shrink-0">4</div>
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-800 mb-1">Profile နှင့် Signature</h3>
-                                    <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                        <li>• သင့် Profile အချက်အလက်များကို အမြဲတမ်း update ထားပါ။</li>
-                                        <li>• ပရော်ဖက်ရှင်နယ် Profile ပုံတစ်ခု တင်ပါ။</li>
-                                        <li>• Report export များအတွက် သင့်digital signature ကို သတ်မှတ်ပါ။</li>
-                                        <li>• သင့်signatureသည် export လုပ်ထားသည့် HTML report များတွင် ပေါ်လာပါမည်။</li>
+                                <div class="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center text-base font-black shrink-0">4</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                                        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                            <span>✍️</span> စစ်ဆေးအကဲဖြတ်ခြင်း လုပ်ငန်းစဉ် (Review &amp; Evaluation Process)
+                                        </h2>
+                                        <span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">Evaluation / အကဲဖြတ်ချက်</span>
+                                    </div>
+                                    <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Company Instructor (ကုမ္ပဏီကြီးကြပ်သူ):</strong> ကျောင်းသားတင်သွင်းထားသော Reflection ကို <strong>Magic Link</strong> သို့မဟုတ် Account မှတစ်ဆင့် ဝင်ရောက်စစ်ဆေးပြီး Grade၊ မှတ်ချက်များနှင့် အတည်ပြုလက်မှတ် (Digital Signature) ရေးထိုးပေးပါမည်။ (ပြင်ဆင်ရန်လိုအပ်ပါက Revision Note ပေးပို့ပါမည်)။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>CU Supervisor (တက္ကသိုလ်ကြီးကြပ်ဆရာ/မ):</strong> တက္ကသိုလ်မှ တာဝန်ခံဆရာ/မသည် ကျောင်းသား၏ အပတ်စဉ်စွမ်းဆောင်ရည်ကို <strong>Weekly Grade (A, B, C, D, F)</strong> နှင့် သုံးသပ်အကြံပြုချက် Feedback များ ပေးအပ်မည်ဖြစ်ပါသည်။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>အခြေအနေစစ်ဆေးခြင်း:</strong> ဆရာများ၏ Evaluation၊ မှတ်ချက်များနှင့် Grade များကို <a href="student-dashboard.php" class="text-indigo-600 underline font-semibold hover:text-indigo-800">Dashboard</a> နှင့် <a href="log-history.php" class="text-indigo-600 underline font-semibold hover:text-indigo-800">Log History</a> တွင် ချက်ချင်း စစ်ဆေးနိုင်ပါသည်။</span>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 5. Report Export -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 hover:shadow-md transition">
+                        <!-- 5. Official Report & Printing -->
+                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 hover:shadow-md transition">
                             <div class="flex items-start gap-4">
-                                <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-lg font-black shrink-0">5</div>
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-800 mb-1">Report အစီရင်ခံစာများ</h3>
-                                    <ul class="text-xs text-slate-500 space-y-1.5 leading-relaxed">
-                                        <li>• Dashboard မှ သင့် report ကို <strong>HTML</strong> သို့မဟုတ် <strong>CSV</strong> အဖြစ် export လုပ်ပါ။</li>
-                                        <li>• သင့်report၏ hard copy အတွက် Print option ကို အသုံးပြုပါ။</li>
-                                        <li>• Sidebar progress bar မှ သင့်internship တိုးတက်မှုကို ခြေရာခံပါ။</li>
+                                <div class="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 border border-purple-200 flex items-center justify-center text-base font-black shrink-0">5</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                                        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                            <span>🖨️</span> တရားဝင် အစီရင်ခံစာ ထုတ်ယူခြင်း (Official Print &amp; PDF Export)
+                                        </h2>
+                                        <span class="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">Official Report / စာရွက်စာတမ်း</span>
+                                    </div>
+                                    <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Print Report ရယူခြင်း:</strong> <a href="log-history.php" class="text-indigo-600 underline font-semibold hover:text-indigo-800">Log History</a> စာမျက်နှာရှိ <strong>Print</strong> ခလုတ်ကို နှိပ်၍ သက်ဆိုင်ရာ အပတ်စဉ်အလိုက် (သို့မဟုတ် All Weeks အားလုံးအတွက်) တရားဝင် အစီရင်ခံစာ စာမျက်နှာကို ဖွင့်လှစ်နိုင်ပါသည်။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>အပြည့်အစုံ ပါဝင်မှု:</strong> Official Report တွင် တရားဝင် Letterhead၊ ကျောင်းသားနှင့် ကြီးကြပ်သူအချက်အလက်များ၊ Daily Log Table၊ Weekly Reflection၊ Company Instructor နှင့် University Supervisor တို့၏ Feedback များအပြင် ၃ ဦးစလုံး၏ Formal Signatures များ အပြည့်အစုံ ပါဝင်ပါသည်။</span>
+                                        </li>
+                                        <li class="flex items-start gap-2">
+                                            <span class="text-teal-600 font-bold">•</span>
+                                            <span><strong>Hardcopy & PDF:</strong> အစီရင်ခံစာ စာမျက်နှာရှိ <strong>Print / Save PDF</strong> ခလုတ်ကို အသုံးပြု၍ A4 Format ဖြင့် Hardcopy ထုတ်ယူခြင်း သို့မဟုတ် PDF အဖြစ် ကွန်ပျူတာထဲသို့ တိုက်ရိုက် Save ပြုလုပ်နိုင်ပါသည်။</span>
+                                        </li>
                                     </ul>
                                 </div>
                             </div>
                         </div>
 
+                    </div>
+
+                    <!-- Helpful Notice Banner -->
+                    <div class="bg-teal-50 border border-teal-200/80 rounded-2xl p-5 flex items-start gap-3.5">
+                        <div class="w-8 h-8 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 font-bold text-sm">💡</div>
+                        <div class="text-xs text-teal-900 leading-relaxed">
+                            <p class="font-bold text-teal-950 mb-1">အကြံပြုချက် (Helpful Tip):</p>
+                            <p>Daily Logs များကို အလုပ်ပြီးဆုံးသည့်နေ့တိုင်း ချက်ချင်း မှတ်တမ်းတင်ခြင်းက အပတ်စဉ် Reflection ရေးသားရာတွင် လွယ်ကူစေပြီး အစီရင်ခံစာများ တိကျပြည့်စုံစေပါသည်။ စနစ်အသုံးပြုရာတွင် အခက်အခဲတစ်စုံတစ်ရာရှိပါက မိမိ၏ CU Supervisor သို့မဟုတ် Company Instructor ထံသို့ ဆက်သွယ်မေးမြန်းနိုင်ပါသည်။</p>
+                        </div>
                     </div>
 
                     <!-- Footer Note -->
-                    <div class="mt-8 text-center">
-                        <p class="text-caption text-slate-400">မည်သည့်ပြဿနာမဆို သင့် CU Supervisor သို့မဟုတ် Company Instructor ကို ဆက်သွယ်ပါ။</p>
+                    <div class="pt-4 text-center">
+                        <p class="text-caption text-slate-400">Internship Reporting &amp; Management System • University of Computer Studies</p>
                     </div>
 
                 </div>

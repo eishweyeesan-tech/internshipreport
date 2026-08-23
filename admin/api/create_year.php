@@ -96,6 +96,11 @@ try {
         $db->query("UPDATE academic_years SET is_current = 0");
         $db->query("UPDATE academic_years SET status = 'Archived' WHERE status = 'Active'");
 
+        // Batch archive all students belonging to previous / other academic years
+        $stu_arch = $db->prepare("UPDATE users SET status = 'Archived' WHERE role = 'student' AND (academic_year != ? OR academic_year IS NULL)");
+        $stu_arch->bind_param("s", $label);
+        $stu_arch->execute();
+
         $status = 'Active';
         $is_curr = 1;
     } else {

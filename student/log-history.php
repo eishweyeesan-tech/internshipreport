@@ -375,7 +375,10 @@ $back_url = 'student-dashboard.php';
                     <?php endif; ?>
 
                     <!-- Print -->
-                    <button onclick="window.print()" class="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 transition shadow-sm cursor-pointer">
+                    <?php
+                    $print_target_week = ($view_mode === 'weekly' && $filter_week > 0) ? $filter_week : 'all';
+                    ?>
+                    <button onclick="window.open('print_report.php?week=<?= $print_target_week ?>', '_blank')" class="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition shadow-sm cursor-pointer">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg>
                         Print
                     </button>
@@ -426,18 +429,6 @@ $back_url = 'student-dashboard.php';
                                 <span class="text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded"><?= $week_present ?> Present</span>
                                 <span class="text-xs font-medium text-red-600 bg-red-50 px-2.5 py-0.5 rounded"><?= $week_absent ?> Absent</span>
                                 <span class="text-xs font-medium text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded"><?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?>m</span>
-                                <?php if ($week_eval && $week_eval['report_status'] !== 'pending'): ?>
-                                    <?php
-                                    $gmap = [
-                                        'excellent'         => ['Excellent',         'text-emerald-600', 'bg-emerald-50'],
-                                        'good'              => ['Good',              'text-blue-600',    'bg-blue-50'],
-                                        'average'           => ['Average',           'text-amber-600',   'bg-amber-50'],
-                                        'needs_improvement' => ['Needs Improvement', 'text-red-600',     'bg-red-50'],
-                                    ];
-                                    $gs = $gmap[$week_eval['grade']] ?? ['—', 'text-slate-400', 'bg-slate-50'];
-                                    ?>
-                                    <span class="text-xs font-medium <?= $gs[1] ?> <?= $gs[2] ?> px-2.5 py-0.5 rounded"><?= $gs[0] ?></span>
-                                <?php endif; ?>
                             </div>
                         </div>
 

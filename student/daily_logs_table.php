@@ -36,12 +36,6 @@ if (!empty($weeks[$selected_week])) {
             </h3>
             <span class="text-xs font-medium text-gray-500 bg-slate-100 px-2.5 py-0.5 rounded-full"><?= count($log_by_date) ?> / <?= count($week_dates) ?> day(s)</span>
         </div>
-        <button onclick="window.open('print_report.php?week=<?= $selected_week ?>', '_blank')" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition cursor-pointer">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z" />
-            </svg>
-            Print
-        </button>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">

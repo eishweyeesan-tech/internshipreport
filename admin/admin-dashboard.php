@@ -9,8 +9,8 @@ $msg = '';
 $err = '';
 
 // Default password values should be available before request handlers run.
-$def_student_pw = 'password123';
-$def_supervisor_pw = 'password123';
+$def_student_pw = 'Intern@123';
+$def_supervisor_pw = 'Intern@123';
 $sys_settings = [];
 $res_st = $db->query("SELECT setting_key, setting_value FROM system_settings");
 if ($res_st) {
@@ -21,6 +21,7 @@ if ($res_st) {
 $def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
 $def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
 
+require_once __DIR__ . '/../includes/security_helper.php';
 require_once __DIR__ . '/../includes/academic_year_helper.php';
 ensure_academic_years_table($db);
 ensure_supervisor_assignments_table($db);
@@ -72,15 +73,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     $s_instructor    = trim($_POST['s_instructor'] ?? '');
     $s_start         = trim($_POST['s_start_date'] ?? '');
     $s_end           = trim($_POST['s_end_date'] ?? '');
-    $s_academic      = trim($_POST['s_academic_year'] ?? '');
+    $s_academic      = trim($_POST['s_academic_year'] ?? '') ?: $current_active_year_label;
     $s_password      = $_POST['s_password'] ?? '';
 
     if (empty($s_name) || empty($s_roll) || empty($s_email) || empty($s_password)) {
         $err = 'Name, Roll No, Email, and Password are required.';
-    } elseif (!filter_var($s_email, FILTER_VALIDATE_EMAIL)) {
-        $err = 'Invalid email format.';
-    } elseif (strlen($s_password) < 6) {
-        $err = 'Password must be at least 6 characters.';
+    } elseif ($email_err = validate_gmail_address($s_email)) {
+        $err = $email_err;
+    } elseif ($pw_err = validate_strong_password($s_password)) {
+        $err = $pw_err;
     } elseif ($s_academic && !preg_match('/^\d{4}-\d{4}$/', $s_academic)) {
         $err = 'Academic year must be in range format (e.g. 2024-2025).';
     } else {
@@ -139,10 +140,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
 
     if (empty($t_name) || empty($t_email) || empty($t_password)) {
         $err = 'Name, Email, and Password are required.';
-    } elseif (!filter_var($t_email, FILTER_VALIDATE_EMAIL)) {
-        $err = 'Invalid email format.';
-    } elseif (strlen($t_password) < 6) {
-        $err = 'Password must be at least 6 characters.';
+    } elseif ($email_err = validate_gmail_address($t_email)) {
+        $err = $email_err;
+    } elseif ($pw_err = validate_strong_password($t_password)) {
+        $err = $pw_err;
     } else {
         $check = $db->prepare("SELECT id FROM users WHERE email = ?");
         $check->bind_param("s", $t_email);
@@ -792,7 +793,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                     <!-- ════ ANALYTICS SUMMARY CARDS (always visible) ════ -->
                     <div class="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <!-- Students Card -->
-                        <a href="?tab=manage&role=student<?= ($selected_year && $selected_year !== 'all') ? '&year=' . urlencode($selected_year) : '' ?>" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-teal-200 hover:bg-teal-50/60 cursor-pointer">
+                        <a href="?tab=students#allRegisteredStudentsCard" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-teal-200 hover:bg-teal-50/60 cursor-pointer">
                             <div class="flex items-center gap-3">
                                 <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl transition group-hover:bg-teal-100">🎓</div>
                                 <div>
@@ -861,7 +862,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                             <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm h-full">
                                 <div class="flex justify-between items-center mb-4">
                                     <h2 class="text-xs font-bold text-slate-400 tracking-wider uppercase">Recent Students</h2>
-                                    <a href="?tab=manage" class="text-sm font-bold text-indigo-600 hover:underline">View All →</a>
+                                    <a href="?tab=students#allRegisteredStudentsCard" class="text-sm font-bold text-indigo-600 hover:underline">View All →</a>
                                 </div>
                                 <div class="divide-y divide-slate-100 max-h-64 overflow-y-auto">
                                     <?php foreach (array_slice($students, 0, 5) as $s): ?>
@@ -886,7 +887,6 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                             <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm h-full">
                                 <div class="flex justify-between items-center mb-4">
                                     <h2 class="text-xs font-bold text-slate-400 tracking-wider uppercase">Recent Activities</h2>
-                                    <a href="?tab=history" class="text-sm font-bold text-indigo-600 hover:underline">View History &rarr;</a>
                                 </div>
                                 <?php if (!empty($recent_activity_items)): ?>
                                     <div class="space-y-3 max-h-72 overflow-y-auto pr-1">
@@ -960,7 +960,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Email *</label>
-                                        <input type="email" name="s_email" required placeholder="student@example.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                        <input type="email" name="s_email" required placeholder="student@gmail.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Company <span class="text-slate-300 font-normal">(ကုမ္ပဏီ)</span></label>
@@ -985,10 +985,8 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="text-xs font-semibold text-slate-700 tracking-wide uppercase block mb-1.5">Academic Year *</label>
-                                        <select name="s_academic_year" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 focus:border-purple-500 focus:bg-white focus:outline-none transition-all duration-200">
-                                            <?= render_academic_year_options($db, $current_active_year_label, false) ?>
-                                        </select>
+                                        <label class="block text-sm font-bold text-slate-500 mb-1">Academic Year</label>
+                                        <input type="text" name="s_academic_year" value="<?= htmlspecialchars($current_active_year_label) ?>" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 font-mono focus:outline-none cursor-not-allowed">
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Internship Start Date</label>
@@ -1001,7 +999,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Default Password *</label>
                                         <input type="text" name="s_password" required minlength="6" value="<?= htmlspecialchars($def_student_pw) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-blue-500 transition">
-                                        <p class="text-sm text-slate-400 mt-0.5">Must change on first login.</p>
+                                        <p class="text-xs text-slate-400 mt-0.5">Min. 6 chars with uppercase, lowercase, number & symbol.</p>
                                     </div>
                                 </div>
                                 <div class="flex justify-end pt-2">
@@ -1011,7 +1009,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                         </div>
 
                         <!-- ════ STUDENTS TABLE ════ -->
-                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div id="allRegisteredStudentsCard" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden scroll-mt-6">
                             <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
                                 <div class="flex items-center gap-3">
                                     <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
@@ -1221,39 +1219,33 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Email *</label>
-                                        <input type="email" name="t_email" required placeholder="supervisor@example.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 transition">
+                                        <input type="email" name="t_email" required placeholder="supervisor@gmail.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 transition">
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Department</label>
                                         <select name="t_dept" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 transition cursor-pointer">
                                             <option value="">— Select Department —</option>
-                                            <option value="Computer Science">Computer Science</option>
-                                            <option value="Computer Technology">Computer Technology</option>
-                                            <option value="Information Science">Information Science</option>
-                                            <option value="Software Engineering">Software Engineering</option>
-                                            <option value="Hardware & Networking">Hardware & Networking</option>
-                                            <option value="Information Technology">Information Technology</option>
-                                            <option value="Natural Science">Natural Science</option>
-                                            <option value="Languages / English">Languages / English</option>
+                                            <option value="Faculty of Computer Science (FCS)">Faculty of Computer Science (FCS)</option>
+                                            <option value="Faculty of Information Science (FIS)">Faculty of Information Science (FIS)</option>
+                                            <option value="Faculty of Computer Systems and Technologies (FCST)">Faculty of Computer Systems and Technologies (FCST)</option>
+                                            <option value="Department of Information Technology Supporting and Maintenance">Department of Information Technology Supporting and Maintenance</option>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-bold text-slate-500 mb-1">Position / Designation</label>
+                                        <label class="block text-sm font-bold text-slate-500 mb-1">Rank</label>
                                         <select name="t_position" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-500 transition cursor-pointer">
-                                            <option value="">— Select Position —</option>
-                                            <option value="Professor / Head of Department">Professor / Head of Department</option>
+                                            <option value="">— Select Rank —</option>
+                                            <option value="Professor">Professor</option>
                                             <option value="Associate Professor">Associate Professor</option>
-                                            <option value="Senior Lecturer">Senior Lecturer</option>
                                             <option value="Lecturer">Lecturer</option>
                                             <option value="Assistant Lecturer">Assistant Lecturer</option>
-                                            <option value="Tutor / Demonstrator">Tutor / Demonstrator</option>
-                                            <option value="Supervisor">Supervisor</option>
+                                            <option value="Tutor">Tutor</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Default Password *</label>
                                         <input type="text" name="t_password" required minlength="6" value="<?= htmlspecialchars($def_supervisor_pw) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-mono focus:outline-none focus:border-emerald-500 transition">
-                                        <p class="text-sm text-slate-400 mt-0.5">Must change on first login.</p>
+                                        <p class="text-xs text-slate-400 mt-0.5">Min. 6 chars with uppercase, lowercase, number & symbol.</p>
                                     </div>
                                 </div>
                                 <div class="flex justify-end pt-2">
@@ -1278,26 +1270,26 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                         </span>
                                     <?php endif; ?>
                                     <?php if (!empty($supervisors)): ?>
-                                    <div class="relative w-full sm:w-64">
-                                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                                            <i class="fa-solid fa-magnifying-glass text-xs"></i>
-                                        </span>
-                                        <input type="text"
-                                               id="supervisorLiveSearchInput"
-                                               oninput="handleSupervisorLiveSearch(this.value)"
-                                               placeholder="Search name, email..."
-                                               class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition-all duration-200"
-                                               autocomplete="off"
-                                               spellcheck="false">
-                                        <button type="button"
+                                        <div class="relative w-full sm:w-64">
+                                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                                                <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                                            </span>
+                                            <input type="text"
+                                                id="supervisorLiveSearchInput"
+                                                oninput="handleSupervisorLiveSearch(this.value)"
+                                                placeholder="Search name, email..."
+                                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl pl-9 pr-8 py-1.5 text-xs text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition-all duration-200"
+                                                autocomplete="off"
+                                                spellcheck="false">
+                                            <button type="button"
                                                 id="clearSupSearchBtn"
                                                 onclick="clearSupervisorLiveSearch()"
                                                 class="hidden absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                                                 title="Clear search"
                                                 aria-label="Clear search">
-                                            <i class="fa-solid fa-xmark text-xs"></i>
-                                        </button>
-                                    </div>
+                                                <i class="fa-solid fa-xmark text-xs"></i>
+                                            </button>
+                                        </div>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -1374,12 +1366,12 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                                     <td class="px-4 py-3.5">
                                                         <?php if (!empty($sup_assigned_years)): ?>
                                                             <div class="flex flex-wrap gap-1">
-                                                            <?php foreach (array_slice($sup_assigned_years, 0, 3) as $ay_label): ?>
-                                                                <span class="inline-block font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[11px] border border-emerald-200/60"><?= htmlspecialchars($ay_label) ?></span>
-                                                            <?php endforeach; ?>
-                                                            <?php if (count($sup_assigned_years) > 3): ?>
-                                                                <span class="inline-block text-[11px] text-slate-400 font-semibold">+<?= count($sup_assigned_years) - 3 ?> more</span>
-                                                            <?php endif; ?>
+                                                                <?php foreach (array_slice($sup_assigned_years, 0, 3) as $ay_label): ?>
+                                                                    <span class="inline-block font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[11px] border border-emerald-200/60"><?= htmlspecialchars($ay_label) ?></span>
+                                                                <?php endforeach; ?>
+                                                                <?php if (count($sup_assigned_years) > 3): ?>
+                                                                    <span class="inline-block text-[11px] text-slate-400 font-semibold">+<?= count($sup_assigned_years) - 3 ?> more</span>
+                                                                <?php endif; ?>
                                                             </div>
                                                         <?php else: ?>
                                                             <span class="text-xs text-slate-400">Unassigned</span>
@@ -1408,9 +1400,9 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                                             </div>
                                                             <div class="flex items-center gap-1.5">
                                                                 <button type="button"
-                                                                        onclick="openSupervisorHistoryModal(<?= (int)$sup['id'] ?>, '<?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>', '<?= htmlspecialchars($sup['email'], ENT_QUOTES) ?>')"
-                                                                        class="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/60 shadow-xs transition cursor-pointer flex items-center gap-1"
-                                                                        title="View assignment history and supervised students">
+                                                                    onclick="openSupervisorHistoryModal(<?= (int)$sup['id'] ?>, '<?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>', '<?= htmlspecialchars($sup['email'], ENT_QUOTES) ?>')"
+                                                                    class="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/60 shadow-xs transition cursor-pointer flex items-center gap-1"
+                                                                    title="View assignment history and supervised students">
                                                                     📜 History
                                                                 </button>
                                                                 <form method="POST" onsubmit="return confirm('<?= $is_inactive ? 'Activate' : 'Deactivate' ?> supervisor <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\n<?= $is_inactive ? 'They will be allowed to log in.' : 'They will NOT be allowed to log in.' ?>')" class="inline">
@@ -1615,11 +1607,11 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                                 <td class="px-3 py-2.5 text-slate-400 whitespace-nowrap"><?= (new DateTime($u['created_at']))->format('d M Y') ?></td>
                                                 <td class="px-3 py-2.5">
                                                     <div class="flex items-center gap-1.5">
-                                                        <button type="button" 
-                                                                onclick="openUserDetailsModal(this)"
-                                                                data-user='<?= $user_detail_json ?>'
-                                                                class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/60 shadow-xs transition flex items-center gap-1 cursor-pointer"
-                                                                title="View full user details">
+                                                        <button type="button"
+                                                            onclick="openUserDetailsModal(this)"
+                                                            data-user='<?= $user_detail_json ?>'
+                                                            class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/60 shadow-xs transition flex items-center gap-1 cursor-pointer"
+                                                            title="View full user details">
                                                             <i class="fa-regular fa-eye text-xs"></i> Details
                                                         </button>
                                                         <?php if ($u['role'] !== 'admin'): ?>
@@ -1913,7 +1905,6 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                             <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-sm">
                                                 <th class="px-3 py-2.5 text-left">Roll No</th>
                                                 <th class="px-3 py-2.5 text-left">Student Name</th>
-                                                <th class="px-3 py-2.5 text-left">Job Role</th>
                                                 <th class="px-3 py-2.5 text-left">Company</th>
                                                 <th class="px-3 py-2.5 text-left">Supervisor</th>
                                                 <th class="px-3 py-2.5 text-left">Year</th>
@@ -1939,7 +1930,6 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td class="px-3 py-2.5 text-slate-600 max-w-[120px] truncate" title="<?= htmlspecialchars($hs['job_role'] ?? '') ?>"><?= htmlspecialchars($hs['job_role'] ?: '—') ?></td>
                                                     <td class="px-3 py-2.5 text-slate-600 max-w-[130px] truncate" title="<?= htmlspecialchars($hs['company_name'] ?? '') ?>"><?= htmlspecialchars($hs['company_name'] ?: '—') ?></td>
                                                     <td class="px-3 py-2.5 text-slate-500"><?= htmlspecialchars($hs['supervisor_name'] ?: 'Unassigned') ?></td>
                                                     <td class="px-3 py-2.5">
@@ -1970,7 +1960,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                                 </tr>
                                             <?php endforeach; ?>
                                             <tr id="noHistMatchRow" class="hidden">
-                                                <td colspan="8" class="px-3 py-8 text-center text-xs text-slate-400">No student records found matching your search.</td>
+                                                <td colspan="7" class="px-3 py-8 text-center text-xs text-slate-400">No student records found matching your search.</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -2449,16 +2439,16 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
             }
         }
 
-        document.addEventListener('DOMContentLoaded', function () {
+        document.addEventListener('DOMContentLoaded', function() {
             const modal = document.getElementById('userDetailsModal');
             if (modal) {
-                modal.addEventListener('click', function (e) {
+                modal.addEventListener('click', function(e) {
                     if (e.target === modal) {
                         closeUserDetailsModal();
                     }
                 });
             }
-            document.addEventListener('keydown', function (e) {
+            document.addEventListener('keydown', function(e) {
                 if (e.key === 'Escape') {
                     closeUserDetailsModal();
                 }
@@ -2469,7 +2459,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
     <!-- ════ USER DETAILS MODAL ════ -->
     <div id="userDetailsModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true" aria-labelledby="modalUserName">
         <div class="relative w-full max-w-2xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] my-auto">
-            
+
             <!-- Modal Header -->
             <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 via-white to-slate-50 flex items-center justify-between">
                 <div class="flex items-center gap-3.5 min-w-0">
@@ -2495,7 +2485,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
 
                 <!-- STUDENT DETAILS VIEW -->
                 <div id="studentDetailsView" class="space-y-4">
-                    
+
                     <!-- Section 1: Academic & Personal Profile -->
                     <div class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4">
                         <h4 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -2601,7 +2591,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                 <span id="detailStaffDept" class="font-bold text-slate-800 block truncate">—</span>
                             </div>
                             <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                                <span class="text-slate-400 font-medium block text-[11px] mb-0.5">Position / Designation</span>
+                                <span class="text-slate-400 font-medium block text-[11px] mb-0.5">Rank</span>
                                 <span id="detailStaffPos" class="font-semibold text-slate-800 block truncate">—</span>
                             </div>
                             <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
@@ -2689,29 +2679,6 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                     </div>
                 </div>
 
-                <!-- Assign Year Form -->
-                <div class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4">
-                    <h4 class="text-xs font-black text-slate-600 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                        <span class="p-1 bg-emerald-100 text-emerald-700 rounded text-[11px]">➕</span> Assign to Academic Year
-                    </h4>
-                    <form id="assignYearForm" class="flex flex-col sm:flex-row items-stretch sm:items-end gap-3" onsubmit="return assignSupervisorYear(event)">
-                        <input type="hidden" id="assignSupId" value="">
-                        <div class="flex-1">
-                            <label class="block text-xs font-bold text-slate-500 mb-1">Academic Year Session</label>
-                            <select id="assignYearSelect" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition" required>
-                                <option value="">— Select Academic Year —</option>
-                                <?php foreach ($all_ay_records as $ayr): ?>
-                                    <option value="<?= (int)$ayr['id'] ?>"><?= htmlspecialchars($ayr['year_label']) ?><?= $ayr['status'] === 'Archived' ? ' (Archived)' : ($ayr['is_current'] ? ' (Current Active)' : '') ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer shrink-0">
-                            ➕ Assign Year
-                        </button>
-                    </form>
-                    <div id="assignYearError" class="hidden bg-red-50 border border-red-200 text-red-600 text-xs font-semibold px-4 py-2.5 rounded-xl mt-3"></div>
-                </div>
-
                 <!-- Year-by-Year History Section -->
                 <div>
                     <h4 class="text-xs font-black text-slate-600 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -2723,7 +2690,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                     <div id="supHistoryEmpty" class="hidden p-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                         <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mx-auto mb-3">📭</div>
                         <p class="text-sm font-semibold text-slate-600">No academic year history found</p>
-                        <p class="text-xs text-slate-400 mt-1">This supervisor has not been assigned to any academic years and has no supervised student records yet.</p>
+                        <p class="text-xs text-slate-400 mt-1">This supervisor has no supervised student records yet.</p>
                     </div>
                 </div>
             </div>
@@ -2737,306 +2704,279 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
     </div>
 
     <script>
-    // ═══ ENHANCED SUPERVISOR HISTORY MODAL ═════════════════════════════
-    var _allAyRecords = <?= json_encode($all_ay_records, JSON_UNESCAPED_UNICODE) ?>;
-    var _currentModalSupId = 0;
-    var _currentModalSupStatus = 'Active';
+        // ═══ ENHANCED SUPERVISOR HISTORY MODAL ═════════════════════════════
+        var _currentModalSupId = 0;
+        var _currentModalSupStatus = 'Active';
 
-    function openSupervisorHistoryModal(supId, supName, supEmail) {
-        var modal = document.getElementById('supHistoryModal');
-        if (!modal) return;
-        _currentModalSupId = supId;
-        document.getElementById('assignSupId').value = supId;
-        document.getElementById('supHistoryTitle').textContent = supName || 'Supervisor History';
-        document.getElementById('supHistoryEmail').textContent = supEmail || '—';
-        document.getElementById('supHistoryAvatar').textContent = ((supName || 'S').charAt(0)).toUpperCase();
-        document.getElementById('assignYearError').classList.add('hidden');
+        function openSupervisorHistoryModal(supId, supName, supEmail) {
+            var modal = document.getElementById('supHistoryModal');
+            if (!modal) return;
+            _currentModalSupId = supId;
+            document.getElementById('supHistoryTitle').textContent = supName || 'Supervisor History';
+            document.getElementById('supHistoryEmail').textContent = supEmail || '—';
+            document.getElementById('supHistoryAvatar').textContent = ((supName || 'S').charAt(0)).toUpperCase();
 
-        // Fetch rich history via AJAX
-        var fd = new FormData();
-        fd.append('action', 'get_history');
-        fd.append('supervisor_id', supId);
+            // Loading state
+            document.getElementById('supHistoryYearCount').textContent = '…';
+            document.getElementById('supHistoryTotalStudents').textContent = '…';
+            document.getElementById('supHistoryTotalEvaluations').textContent = '…';
+            document.getElementById('supHistoryEmpty').classList.add('hidden');
+            document.getElementById('supHistoryList').innerHTML = '<div class="p-10 text-center"><div class="w-9 h-9 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div><p class="text-xs font-bold text-slate-600">Loading supervisor history & records…</p></div>';
 
-        fetch('api/assign_supervisor.php', { method: 'POST', body: fd })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    var sup = data.supervisor || {};
-                    _currentModalSupStatus = sup.status || 'Active';
-                    updateSupervisorModalStatusUI(_currentModalSupStatus);
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
 
-                    if (sup.username) {
-                        document.getElementById('supHistoryTitle').textContent = sup.username;
+            // Fetch rich history via AJAX
+            fetch('api/assign_supervisor.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: 'action=get_history&supervisor_id=' + encodeURIComponent(supId)
+                })
+                .then(function(r) {
+                    return r.json();
+                })
+                .then(function(data) {
+                    if (data.success) {
+                        _currentModalSupStatus = data.status || 'Active';
+                        updateSupervisorModalStatusUI(_currentModalSupStatus);
+                        renderSupHistory(data.assignments || [], data.total_students, data.total_assigned_years, data.total_evaluations);
+                    } else {
+                        showToast('error', data.error || 'Failed to load supervisor history.');
+                        renderSupHistory([], 0, 0, 0);
                     }
-                    if (sup.email) {
-                        var subtitle = sup.email;
-                        if (sup.department) subtitle += ' · ' + sup.department;
-                        if (sup.position) subtitle += ' (' + sup.position + ')';
-                        document.getElementById('supHistoryEmail').textContent = subtitle;
-                    }
-
-                    renderSupHistory(data.assignments || [], data.total_students || 0, data.total_assigned_years || 0, data.total_evaluations || 0);
-                } else {
+                })
+                .catch(function(err) {
+                    console.error('Error fetching supervisor history:', err);
+                    showToast('error', 'Network error loading history.');
                     renderSupHistory([], 0, 0, 0);
-                }
-            })
-            .catch(function() { renderSupHistory([], 0, 0, 0); });
-
-        modal.classList.remove('hidden');
-        document.body.classList.add('overflow-hidden');
-    }
-
-    function updateSupervisorModalStatusUI(status) {
-        var badge = document.getElementById('supHistoryStatusBadge');
-        var btn = document.getElementById('supHistoryToggleStatusBtn');
-        var isInactive = (status.toLowerCase() === 'inactive');
-
-        if (isInactive) {
-            badge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200/80';
-            badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Inactive (Login Blocked)';
-            btn.className = 'px-3 py-1.5 text-xs font-bold rounded-xl border bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/80 transition cursor-pointer flex items-center gap-1 shadow-2xs';
-            btn.innerHTML = '🟢 Activate Account';
-            btn.title = 'Allow this supervisor to log in';
-        } else {
-            badge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80';
-            badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active (Can Login)';
-            btn.className = 'px-3 py-1.5 text-xs font-bold rounded-xl border bg-red-50 hover:bg-red-100 text-red-700 border-red-200/80 transition cursor-pointer flex items-center gap-1 shadow-2xs';
-            btn.innerHTML = '🔴 Deactivate Account';
-            btn.title = 'Block this supervisor from logging in';
-        }
-    }
-
-    function toggleSupervisorStatusFromModal() {
-        if (!_currentModalSupId) return;
-        var willDeactivate = (_currentModalSupStatus.toLowerCase() === 'active');
-        var confirmMsg = willDeactivate
-            ? 'Deactivate this supervisor account?\nThey will NOT be able to log in. All historical student records and evaluations will be preserved.'
-            : 'Activate this supervisor account?\nThey will be able to log in normally.';
-        if (!confirm(confirmMsg)) return;
-
-        var targetStatus = willDeactivate ? 'Inactive' : 'Active';
-        var fd = new FormData();
-        fd.append('action', 'toggle_status');
-        fd.append('supervisor_id', _currentModalSupId);
-        fd.append('status', targetStatus);
-
-        fetch('api/assign_supervisor.php', { method: 'POST', body: fd })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    _currentModalSupStatus = data.status || targetStatus;
-                    updateSupervisorModalStatusUI(_currentModalSupStatus);
-                    showToast('success', data.message || 'Status updated successfully.');
-                } else {
-                    showToast('error', data.error || 'Failed to update status.');
-                }
-            })
-            .catch(function() { showToast('error', 'Network error updating status.'); });
-    }
-
-    function closeSupHistoryModal() {
-        var modal = document.getElementById('supHistoryModal');
-        if (modal) {
-            modal.classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-        }
-    }
-
-    function renderSupHistory(assignments, totalStudents, totalYears, totalEvaluations) {
-        var listEl = document.getElementById('supHistoryList');
-        var emptyEl = document.getElementById('supHistoryEmpty');
-        var yearCountEl = document.getElementById('supHistoryYearCount');
-        var totalStuEl = document.getElementById('supHistoryTotalStudents');
-        var totalEvalEl = document.getElementById('supHistoryTotalEvaluations');
-
-        yearCountEl.textContent = totalYears || (assignments ? assignments.length : 0);
-        totalStuEl.textContent = totalStudents || 0;
-        totalEvalEl.textContent = totalEvaluations || 0;
-
-        if (!assignments || assignments.length === 0) {
-            listEl.innerHTML = '';
-            emptyEl.classList.remove('hidden');
-            return;
-        }
-        emptyEl.classList.add('hidden');
-
-        var html = '';
-        assignments.forEach(function(a) {
-            var isArchived = (a.year_status === 'Archived');
-            var statusColor = 'bg-slate-100 text-slate-600 border-slate-200';
-            var statusIcon = '📦';
-            if (a.year_status === 'Active') { statusColor = 'bg-emerald-100 text-emerald-800 border-emerald-200'; statusIcon = '🟢'; }
-            else if (a.year_status === 'Upcoming') { statusColor = 'bg-blue-100 text-blue-800 border-blue-200'; statusIcon = '🔵'; }
-
-            var assignBadge = a.is_assigned
-                ? '<span class="inline-flex items-center gap-1 text-[11px] font-bold text-teal-700 bg-teal-50 border border-teal-200/80 px-2 py-0.5 rounded-full"><i class="fa-solid fa-check text-[10px]"></i> Assigned</span>'
-                : '<span class="inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">Historical (Unassigned)</span>';
-
-            html += '<div class="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-2xs transition hover:border-slate-300">';
-            
-            // Year Card Header
-            html += '  <div class="px-4 py-3.5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">';
-            html += '    <div class="flex items-center gap-2.5">';
-            html += '      <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-sm font-bold shrink-0">' + statusIcon + '</div>';
-            html += '      <div>';
-            html += '        <div class="flex items-center gap-2">';
-            html += '          <span class="font-mono font-black text-sm text-slate-800">' + escHtml(a.year_label || '—') + '</span>';
-            html += '          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + statusColor + '">' + escHtml(a.year_status || '') + '</span>';
-            html += '          ' + assignBadge;
-            html += '        </div>';
-            if (a.assigned_at_display) {
-                html += '        <p class="text-[11px] text-slate-400 font-medium mt-0.5">Assigned session: ' + escHtml(a.assigned_at_display) + '</p>';
-            }
-            html += '      </div>';
-            html += '    </div>';
-
-            html += '    <div class="flex items-center gap-2 shrink-0">';
-            html += '      <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-xl">🎓 ' + (a.student_count || 0) + ' student' + (a.student_count === 1 ? '' : 's') + '</span>';
-            html += '      <span class="text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200/60 px-2.5 py-1 rounded-xl">📝 ' + (a.evaluation_count || 0) + ' graded</span>';
-            if (a.is_assigned) {
-                html += '      <button onclick="removeSupAssignment(' + _currentModalSupId + ', ' + (a.academic_year_id || 0) + ', \'' + escAttr(a.year_label || '') + '\')" ';
-                html += '        class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl border border-red-200/60 transition cursor-pointer shrink-0" title="Remove assignment from this year">✕ Unassign</button>';
-            }
-            html += '    </div>';
-            html += '  </div>';
-
-            // Students Table
-            var students = a.students || [];
-            if (students.length > 0) {
-                html += '  <div class="overflow-x-auto">';
-                html += '    <table class="w-full text-xs text-left">';
-                html += '      <thead>';
-                html += '        <tr class="bg-slate-50/70 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-100 text-[10px]">';
-                html += '          <th class="px-4 py-2.5">Roll No</th>';
-                html += '          <th class="px-4 py-2.5">Student Name & Major</th>';
-                html += '          <th class="px-4 py-2.5">Partner Company</th>';
-                html += '          <th class="px-4 py-2.5">Internship Duration</th>';
-                html += '          <th class="px-4 py-2.5 text-center">Student Status</th>';
-                html += '          <th class="px-4 py-2.5 text-right">Evaluations / Grade</th>';
-                html += '        </tr>';
-                html += '      </thead>';
-                html += '      <tbody class="divide-y divide-slate-100">';
-                students.forEach(function(st) {
-                    var isStuActive = (st.student_status === 'Active');
-                    var stuStatusPill = isStuActive
-                        ? '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active</span>'
-                        : '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">📦 Archived</span>';
-
-                    var gradeText = st.latest_weekly_grade
-                        ? '<span class="inline-block px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold text-[10px]">Grade: ' + escHtml(st.latest_weekly_grade) + '</span>'
-                        : '';
-
-                    html += '        <tr class="hover:bg-slate-50/50 transition">';
-                    html += '          <td class="px-4 py-2.5 font-mono font-bold text-indigo-700">' + escHtml(st.student_roll || st.username || '—') + '</td>';
-                    html += '          <td class="px-4 py-2.5">';
-                    html += '            <span class="font-bold text-slate-800 block">' + escHtml(st.full_name || st.username) + '</span>';
-                    if (st.major) {
-                        html += '            <span class="text-[10px] text-slate-400">' + escHtml(st.major) + '</span>';
-                    }
-                    html += '          </td>';
-                    html += '          <td class="px-4 py-2.5">';
-                    html += '            <span class="font-semibold text-slate-700 block">' + escHtml(st.company_name || '—') + '</span>';
-                    if (st.job_role) {
-                        html += '            <span class="text-[10px] text-slate-400">' + escHtml(st.job_role) + '</span>';
-                    }
-                    html += '          </td>';
-                    html += '          <td class="px-4 py-2.5 text-slate-600 whitespace-nowrap text-[11px]">' + escHtml(st.internship_dates_formatted || '—') + '</td>';
-                    html += '          <td class="px-4 py-2.5 text-center">' + stuStatusPill + '</td>';
-                    html += '          <td class="px-4 py-2.5 text-right whitespace-nowrap">';
-                    html += '            <span class="font-semibold text-slate-700 block">' + (st.weekly_eval_count || 0) + ' weekly review' + (st.weekly_eval_count === 1 ? '' : 's') + '</span>';
-                    if (gradeText) {
-                        html += '            <div class="mt-0.5">' + gradeText + '</div>';
-                    }
-                    html += '          </td>';
-                    html += '        </tr>';
                 });
-                html += '      </tbody>';
-                html += '    </table>';
-                html += '  </div>';
-            } else {
-                html += '  <div class="p-4 text-center text-xs text-slate-400 bg-slate-50/40">';
-                html += '    No students supervised for this academic year.';
-                html += '  </div>';
-            }
-
-            html += '</div>';
-        });
-
-        listEl.innerHTML = html;
-    }
-
-    function assignSupervisorYear(e) {
-        e.preventDefault();
-        var supId = document.getElementById('assignSupId').value;
-        var yearId = document.getElementById('assignYearSelect').value;
-        var errDiv = document.getElementById('assignYearError');
-        errDiv.classList.add('hidden');
-
-        if (!supId || !yearId) {
-            errDiv.textContent = 'Please select an academic year.';
-            errDiv.classList.remove('hidden');
-            return false;
         }
 
-        var fd = new FormData();
-        fd.append('action', 'assign');
-        fd.append('supervisor_id', supId);
-        fd.append('academic_year_id', yearId);
+        function updateSupervisorModalStatusUI(status) {
+            var badge = document.getElementById('supHistoryStatusBadge');
+            var btn = document.getElementById('supHistoryToggleStatusBtn');
+            if (!badge || !btn) return;
+            var isInactive = (status && status.toLowerCase() === 'inactive');
+            if (isInactive) {
+                badge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200/80';
+                badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Inactive (Blocked)';
+                btn.className = 'px-3 py-1.5 text-xs font-bold rounded-xl border bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/80 transition cursor-pointer flex items-center gap-1 shadow-2xs';
+                btn.innerHTML = '🟢 Activate Account';
+                btn.title = 'Allow this supervisor to log in';
+            } else {
+                badge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80';
+                badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active (Can Login)';
+                btn.className = 'px-3 py-1.5 text-xs font-bold rounded-xl border bg-red-50 hover:bg-red-100 text-red-700 border-red-200/80 transition cursor-pointer flex items-center gap-1 shadow-2xs';
+                btn.innerHTML = '🔴 Deactivate Account';
+                btn.title = 'Block this supervisor from logging in';
+            }
+        }
 
-        fetch('api/assign_supervisor.php', { method: 'POST', body: fd })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    document.getElementById('assignYearSelect').value = '';
-                    openSupervisorHistoryModal(supId, document.getElementById('supHistoryTitle').textContent, document.getElementById('supHistoryEmail').textContent);
-                    showToast('success', data.message || 'Assigned to academic year.');
-                } else {
-                    errDiv.textContent = data.error || 'Failed to assign.';
-                    errDiv.classList.remove('hidden');
+        function toggleSupervisorStatusFromModal() {
+            if (!_currentModalSupId) return;
+            var willDeactivate = (_currentModalSupStatus.toLowerCase() === 'active');
+            var confirmMsg = willDeactivate ?
+                'Deactivate this supervisor account?\nThey will NOT be able to log in. All historical student records and evaluations will be preserved.' :
+                'Activate this supervisor account?\nThey will be able to log in normally.';
+            if (!confirm(confirmMsg)) return;
+
+            var targetStatus = willDeactivate ? 'Inactive' : 'Active';
+            var fd = new FormData();
+            fd.append('action', 'toggle_status');
+            fd.append('supervisor_id', _currentModalSupId);
+            fd.append('status', targetStatus);
+
+            fetch('api/assign_supervisor.php', {
+                    method: 'POST',
+                    body: fd
+                })
+                .then(function(r) {
+                    return r.json();
+                })
+                .then(function(data) {
+                    if (data.success) {
+                        _currentModalSupStatus = data.status || targetStatus;
+                        updateSupervisorModalStatusUI(_currentModalSupStatus);
+                        showToast('success', data.message || 'Status updated successfully.');
+                    } else {
+                        showToast('error', data.error || 'Failed to update status.');
+                    }
+                })
+                .catch(function() {
+                    showToast('error', 'Network error updating status.');
+                });
+        }
+
+        function closeSupHistoryModal() {
+            var modal = document.getElementById('supHistoryModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        function renderSupHistory(assignments, totalStudents, totalYears, totalEvaluations) {
+            var listEl = document.getElementById('supHistoryList');
+            var emptyEl = document.getElementById('supHistoryEmpty');
+            var yearCountEl = document.getElementById('supHistoryYearCount');
+            var totalStuEl = document.getElementById('supHistoryTotalStudents');
+            var totalEvalEl = document.getElementById('supHistoryTotalEvaluations');
+
+            yearCountEl.textContent = totalYears || (assignments ? assignments.length : 0);
+            totalStuEl.textContent = totalStudents || 0;
+            totalEvalEl.textContent = totalEvaluations || 0;
+
+            if (!assignments || assignments.length === 0) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+            emptyEl.classList.add('hidden');
+
+            var html = '';
+            assignments.forEach(function(a) {
+                var statusColor = 'bg-slate-100 text-slate-600 border-slate-200';
+                var statusIcon = '📦';
+                if (a.year_status === 'Active') {
+                    statusColor = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                    statusIcon = '🟢';
+                } else if (a.year_status === 'Upcoming') {
+                    statusColor = 'bg-blue-100 text-blue-800 border-blue-200';
+                    statusIcon = '🔵';
                 }
-            })
-            .catch(function() {
-                errDiv.textContent = 'Network error. Please try again.';
-                errDiv.classList.remove('hidden');
+
+                html += '<div class="bg-white border border-slate-200/90 rounded-2xl overflow-hidden shadow-xs transition hover:border-slate-300">';
+
+                // Year Card Header
+                html += '  <div class="px-4 py-3.5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">';
+                html += '    <div class="flex items-center gap-2.5">';
+                html += '      <div class="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center text-sm font-bold shrink-0">' + statusIcon + '</div>';
+                html += '      <div>';
+                html += '        <div class="flex items-center gap-2 flex-wrap">';
+                html += '          <span class="font-mono font-black text-sm text-slate-800">' + escHtml(a.year_label || '—') + '</span>';
+                html += '          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ' + statusColor + '">' + escHtml(a.year_status || '') + '</span>';
+                html += '        </div>';
+                html += '      </div>';
+                html += '    </div>';
+
+                html += '    <div class="flex items-center gap-2 shrink-0">';
+                html += '      <span class="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-xl">🎓 ' + (a.student_count || 0) + ' student' + (a.student_count === 1 ? '' : 's') + '</span>';
+                html += '      <span class="text-xs font-bold text-purple-700 bg-purple-50 border border-purple-200/60 px-2.5 py-1 rounded-xl">📝 ' + (a.evaluation_count || 0) + ' graded</span>';
+                if (a.is_assigned) {
+                    html += '      <button onclick="removeSupAssignment(' + _currentModalSupId + ', ' + (a.academic_year_id || 0) + ', \'' + escAttr(a.year_label || '') + '\')" ';
+                    html += '        class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-xl border border-red-200/60 transition cursor-pointer shrink-0" title="Remove assignment from this year">✕ Unassign</button>';
+                }
+                html += '    </div>';
+                html += '  </div>';
+
+                // Students Table
+                var students = a.students || [];
+                if (students.length > 0) {
+                    html += '  <div class="overflow-x-auto">';
+                    html += '    <table class="w-full text-xs text-left min-w-[700px]">';
+                    html += '      <thead>';
+                    html += '        <tr class="bg-slate-50/70 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-100 text-[10px]">';
+                    html += '          <th class="px-4 py-2.5">Roll No</th>';
+                    html += '          <th class="px-4 py-2.5">Student Name & Major</th>';
+                    html += '          <th class="px-4 py-2.5">Partner Company</th>';
+                    html += '          <th class="px-4 py-2.5">Internship Duration</th>';
+                    html += '          <th class="px-4 py-2.5 text-center">Status</th>';
+                    html += '          <th class="px-4 py-2.5 text-center">Evaluations</th>';
+                    html += '          <th class="px-4 py-2.5 text-right">Actions</th>';
+                    html += '        </tr>';
+                    html += '      </thead>';
+                    html += '      <tbody class="divide-y divide-slate-100">';
+                    students.forEach(function(st) {
+                        var isStuActive = (st.student_status === 'Active');
+                        var stuStatusPill = isStuActive ?
+                            '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Active</span>' :
+                            '<span class="inline-flex items-center gap-1 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">📦 Archived</span>';
+
+                        var gradeBadge = '';
+                        if (st.latest_weekly_grade) {
+                            var g = (st.latest_weekly_grade || '').toUpperCase();
+                            var gClass = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                            if (g === 'B') gClass = 'bg-blue-50 text-blue-800 border-blue-200';
+                            else if (g === 'C') gClass = 'bg-amber-50 text-amber-800 border-amber-200';
+                            else if (g === 'D' || g === 'F') gClass = 'bg-rose-50 text-rose-800 border-rose-200';
+                            gradeBadge = '<span class="inline-block px-1.5 py-0.5 rounded border font-bold text-[10px] ' + gClass + '">Grade: ' + escHtml(g) + '</span>';
+                        }
+
+                        html += '        <tr class="hover:bg-slate-50/70 transition">';
+                        html += '          <td class="px-4 py-2.5 font-mono font-bold text-indigo-700">' + escHtml(st.student_roll || st.username || '—') + '</td>';
+                        html += '          <td class="px-4 py-2.5">';
+                        html += '            <a href="../view_student_history.php?uid=' + encodeURIComponent(st.id) + '" target="_blank" class="font-bold text-slate-800 hover:text-indigo-600 hover:underline inline-flex items-center gap-1">' + escHtml(st.full_name || st.username) + ' <i class="fa-solid fa-arrow-up-right-from-square text-[9px] text-slate-400"></i></a>';
+                        if (st.major) {
+                            html += '            <span class="text-[10px] text-slate-400 block">' + escHtml(st.major) + '</span>';
+                        }
+                        html += '          </td>';
+                        html += '          <td class="px-4 py-2.5">';
+                        html += '            <span class="font-semibold text-slate-700 block">' + escHtml(st.company_name || '—') + '</span>';
+                        if (st.job_role) {
+                            html += '            <span class="text-[10px] text-slate-400">' + escHtml(st.job_role) + '</span>';
+                        }
+                        html += '          </td>';
+                        html += '          <td class="px-4 py-2.5 text-slate-600 whitespace-nowrap text-[11px]">' + escHtml(st.internship_dates_formatted || '—') + '</td>';
+                        html += '          <td class="px-4 py-2.5 text-center">' + stuStatusPill + '</td>';
+                        html += '          <td class="px-4 py-2.5 text-center whitespace-nowrap">';
+                        html += '            <span class="font-semibold text-slate-700 block">' + (st.weekly_eval_count || 0) + ' reviews</span>';
+                        if (gradeBadge) {
+                            html += '            <div class="mt-0.5">' + gradeBadge + '</div>';
+                        }
+                        html += '          </td>';
+                        html += '          <td class="px-4 py-2.5 text-right whitespace-nowrap">';
+                        html += '            <div class="inline-flex items-center gap-1.5 justify-end">';
+                        html += '              <a href="../view_student_history.php?uid=' + encodeURIComponent(st.id) + '" class="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-200/60 shadow-2xs transition text-[11px]" title="View 13-week log history & evaluations">';
+                        html += '                <i class="fa-regular fa-file-lines text-[10px]"></i> History';
+                        html += '              </a>';
+                        html += '              <a href="../student/print_report.php?student_id=' + encodeURIComponent(st.id) + '&week=1" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition text-[11px]" title="Print official report">';
+                        html += '                <i class="fa-solid fa-print text-[10px]"></i>';
+                        html += '              </a>';
+                        html += '            </div>';
+                        html += '          </td>';
+                        html += '        </tr>';
+                    });
+                    html += '      </tbody>';
+                    html += '    </table>';
+                    html += '  </div>';
+                } else {
+                    html += '  <div class="p-5 text-center text-xs text-slate-400 bg-slate-50/40">';
+                    html += '    <p class="font-medium text-slate-500">No students supervised for this academic year yet.</p>';
+                    html += '  </div>';
+                }
+
+                html += '</div>';
             });
-        return false;
-    }
 
-    function removeSupAssignment(supId, yearId, yearLabel) {
-        if (!confirm('Remove assignment for ' + yearLabel + '?\nThis will unassign the supervisor from this year, but all historical student and evaluation records will remain safely preserved.')) return;
-        var fd = new FormData();
-        fd.append('action', 'unassign');
-        fd.append('supervisor_id', supId);
-        fd.append('academic_year_id', yearId);
+            listEl.innerHTML = html;
+        }
 
-        fetch('api/assign_supervisor.php', { method: 'POST', body: fd })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    openSupervisorHistoryModal(supId, document.getElementById('supHistoryTitle').textContent, document.getElementById('supHistoryEmail').textContent);
-                    showToast('success', data.message || 'Assignment removed.');
-                } else {
-                    showToast('error', data.error || 'Failed to remove assignment.');
-                }
-            })
-            .catch(function() { showToast('error', 'Network error.'); });
-    }
+        function escHtml(s) {
+            var d = document.createElement('div');
+            d.appendChild(document.createTextNode(s || ''));
+            return d.innerHTML;
+        }
 
-    function escHtml(s) { var d = document.createElement('div'); d.appendChild(document.createTextNode(s || '')); return d.innerHTML; }
-    function escAttr(s) { return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+        function escAttr(s) {
+            return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
 
-    function showToast(type, message) {
-        var toast = document.getElementById('toast');
-        if (!toast) return;
-        var bg = type === 'success'
-            ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
-            : 'bg-red-50 border border-red-200 text-red-700';
-        var icon = type === 'success' ? '✅' : '❌';
-        toast.className = bg + ' px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm font-semibold transition-all duration-300 fixed top-6 right-6 z-[100] max-w-sm';
-        toast.innerHTML = '<span>' + icon + '</span> ' + message;
-        toast.classList.remove('hidden');
-        setTimeout(function() { toast.classList.add('hidden'); }, 3000);
-    }
+        function showToast(type, message) {
+            var toast = document.getElementById('toast');
+            if (!toast) return;
+            var bg = type === 'success' ?
+                'bg-emerald-50 border border-emerald-200 text-emerald-700' :
+                'bg-red-50 border border-red-200 text-red-700';
+            var icon = type === 'success' ? '✅' : '❌';
+            toast.className = bg + ' px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 text-sm font-semibold transition-all duration-300 fixed top-6 right-6 z-[100] max-w-sm';
+            toast.innerHTML = '<span>' + icon + '</span> ' + message;
+            toast.classList.remove('hidden');
+            setTimeout(function() {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
     </script>
 
 </body>

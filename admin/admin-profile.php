@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../includes/security_helper.php';
 
 $admin_id   = (int) $_SESSION['user_id'];
 $admin_name = $_SESSION['username'];
@@ -51,8 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 
     if (empty($new_name) || empty($new_email)) {
         $err = 'Name and Email are required.';
-    } elseif (!filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
-        $err = 'Invalid email format.';
+    } elseif ($email_err = validate_gmail_address($new_email)) {
+        $err = $email_err;
     } else {
         // Check email uniqueness (exclude self)
         $chk = $db->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
@@ -82,8 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
     if (empty($current) || empty($new_pw) || empty($confirm)) {
         $err = 'All password fields are required.';
-    } elseif (strlen($new_pw) < 6) {
-        $err = 'New password must be at least 6 characters.';
+    } elseif ($err_msg = validate_strong_password($new_pw)) {
+        $err = $err_msg;
     } elseif ($new_pw !== $confirm) {
         $err = 'New passwords do not match.';
     } else {
@@ -114,8 +115,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_defaults'])) {
 
     if (empty($d_student) || empty($d_sup)) {
         $err = 'Both default password fields are required.';
-    } elseif (strlen($d_student) < 6 || strlen($d_sup) < 6) {
-        $err = 'Default passwords must be at least 6 characters.';
+    } elseif ($err_msg = validate_strong_password($d_student)) {
+        $err = 'Student default password invalid: ' . $err_msg;
+    } elseif ($err_msg = validate_strong_password($d_sup)) {
+        $err = 'Supervisor default password invalid: ' . $err_msg;
     } else {
         $st1 = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_student_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
         $st1->bind_param("s", $d_student);

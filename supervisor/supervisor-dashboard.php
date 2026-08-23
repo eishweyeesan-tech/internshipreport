@@ -391,81 +391,6 @@ usort($tasks, function ($a, $b) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script>
-    function onNotificationItemClick(e, el) {
-        e.preventDefault();
-        var id = el.getAttribute('data-notif-id');
-        var url = el.getAttribute('data-redirect-url') || 'supervisor-dashboard.php';
-        var fd = new FormData();
-        fd.append('notification_id', id);
-        fd.append('mark_notification_read', '1');
-        fetch(window.location.pathname, {
-            method: 'POST',
-            body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); })
-          .then(function(data) {
-              var badge = document.getElementById('notif-badge');
-              if (badge) {
-                  if (data.unread_count > 0) badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
-                  else badge.remove();
-              }
-              var item = el.closest('[data-notif-id]');
-              if (item) {
-                  item.classList.remove('bg-[#e7f3ff]', 'bg-teal-50/50');
-                  item.querySelector('.unread-dot')?.remove();
-              }
-          })
-          .catch(function() {})
-          .finally(function() {
-              window.location.href = url;
-          });
-    }
-
-    function toggleNotifDropdown() {
-        var nd = document.getElementById('notif-dropdown');
-        if (!nd) return;
-        var isHidden = nd.style.visibility === 'hidden' || nd.style.opacity === '0';
-        if (isHidden) {
-            nd.style.opacity = '1';
-            nd.style.visibility = 'visible';
-            nd.style.transform = 'translateY(0) scale(1)';
-            var pd = document.getElementById('profile-dropdown-menu');
-            if (pd) pd.classList.add('hidden');
-        } else {
-            nd.style.opacity = '0';
-            nd.style.visibility = 'hidden';
-            nd.style.transform = 'translateY(-8px) scale(0.95)';
-        }
-    }
-
-    function markAllNotifsRead() {
-        var fd = new FormData();
-        fd.append('mark_all_notifications_read', '1');
-        fetch(window.location.pathname, {
-            method: 'POST',
-            body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); })
-          .then(function(data) {
-              var badge = document.getElementById('notif-badge');
-              if (badge) badge.remove();
-              document.querySelectorAll('#notif-dropdown [data-notif-id]').forEach(function(item) {
-                  item.classList.remove('bg-[#e7f3ff]', 'bg-teal-50/50');
-                  item.querySelector('.unread-dot')?.remove();
-              });
-          })
-          .catch(function() {});
-    }
-
-    function toggleNotifOptions(btn) {
-        var menu = btn.nextElementSibling;
-        if (!menu) return;
-        document.querySelectorAll('.notif-options-menu').forEach(function(m) {
-            if (m !== menu) m.classList.add('hidden');
-        });
-        menu.classList.toggle('hidden');
-    }
-
     function showToast(message, type) {
         var toast = document.createElement('div');
         var bgColor, icon;
@@ -501,7 +426,7 @@ usort($tasks, function ($a, $b) {
         <?php $pageTitle = 'University Supervisor Dashboard'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- ─── MAIN DASHBOARD BODY ─── -->
-        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <div class="max-w-7xl w-full mx-auto space-y-6">
 
 
@@ -515,13 +440,12 @@ usort($tasks, function ($a, $b) {
                             </div>
                             <div>
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <h2 class="text-lg sm:text-xl font-black tracking-tight text-white">Welcome back, <?= htmlspecialchars(format_supervisor_name($sup_name)) ?>!</h2>
+                                    <h2 class="text-lg sm:text-lg font-black tracking-tight text-white">Welcome back, <?= htmlspecialchars(format_supervisor_name($sup_name)) ?>!</h2>
                                 </div>
                                 <p class="text-xs text-teal-100/90 font-medium mt-0.5">
                                     <?= date('l, d F Y') ?> · Overview of assigned interns and pending supervisory tasks
                                 </p>
                             </div>
-
                         </div>
 
                         <!-- Quick Badges -->
@@ -695,13 +619,6 @@ usort($tasks, function ($a, $b) {
                             </div>
                             <?php endif; ?>
                         </div>
-
-                        <div class="px-6 py-3 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Supervisor grading portal</span>
-                            <a href="supervisor-reports.php" class="font-bold text-purple-600 hover:text-purple-800">
-                                Browse all submitted reports →
-                            </a>
-                        </div>
                     </div>
 
                     <!-- RIGHT COLUMN (5 COLS): NEEDS ATTENTION / ACTION REQUIRED -->
@@ -756,11 +673,6 @@ usort($tasks, function ($a, $b) {
                                 <p class="text-[11px] text-slate-400 mt-1">You have no pending reviews, behind-schedule students, or incomplete evaluations.</p>
                             </div>
                             <?php endif; ?>
-                        </div>
-
-                        <div class="px-6 py-3 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Prioritized supervisory actions</span>
-                            <span class="text-slate-500 font-semibold"><?= $behind_schedule ?> behind · <?= $pending_reviews ?> awaiting</span>
                         </div>
                     </div>
 

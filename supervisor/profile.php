@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/phone_validation.php';
+require_once __DIR__ . '/../includes/security_helper.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 require_once __DIR__ . '/../includes/notification_actions.php';
 
@@ -80,8 +81,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 
     if (empty($new_name) || empty($new_email)) {
         $err = 'Name and Email are required.';
-    } elseif (!filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
-        $err = 'Invalid email format.';
+    } elseif ($email_err = validate_gmail_address($new_email)) {
+        $err = $email_err;
     } elseif (($phone_err = phone_validation_error($new_phone)) !== null) {
         $err = $phone_err;
     } else {
@@ -120,8 +121,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
     if (empty($current) || empty($new_pw) || empty($confirm)) {
         $err = 'All password fields are required.';
-    } elseif (strlen($new_pw) < 6) {
-        $err = 'New password must be at least 6 characters.';
+    } elseif ($err_msg = validate_strong_password($new_pw)) {
+        $err = $err_msg;
     } elseif ($new_pw !== $confirm) {
         $err = 'New passwords do not match.';
     } else {
@@ -422,17 +423,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         <input type="hidden" name="change_password" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Current Password</label>
-                                <input type="password" name="current_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                 <label class="block text-sm font-bold text-slate-500 mb-1">Current Password</label>
+                                 <div class="relative">
+                                     <input type="password" id="sup_current_password" name="current_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                     <button type="button" onclick="togglePasswordVisibility('sup_current_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
+                                         <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                         </svg>
+                                         <svg class="eye-open w-4 h-4 text-blue-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                         </svg>
+                                     </button>
+                                 </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
-                                <input type="password" name="new_password" required minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <div class="relative">
+                                    <input type="password" id="sup_new_password" name="new_password" required minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <button type="button" onclick="togglePasswordVisibility('sup_new_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
+                                        <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                        </svg>
+                                        <svg class="eye-open w-4 h-4 text-blue-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                         </svg>
+                                     </button>
+                                 </div>
                                 <p class="text-sm text-slate-400 mt-0.5">Min 6 characters</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>
-                                <input type="password" name="confirm_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <div class="relative">
+                                    <input type="password" id="sup_confirm_password" name="confirm_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <button type="button" onclick="togglePasswordVisibility('sup_confirm_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
+                                        <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                        </svg>
+                                        <svg class="eye-open w-4 h-4 text-blue-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                         </svg>
+                                     </button>
+                                 </div>
                             </div>
                         </div>
                         <div class="flex justify-start pt-1">
@@ -446,6 +480,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     </div>
 </div>
 
+<script>
+    function togglePasswordVisibility(inputId, btn) {
+        var input = document.getElementById(inputId);
+        if (!input) return;
+        var eyeSlash = btn.querySelector('.eye-slash');
+        var eyeOpen = btn.querySelector('.eye-open');
+        if (input.type === 'password') {
+            input.type = 'text';
+            if (eyeSlash) eyeSlash.classList.add('hidden');
+            if (eyeOpen) eyeOpen.classList.remove('hidden');
+            btn.setAttribute('title', 'Hide password');
+        } else {
+            input.type = 'password';
+            if (eyeOpen) eyeOpen.classList.add('hidden');
+            if (eyeSlash) eyeSlash.classList.remove('hidden');
+            btn.setAttribute('title', 'Show password');
+        }
+    }
+</script>
 <script src="../assets/js/main.js"></script>
 <script src="../assets/js/notifications.js"></script>
 <?php include __DIR__ . '/includes/notification_delete.php'; ?>

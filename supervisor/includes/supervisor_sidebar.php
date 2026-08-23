@@ -69,10 +69,9 @@ $nav_items = [
 <aside id="supervisorSidebar" class="w-64 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 lg:static lg:z-auto transition-transform duration-200 ease-in-out flex flex-col shrink-0 bg-[#005f73] border-r border-teal-700/40 shadow-xl text-white print:hidden">
     <div class="h-16 flex items-center justify-between px-5 bg-teal-900/40 backdrop-blur-sm border-b border-teal-700/40">
         <div class="flex items-center gap-2">
-            <span class="text-sm font-black tracking-tight text-white">📋 InternReport</span>
-            <span class="text-micro font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-600/40 text-teal-100 border border-teal-400/30">SUPERVISOR</span>
+            <span class="font-black text-white tracking-tight text-lg">InternReport</span>
         </div>
-        <button type="button" onclick="toggleSupervisorSidebar()" class="lg:hidden text-teal-200 hover:text-white p-1 rounded-lg transition" aria-label="Close sidebar">
+        <button type="button" onclick="toggleSupervisorSidebar()" class="lg:hidden text-teal-200 hover:text-white p-1 rounded-lg transition cursor-pointer" aria-label="Close sidebar">
             ✕
         </button>
     </div>

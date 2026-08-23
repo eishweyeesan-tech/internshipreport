@@ -422,11 +422,11 @@ $sgd = [
             </div>
             <?php endif; ?>
 
-            <!-- Print Action -->
-            <button onclick="window.print()" class="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-xs cursor-pointer">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg>
-                Print Report
-            </button>
+            <!-- Print Action (Real-world Official Format) -->
+            <a href="student/print_report.php?student_id=<?= $uid ?><?= $filter_week ? '&week=' . $filter_week : '&week=1' ?>" target="_blank" class="flex items-center gap-2 px-3.5 py-1.5 bg-[#005f73] hover:bg-[#0a9396] text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                Print Official Report
+            </a>
         </div>
     </div>
 
@@ -471,6 +471,10 @@ $sgd = [
                         </div>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap">
+                        <a href="student/print_report.php?student_id=<?= $uid ?>&week=<?= $wn ?>" target="_blank" class="inline-flex items-center gap-1.5 text-xs font-bold text-[#005f73] bg-teal-50 hover:bg-teal-100 border border-teal-200/80 px-2.5 py-1 rounded-lg transition shadow-2xs" title="Print official formal report for Week <?= $wn ?>">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                            <span>Print (W<?= $wn ?>)</span>
+                        </a>
                         <span class="text-xs font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/60 px-2.5 py-0.5 rounded-lg"><?= $week_present ?> Present</span>
                         <span class="text-xs font-bold text-red-600 bg-red-50 border border-red-200/60 px-2.5 py-0.5 rounded-lg"><?= $week_absent ?> Absent</span>
                         <span class="text-xs font-bold text-blue-600 bg-blue-50 border border-blue-200/60 px-2.5 py-0.5 rounded-lg"><?= floor($week_minutes / 60) ?>h <?= str_pad($week_minutes % 60, 2, '0', STR_PAD_LEFT) ?>m</span>

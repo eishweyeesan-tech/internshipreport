@@ -244,6 +244,6 @@ INSERT IGNORE INTO academic_years (year_label, start_date, end_date, is_current,
 
 -- Default admin account (password: "password")
 INSERT IGNORE INTO users (username, email, password, role, is_first_login) VALUES
-('admin', 'admin@example.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 0);
+('admin', 'admin@gmail.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 0);
 
 SET FOREIGN_KEY_CHECKS = 1;

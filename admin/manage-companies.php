@@ -92,7 +92,7 @@ $edit_company = null;
 if (isset($_GET['edit'])) {
     $eid = (int) $_GET['edit'];
     foreach ($companies as $c) {
-        if ($c['id'] === $eid) {
+        if ((int) $c['id'] === $eid) {
             $edit_company = $c;
             break;
         }
@@ -156,14 +156,23 @@ if (isset($_GET['edit'])) {
                 <?php endif; ?>
 
                 <!-- ════ ADD / EDIT COMPANY FORM ════ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <h2 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-teal-50 text-teal-700 rounded">🏢</span>
-                            <?= $edit_company ? 'Edit Company' : 'Register New Partner Company' ?>
-                        </h2>
+                <div id="companyForm" class="bg-white rounded-2xl border <?= $edit_company ? 'border-teal-400 ring-2 ring-teal-500/20 shadow-md' : 'border-slate-200 shadow-sm' ?> overflow-hidden transition-all duration-200">
+                    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between <?= $edit_company ? 'bg-teal-50/50' : '' ?>">
+                        <div class="flex items-center gap-2.5">
+                            <span class="p-1.5 <?= $edit_company ? 'bg-teal-100 text-teal-800' : 'bg-teal-50 text-teal-700' ?> rounded-lg text-sm">🏢</span>
+                            <div>
+                                <h2 class="text-sm font-black text-slate-800 uppercase tracking-wider">
+                                    <?= $edit_company ? 'Edit Company Details' : 'Register New Partner Company' ?>
+                                </h2>
+                                <?php if ($edit_company): ?>
+                                <p class="text-xs text-teal-700 font-medium mt-0.5">Editing: <strong class="font-bold text-slate-800"><?= htmlspecialchars($edit_company['company_name']) ?></strong></p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
                         <?php if ($edit_company): ?>
-                        <a href="manage-companies.php" class="text-sm font-bold text-slate-400 hover:text-slate-600 transition">✕ Cancel</a>
+                        <a href="manage-companies.php" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-xl transition cursor-pointer">
+                            <span>✕ Cancel Edit</span>
+                        </a>
                         <?php endif; ?>
                     </div>
                     <form method="POST" class="p-6">
@@ -254,12 +263,19 @@ if (isset($_GET['edit'])) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
-                                <?php foreach ($companies as $i => $c): ?>
-                                <tr class="company-row hover:bg-slate-50/80 transition-colors" data-name="<?= htmlspecialchars($c['company_name'], ENT_QUOTES, 'UTF-8') ?>">
+                                <?php foreach ($companies as $i => $c): 
+                                    $is_current_editing = $edit_company && ((int)$edit_company['id'] === (int)$c['id']);
+                                ?>
+                                <tr class="company-row hover:bg-slate-50/80 transition-colors <?= $is_current_editing ? 'bg-amber-50/60 ring-1 ring-amber-300' : '' ?>" data-name="<?= htmlspecialchars($c['company_name'], ENT_QUOTES, 'UTF-8') ?>">
                                     <td class="row-number px-4 py-3.5 text-center text-slate-400 font-mono text-xs"><?= $i + 1 ?></td>
                                     <td class="px-4 py-3.5">
                                         <div class="flex flex-col">
-                                            <span class="font-bold text-slate-800 text-sm"><?= htmlspecialchars($c['company_name']) ?></span>
+                                            <div class="flex items-center gap-2">
+                                                <span class="font-bold text-slate-800 text-sm"><?= htmlspecialchars($c['company_name']) ?></span>
+                                                <?php if ($is_current_editing): ?>
+                                                <span class="text-[10px] font-extrabold uppercase px-1.5 py-0.5 bg-amber-200 text-amber-900 rounded">Editing</span>
+                                                <?php endif; ?>
+                                            </div>
                                             <?php if (!empty($c['website'])): ?>
                                             <a href="<?= htmlspecialchars($c['website']) ?>" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-xs font-medium text-teal-600 hover:text-teal-700 hover:underline mt-0.5 w-fit">
                                                 <i class="fa-solid fa-globe text-[11px] text-teal-500"></i>
@@ -311,8 +327,9 @@ if (isset($_GET['edit'])) {
                                     </td>
                                     <td class="px-4 py-3.5 text-center">
                                         <div class="flex items-center justify-center gap-1.5">
-                                            <a href="?edit=<?= $c['id'] ?>" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/60 shadow-xs transition" title="Edit company">
-                                                <i class="fa-regular fa-pen-to-square mr-1"></i>Edit
+                                            <a href="?edit=<?= (int)$c['id'] ?>#companyForm" class="px-2.5 py-1.5 <?= $is_current_editing ? 'bg-amber-500 text-white shadow-xs' : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/60' ?> text-xs font-bold rounded-lg shadow-xs transition inline-flex items-center gap-1" title="Edit company">
+                                                <i class="fa-regular fa-pen-to-square"></i>
+                                                <span>Edit</span>
                                             </a>
                                             <form method="POST" onsubmit="return confirm('Delete company &quot;<?= htmlspecialchars($c['company_name'], ENT_QUOTES) ?>&quot;?')" class="inline">
                                                 <input type="hidden" name="delete_company" value="1">

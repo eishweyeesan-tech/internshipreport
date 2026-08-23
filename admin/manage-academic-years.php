@@ -171,11 +171,9 @@ $selected_year_history = [];
                                 <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-xs">
                                     <th class="px-5 py-3 text-left">Year</th>
                                     <th class="px-5 py-3 text-left">Duration</th>
-                                    <th class="px-5 py-3 text-center">Status</th>
-                                    <th class="px-5 py-3 text-center">Current</th>
+                                    <th class="px-5 py-3 text-center">Current Session</th>
                                     <th class="px-5 py-3 text-center">Students</th>
                                     <th class="px-5 py-3 text-center">Supervisors</th>
-                                    <th class="px-5 py-3 text-left">Created</th>
                                     <th class="px-5 py-3 text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -184,12 +182,6 @@ $selected_year_history = [];
                                 <?php
                                     $is_current = (int) $y['is_current'] === 1;
                                     $status_str = strtoupper($y['status']);
-                                    $status_cfg = match($status_str) {
-                                        'ACTIVE'   => ['bg-emerald-100 text-emerald-700 border-emerald-200', '🟢 Active'],
-                                        'UPCOMING' => ['bg-blue-100 text-blue-700 border-blue-200',       '🔵 Upcoming'],
-                                        'ARCHIVED' => ['bg-slate-100 text-slate-500 border-slate-200',    '📦 Archived'],
-                                        default    => ['bg-slate-100 text-slate-500 border-slate-200',    '—'],
-                                    };
                                 ?>
                                 <tr class="hover:bg-slate-50/50 transition <?= $is_current ? 'bg-emerald-50/30' : '' ?>">
                                     <td class="px-5 py-4">
@@ -199,7 +191,6 @@ $selected_year_history = [];
                                             </div>
                                             <div>
                                                 <p class="font-bold text-slate-800"><?= htmlspecialchars($y['year_label']) ?></p>
-                                                <p class="text-caption text-slate-400">ID: <?= $y['id'] ?></p>
                                             </div>
                                         </div>
                                     </td>
@@ -207,17 +198,16 @@ $selected_year_history = [];
                                         <?= (new DateTime($y['start_date']))->format('d M Y') ?> – <?= (new DateTime($y['end_date']))->format('d M Y') ?>
                                     </td>
                                     <td class="px-5 py-4 text-center">
-                                        <span class="inline-block text-micro font-bold px-2.5 py-1 rounded-full border <?= $status_cfg[0] ?>">
-                                            <?= $status_cfg[1] ?>
-                                        </span>
-                                    </td>
-                                    <td class="px-5 py-4 text-center">
                                         <?php if ($is_current): ?>
-                                        <span class="inline-flex items-center gap-1 text-micro font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                                             <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Current
                                         </span>
+                                        <?php elseif ($status_str === 'ARCHIVED'): ?>
+                                        <span class="inline-flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
+                                            📦 Archived
+                                        </span>
                                         <?php else: ?>
-                                        <span class="text-slate-300 text-micro">—</span>
+                                        <span class="text-slate-300 text-xs">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="px-5 py-4 text-center">
@@ -226,42 +216,28 @@ $selected_year_history = [];
                                     <td class="px-5 py-4 text-center">
                                         <span class="font-bold text-slate-700"><?= $y['supervisor_count'] ?></span>
                                     </td>
-                                    <td class="px-5 py-4 text-slate-400 whitespace-nowrap text-xs">
-                                        <?= (new DateTime($y['created_at']))->format('d M Y, H:i') ?>
-                                    </td>
                                     <td class="px-5 py-4 text-right">
                                         <div class="flex items-center justify-end gap-2">
                                             <button type="button"
                                                     onclick="openYearDetailsModal(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label'], ENT_QUOTES) ?>')"
-                                                    class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1 border border-indigo-200/60">
+                                                    class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 border border-indigo-200/60">
                                                 📋 Details
                                             </button>
-                                            <?php if ($is_current): ?>
-                                            <span class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold rounded-xl cursor-default">
-                                                ✓ Active Session
-                                            </span>
-                                            <button type="button"
-                                                    onclick="confirmArchiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>', <?= (int)$y['student_count'] ?>)"
-                                                    class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1">
-                                                📦 Archive
-                                            </button>
-                                            <?php else: ?>
+
+                                            <?php if (!$is_current): ?>
                                             <button type="button"
                                                     onclick="setActiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>')"
-                                                    class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1">
+                                                    class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1">
                                                 ⭐ Set Active
                                             </button>
+                                            <?php endif; ?>
+
                                             <?php if ($status_str !== 'ARCHIVED'): ?>
                                             <button type="button"
                                                     onclick="confirmArchiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>', <?= (int)$y['student_count'] ?>)"
-                                                    class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-1">
+                                                    class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1">
                                                 📦 Archive
                                             </button>
-                                            <?php else: ?>
-                                            <span class="px-3 py-1.5 bg-slate-100 text-slate-400 text-xs font-bold rounded-xl cursor-default">
-                                                Archived
-                                            </span>
-                                            <?php endif; ?>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -421,7 +397,7 @@ document.getElementById('create_year_label').addEventListener('input', function(
 
 // ── Set Active Year ──────────────────────────────────────────────
 function setActiveYear(id, label) {
-    if (!confirm('Set academic year "' + label + '" as the active current year?')) return;
+    if (!confirm('Set academic year "' + label + '" as the active current year?\n\nThis will automatically archive previous academic years and their students.')) return;
     
     var fd = new FormData();
     fd.append('id', id);

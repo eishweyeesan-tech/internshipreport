@@ -13,6 +13,7 @@
 
 require_once __DIR__ . '/../../includes/ui_helpers.php';
 require_once __DIR__ . '/../../config/notify.php';
+require_once __DIR__ . '/../../includes/notification_actions.php';
 
 $topbar_sup_id = (int)($_SESSION['user_id'] ?? 0);
 $topbar_sup_pic = $_SESSION['profile_pic'] ?? '';
@@ -20,8 +21,12 @@ $topbar_sup_email = $_SESSION['email'] ?? '';
 $topbar_sup_raw_name = $sup_name ?? ($_SESSION['username'] ?? 'Supervisor');
 $topbar_sup_name = function_exists('format_supervisor_name') ? format_supervisor_name($topbar_sup_raw_name) : $topbar_sup_raw_name;
 
+if (!isset($db) || !$db) {
+    $db = $mysqli ?? $conn ?? null;
+}
 
 if ($topbar_sup_id > 0 && isset($db) && $db) {
+    handle_notification_ajax_actions($db, $topbar_sup_id);
     if (empty($topbar_sup_pic) || empty($topbar_sup_email)) {
         $_uinfo = $db->prepare("SELECT email, profile_pic FROM users WHERE id = ?");
         if ($_uinfo) {
@@ -34,14 +39,38 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
             }
         }
     }
+
+    if (!isset($unread_notif_count)) {
+        $_unr = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
+        if ($_unr) {
+            $_unr->bind_param("i", $topbar_sup_id);
+            $_unr->execute();
+            $_res = $_unr->get_result();
+            $_row = $_res ? $_res->fetch_row() : null;
+            $unread_notif_count = (int)($_row[0] ?? 0);
+        } else {
+            $unread_notif_count = 0;
+        }
+    }
+    if (!isset($recent_notifications)) {
+        $_rnr = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 15");
+        if ($_rnr) {
+            $_rnr->bind_param("i", $topbar_sup_id);
+            $_rnr->execute();
+            $_res = $_rnr->get_result();
+            $recent_notifications = $_res ? $_res->fetch_all(MYSQLI_ASSOC) : [];
+        } else {
+            $recent_notifications = [];
+        }
+    }
 }
 ?>
-<header class="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 shrink-0 shadow-xs relative z-[1050] print:hidden">
+<header class="h-16 bg-white border-b border-teal-100 flex items-center justify-between px-4 lg:px-6 shrink-0 relative z-50 print:hidden">
     <div class="flex items-center gap-3 flex-1 min-w-0">
-        <button type="button" onclick="toggleSupervisorSidebar()" class="lg:hidden p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer" aria-label="Toggle Navigation">
+        <button type="button" onclick="toggleSupervisorSidebar()" class="lg:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer" aria-label="Toggle Navigation">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <h1 class="text-base font-bold text-slate-800 hidden sm:block"><?= htmlspecialchars($pageTitle ?? 'Supervisor Dashboard') ?></h1>
+        <span class="text-lg font-bold text-slate-800 hidden sm:block"><?= htmlspecialchars($pageTitle ?? 'Supervisor Dashboard') ?></span>
 
         <?php if (!empty($show_topbar_search) && isset($search)): ?>
         <!-- Search Form -->
@@ -59,7 +88,7 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
         <?php endif; ?>
     </div>
 
-    <div class="flex items-center gap-4 shrink-0 h-full justify-end">
+    <div class="flex items-center gap-3 shrink-0 h-full justify-end">
         <?php if (!empty($show_topbar_pending) && isset($pending_reviews) && $pending_reviews !== null): ?>
         <div class="flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full shadow-xs">
             <span class="w-2 h-2 rounded-full bg-amber-500 <?= $pending_reviews > 0 ? 'animate-pulse' : '' ?>"></span>
@@ -67,138 +96,112 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
         </div>
         <?php endif; ?>
 
-        <!-- Notification Bell -->
+        <!-- Notification Bell – Facebook Style (Identical to Student Topbar) -->
         <div class="relative" id="notif-bell-wrapper">
-            <button onclick="toggleNotifDropdown()" class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition cursor-pointer" aria-label="Notifications">
+            <button onclick="toggleNotifDropdown(event)" class="relative p-2 hover:bg-teal-50 rounded-full transition cursor-pointer" id="notif-bell-btn" aria-label="Notifications">
                 <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                 <?php if (($unread_notif_count ?? 0) > 0): ?>
-                <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
+                <span id="notif-badge" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
+                <?php else: ?>
+                <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full items-center justify-center border-2 border-white shadow-sm">0</span>
                 <?php endif; ?>
             </button>
 
-            <!-- Notification Dropdown -->
-            <div id="notif-dropdown" class="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
-                <div class="p-3 border-b border-slate-100 flex items-center justify-between bg-teal-50/60">
-                    <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Notifications</h4>
-                    <?php if (($unread_notif_count ?? 0) > 0): ?>
-                    <button onclick="markAllNotifsRead()" id="notif-mark-all-btn" class="text-label font-bold text-teal-700 hover:text-teal-900 hover:bg-teal-100/60 px-2 py-1 rounded transition cursor-pointer">Mark all read</button>
-                    <?php endif; ?>
+            <!-- Notification Dropdown Menu -->
+            <div id="notif-dropdown" class="hidden absolute right-0 top-full mt-2 w-[360px] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gradient-to-br from-teal-50/80 to-white/60">
+                    <h3 class="text-[17px] font-bold text-gray-900">Notifications</h3>
+                    <button onclick="markAllSupervisorNotificationsRead()" id="notif-mark-all-btn" class="text-[13px] font-semibold text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-2 py-1 rounded-lg transition cursor-pointer <?= ($unread_notif_count ?? 0) === 0 ? 'hidden' : '' ?>">Mark all as read</button>
                 </div>
-                <div class="max-h-80 overflow-y-auto">
+                <div class="max-h-[420px] overflow-y-auto" id="notif-list">
                     <?php if (!empty($recent_notifications)): ?>
-                    <?php foreach ($recent_notifications as $notif): ?>
-                    <?php $notif_url = function_exists('notif_redirect_url') ? notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null) : 'supervisor-reports.php'; ?>
-                    <a href="<?= htmlspecialchars($notif_url) ?>" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)" class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-teal-50/50' : '' ?> hover:bg-teal-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer block no-underline">
-                        <?php if ($notif['type'] === 'instructor_approved'): ?>
-                        <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm mt-0.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                        </div>
-                        <?php elseif ($notif['type'] === 'instructor_rejected'): ?>
-                        <div class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm mt-0.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </div>
-                        <?php else: ?>
-                        <div class="w-8 h-8 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm mt-0.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                        </div>
-                        <?php endif; ?>
-                        <div class="min-w-0 flex-1">
-                            <p class="text-caption font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-600' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
-                            <p class="text-label text-slate-500 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
-                            <p class="text-caption text-slate-400 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
-                        </div>
-                        <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
+                        <?php
+                        $_today = (new DateTime())->format('Y-m-d');
+                        $_section = '';
+                        foreach ($recent_notifications as $notif):
+                            $_ndate = (new DateTime($notif['created_at']))->format('Y-m-d');
+                            if ($_ndate === $_today && $_section !== 'today') {
+                                $_section = 'today';
+                                echo '<div class="px-4 pt-3 pb-1"><p class="text-[13px] font-bold text-gray-900">New</p></div>';
+                            } elseif ($_ndate !== $_today && $_section !== 'older') {
+                                $_section = 'older';
+                                echo '<div class="px-4 pt-3 pb-1 border-t border-gray-100"><p class="text-[13px] font-bold text-gray-900">Earlier</p></div>';
+                            }
+                            $notif_url = function_exists('notif_redirect_url') ? notif_redirect_url($notif['type'], $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null) : 'supervisor-reports.php';
+                        ?>
+                        <a href="<?= htmlspecialchars($notif_url) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-teal-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$notif['is_read'] ? 'bg-teal-50/40' : '' ?>" onclick="return onSupervisorNotifClick(event, this)" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>">
                             <?php if (!$notif['is_read']): ?>
-                            <span class="unread-dot w-2 h-2 rounded-full bg-teal-500 shadow-sm"></span>
+                            <span class="unread-dot w-2.5 h-2.5 bg-teal-500 rounded-full flex-shrink-0 mt-2 shadow-sm"></span>
+                            <?php else: ?>
+                            <span class="w-2.5 flex-shrink-0 mt-2"></span>
                             <?php endif; ?>
-                            <div class="relative">
-                                <button onclick="event.stopPropagation(); toggleNotifOptions(this)" class="w-6 h-6 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition opacity-0 group-hover:opacity-100 cursor-pointer" title="More options">
-                                    <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-                                </button>
-                                <div class="hidden absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1 notif-options-menu" onclick="event.stopPropagation();">
-                                    <?php if (!$notif['is_read']): ?>
-                                    <form method="POST" class="inline">
-                                        <input type="hidden" name="notification_id" value="<?= (int)$notif['id'] ?>">
-                                        <button type="submit" name="mark_notification_read" class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition flex items-center gap-2 cursor-pointer">
-                                            <svg class="w-3 h-3 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                            Mark as read
-                                        </button>
-                                    </form>
-                                    <?php else: ?>
-                                    <div class="px-3 py-2 text-xs font-medium text-slate-400 flex items-center gap-2">
-                                        <svg class="w-3 h-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                                        Already read
-                                    </div>
-                                    <?php endif; ?>
-                                    <div class="my-1 border-t border-slate-100"></div>
-                                    <form method="POST" class="inline">
-                                        <input type="hidden" name="notification_id" value="<?= (int)$notif['id'] ?>">
-                                        <button type="submit" name="delete_notification" class="w-full text-left px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition flex items-center gap-2 cursor-pointer">
-                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                            Delete
-                                        </button>
-                                    </form>
-                                </div>
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0 shadow-sm <?= ($notif['type'] ?? '') === 'instructor_approved' ? 'bg-emerald-100 text-emerald-600' : (($notif['type'] ?? '') === 'instructor_rejected' ? 'bg-red-100 text-red-600' : 'bg-teal-100 text-teal-600') ?>">
+                                <?php if (($notif['type'] ?? '') === 'instructor_approved'): ?>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                                <?php elseif (($notif['type'] ?? '') === 'instructor_rejected'): ?>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                                <?php else: ?>
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                <?php endif; ?>
                             </div>
-                        </div>
-                    </a>
-                    <?php endforeach; ?>
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[13px] leading-snug <?= !$notif['is_read'] ? 'font-semibold text-gray-900' : 'text-gray-600' ?>"><?= htmlspecialchars($notif['title']) ?></p>
+                                <p class="text-[12px] text-gray-400 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
+                                <p class="text-[11px] mt-1 <?= !$notif['is_read'] ? 'text-teal-600 font-medium' : 'text-gray-400' ?>" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
+                            </div>
+                        </a>
+                        <?php endforeach; ?>
                     <?php else: ?>
-                    <div class="p-8 text-center">
-                        <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                            <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                    <div class="py-12 px-6 text-center">
+                        <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                            <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                         </div>
-                        <p class="text-xs font-semibold text-slate-400">No notifications yet</p>
-                        <p class="text-label text-slate-300 mt-1">You'll see updates here</p>
+                        <p class="text-sm font-semibold text-gray-500">No notifications</p>
+                        <p class="text-xs text-gray-400 mt-1">You're all caught up!</p>
                     </div>
                     <?php endif; ?>
                 </div>
-                <div class="border-t border-slate-100">
-                    <a href="notifications.php" class="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-teal-600 hover:bg-teal-50 transition">View all notifications</a>
+                <div class="border-t border-gray-100">
+                    <a href="notifications.php" class="block text-center py-3 text-[13px] font-semibold text-teal-600 hover:bg-teal-50 transition-colors">See all</a>
                 </div>
             </div>
         </div>
 
-        <!-- Supervisor Profile Dropdown Container -->
-        <div class="relative shrink-0" id="profileDropdownContainer">
+        <!-- Profile Dropdown Container -->
+        <div class="relative shrink-0" id="profile-dropdown-wrapper">
             <button
                 type="button"
                 onclick="toggleProfileDropdown(event)"
                 id="profile-avatar-btn"
-                class="flex items-center gap-2.5 p-1.5 pr-2 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200/80 transition-all duration-200 cursor-pointer group focus:outline-none"
+                class="flex items-center gap-2.5 p-1.5 hover:bg-teal-50 border border-transparent hover:border-teal-100 rounded-xl transition-all cursor-pointer group"
                 aria-label="Supervisor menu"
             >
-                <div class="relative shrink-0">
-                    <?php if (!empty($topbar_sup_pic)): ?>
-                    <img src="../uploads/avatars/<?= htmlspecialchars($topbar_sup_pic) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover ring-2 ring-teal-500/20 shadow-xs">
-                    <?php else: ?>
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-700 to-teal-500 flex items-center justify-center font-bold text-sm text-white shadow-xs">
-                        <?= strtoupper(substr($topbar_sup_name, 0, 1)) ?>
-                    </div>
-                    <?php endif; ?>
-                    <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+                <?php if (!empty($topbar_sup_pic)): ?>
+                <img src="../uploads/avatars/<?= htmlspecialchars($topbar_sup_pic) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-teal-200 shadow-sm shrink-0">
+                <?php else: ?>
+                <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-sm shrink-0">
+                    <?= strtoupper(substr($topbar_sup_name, 0, 1)) ?>
                 </div>
+                <?php endif; ?>
                 <div class="text-left hidden sm:block">
-                    <p class="font-bold text-xs text-slate-800 leading-tight group-hover:text-teal-700 transition-colors"><?= htmlspecialchars($topbar_sup_name) ?></p>
-                    <p class="text-[11px] font-medium text-slate-400">Supervisor</p>
+                    <p class="font-semibold text-sm text-slate-800 leading-tight group-hover:text-teal-800 transition-colors"><?= htmlspecialchars($topbar_sup_name) ?></p>
+                    <p class="text-xs font-medium text-teal-700 capitalize">Supervisor</p>
                 </div>
-                <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
-                </svg>
+                <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
 
             <!-- Profile Dropdown Menu -->
             <div
                 id="profile-dropdown-menu"
-                class="hidden absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl shadow-slate-900/10 border border-slate-200/80 p-2 z-50 transition-all duration-200 ease-out"
+                class="hidden absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-teal-100 p-2 z-50 transition-all duration-200 ease-out divide-y divide-slate-100"
             >
-                <!-- User Info Card Header -->
-                <div class="p-3 bg-gradient-to-br from-slate-50 to-teal-50/40 rounded-xl border border-slate-100 mb-1.5 flex items-center gap-3">
+                <!-- User Info Header -->
+                <div class="p-3 bg-gradient-to-br from-slate-50 to-teal-50/50 rounded-xl border border-teal-100/60 mb-1.5 flex items-center gap-3">
                     <div class="relative shrink-0">
                         <?php if (!empty($topbar_sup_pic)): ?>
-                        <img src="../uploads/avatars/<?= htmlspecialchars($topbar_sup_pic) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-slate-200/80 shadow-xs">
+                        <img src="../uploads/avatars/<?= htmlspecialchars($topbar_sup_pic) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-teal-200 shadow-xs">
                         <?php else: ?>
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-teal-700 to-teal-500 flex items-center justify-center font-bold text-sm text-white shadow-xs">
+                        <div class="w-10 h-10 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-xs">
                             <?= strtoupper(substr($topbar_sup_name, 0, 1)) ?>
                         </div>
                         <?php endif; ?>
@@ -213,33 +216,21 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
                 </div>
 
                 <!-- Menu Items -->
-                <div class="space-y-1">
-                    <a href="profile.php" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-teal-50/70 hover:text-teal-900 transition-all duration-150 group">
-                        <div class="flex items-center gap-2.5">
-                            <span class="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-colors duration-150 shrink-0">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                            </span>
-                            <div>
-                                <p class="font-semibold text-slate-800 group-hover:text-teal-900 leading-tight">My Profile</p>
-                                <p class="text-[10px] text-slate-400 font-normal mt-0.5">Account & profile settings</p>
-                            </div>
-                        </div>
-                        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                        </svg>
+                <div class="space-y-0.5 py-1">
+                    <a href="profile.php" class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
+                        <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                        <span>My Profile</span>
+                    </a>
+                    <a href="profile.php#password-section" class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
+                        <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                        <span>Change Password</span>
                     </a>
                 </div>
 
-                <div class="my-1.5 border-t border-slate-100"></div>
-
-                <div>
-                    <a href="../logout.php" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-all duration-150 group">
-                        <div class="flex items-center gap-2.5">
-                            <span class="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-colors duration-150 shrink-0">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                            </span>
-                            <span class="font-semibold text-rose-600 group-hover:text-rose-700">Sign Out</span>
-                        </div>
+                <div class="pt-1">
+                    <a href="../logout.php" class="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition">
+                        <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        <span>Logout</span>
                     </a>
                 </div>
             </div>
@@ -247,3 +238,92 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
     </div>
 </header>
 
+<script>
+function toggleSupervisorSidebar() {
+    var sb = document.getElementById('supervisorSidebar');
+    var bd = document.getElementById('supervisorSidebarBackdrop');
+    if (!sb) return;
+    if (sb.classList.contains('-translate-x-full')) {
+        sb.classList.remove('-translate-x-full');
+        if (bd) bd.classList.remove('hidden');
+    } else {
+        sb.classList.add('-translate-x-full');
+        if (bd) bd.classList.add('hidden');
+    }
+}
+
+function toggleProfileDropdown(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    var menu = document.getElementById('profile-dropdown-menu');
+    if (!menu) return;
+    var notifMenu = document.getElementById('notif-dropdown');
+    if (notifMenu) {
+        notifMenu.classList.add('hidden');
+        notifMenu.style.opacity = '0';
+        notifMenu.style.visibility = 'hidden';
+    }
+    menu.classList.toggle('hidden');
+}
+
+function toggleNotifDropdown(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    var notifMenu = document.getElementById('notif-dropdown');
+    if (!notifMenu) return;
+    var profileMenu = document.getElementById('profile-dropdown-menu');
+    if (profileMenu) profileMenu.classList.add('hidden');
+
+    var isHidden = notifMenu.classList.contains('hidden') || notifMenu.style.visibility === 'hidden' || notifMenu.style.opacity === '0';
+    if (!isHidden) {
+        notifMenu.style.opacity    = '0';
+        notifMenu.style.visibility = 'hidden';
+        notifMenu.style.transform  = 'translateY(-8px) scale(0.95)';
+        notifMenu.classList.add('hidden');
+    } else {
+        notifMenu.classList.remove('hidden');
+        notifMenu.style.opacity    = '1';
+        notifMenu.style.visibility = 'visible';
+        notifMenu.style.transform  = 'translateY(0) scale(1)';
+    }
+}
+
+document.addEventListener('click', function(e) {
+    var profileWrapper = document.getElementById('profile-dropdown-wrapper') || document.getElementById('profileDropdownContainer');
+    var profileMenu = document.getElementById('profile-dropdown-menu');
+    if (profileMenu && !profileMenu.classList.contains('hidden')) {
+        if (profileWrapper && !profileWrapper.contains(e.target)) {
+            profileMenu.classList.add('hidden');
+        }
+    }
+
+    var notifWrapper = document.getElementById('notif-bell-wrapper');
+    var notifMenu = document.getElementById('notif-dropdown');
+    if (notifMenu && (!notifMenu.classList.contains('hidden') || notifMenu.style.visibility === 'visible')) {
+        if (notifWrapper && !notifWrapper.contains(e.target)) {
+            notifMenu.style.opacity = '0';
+            notifMenu.style.visibility = 'hidden';
+            notifMenu.style.transform = 'translateY(-8px) scale(0.95)';
+            notifMenu.classList.add('hidden');
+        }
+    }
+});
+
+function markAllSupervisorNotificationsRead() {
+    if (typeof markAllNotificationsRead === 'function') {
+        markAllNotificationsRead();
+    } else if (typeof markAllNotifsRead === 'function') {
+        markAllNotifsRead();
+    }
+}
+
+function onSupervisorNotifClick(e, el) {
+    if (typeof onNotificationItemClick === 'function') {
+        return onNotificationItemClick(e, el);
+    }
+}
+</script>

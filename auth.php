@@ -67,7 +67,11 @@ if (strpos($script_name, '/admin/') !== false) {
 } elseif (strpos($script_name, '/supervisor/') !== false) {
     require_role('supervisor');
 } elseif (strpos($script_name, '/student/') !== false) {
-    require_role('student');
+    if (strpos($script_name, 'print_report.php') !== false) {
+        require_role(['student', 'supervisor', 'instructor', 'admin']);
+    } else {
+        require_role('student');
+    }
 }
 
 // Load DB connection & update session user data

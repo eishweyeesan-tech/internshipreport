@@ -239,7 +239,7 @@ function build_query_url($overrides = []) {
         <?php $pageTitle = 'University Supervisor Reports'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- ════ REPORTS CONTENT ════ -->
-        <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <div class="max-w-7xl w-full mx-auto space-y-6">
 
 
@@ -380,12 +380,12 @@ function build_query_url($overrides = []) {
                                         <?php elseif ($rep_status === 'rejected'): ?>
                                         <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
                                             <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
-                                            ❌ Rejected
+                                            Rejected
                                         </span>
                                         <?php else: ?>
                                         <span class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
                                             <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                                            ⏳ Waiting for Instructor
+                                            Waiting for Instructor
                                         </span>
                                         <?php endif; ?>
                                     </td>
@@ -395,16 +395,19 @@ function build_query_url($overrides = []) {
                                     <td class="px-6 py-4 text-right">
                                         <div class="inline-flex items-center justify-end gap-1.5 flex-nowrap">
                                             <?php if ($rep_status === 'approved_by_instructor'): ?>
-                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg transition-all duration-200 shadow-xs whitespace-nowrap">
-                                                📝 Review & Grade
+                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-lg transition-all duration-200 shadow-xs whitespace-nowrap">
+                                                <svg class="w-3.5 h-3.5 text-teal-100" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                                <span>Review & Grade</span>
                                             </a>
                                             <?php else: ?>
-                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all duration-200 whitespace-nowrap">
-                                                👁️ View
+                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all duration-200 whitespace-nowrap">
+                                                <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                                <span>View</span>
                                             </a>
                                             <?php endif; ?>
-                                            <a href="../view_student_history.php?uid=<?= (int)$rep['student_id'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all duration-200 whitespace-nowrap" title="View 13-week report history">
-                                                📜 History
+                                            <a href="../view_student_history.php?uid=<?= (int)$rep['student_id'] ?>" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-lg transition-all duration-200 whitespace-nowrap" title="View 13-week report history">
+                                                <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                                <span>History</span>
                                             </a>
                                         </div>
                                     </td>
