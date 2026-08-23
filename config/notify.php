@@ -128,10 +128,10 @@ function notif_action_url($notif, $role = null)
             case 'instructor_rejected':
             case 'supervisor_approved':
                 if ($student_id && $week) {
-                    return $base . 'view-report.php?student_id=' . $student_id . '&week=' . $week;
+                    return $base . 'view-report.php?student_id=' . $student_id . '&week=' . $week . '#evaluation-panel';
                 }
                 if ($report_id) {
-                    return $base . 'view-report.php?id=' . $report_id;
+                    return $base . 'view-report.php?id=' . $report_id . '#evaluation-panel';
                 }
                 return $base . 'instructor-dashboard.php';
 
@@ -163,19 +163,27 @@ function notif_action_url($notif, $role = null)
             case 'instructor_approved':
             case 'instructor_rejected':
             case 'supervisor_approved':
-            case 'new_report_submitted':
             case 'report_needs_review':
             case 'report_submitted':
                 if ($week) {
-                    return $base . 'student-dashboard.php?week=' . $week;
+                    return $base . 'student-dashboard.php?tab=weekly-report&week=' . $week . '#feedback-section';
                 }
-                return $base . 'log-history.php';
+                return $base . 'student-dashboard.php?tab=weekly-report#feedback-section';
+
+            case 'new_report_submitted':
+                if ($week) {
+                    return $base . 'student-dashboard.php?tab=weekly-report&week=' . $week . '#weekly-report-view';
+                }
+                return $base . 'student-dashboard.php?tab=weekly-report';
 
             case 'daily_log_added':
             case 'daily_log_updated':
                 if ($week) {
-                    return $base . 'daily_log.php?week=' . $week;
+                    return $base . 'daily_log.php?week=' . $week . '#daily-log-form';
                 }
+                return $base . 'daily_log.php#daily-log-form';
+
+            case 'student_behind_schedule':
                 return $base . 'daily_log.php';
 
             case 'profile_updated':
@@ -183,6 +191,9 @@ function notif_action_url($notif, $role = null)
                 return $base . 'profile.php';
 
             default:
+                if ($week) {
+                    return $base . 'student-dashboard.php?week=' . $week;
+                }
                 return $base . 'student-dashboard.php';
         }
     }
@@ -197,6 +208,7 @@ function notif_action_url($notif, $role = null)
             if ($student_id) {
                 $url = $base . 'supervisor-review.php?student_id=' . $student_id;
                 if ($week) $url .= '&week=' . $week;
+                $url .= '#university-evaluation';
                 return $url;
             }
             return $base . 'supervisor-reports.php';
@@ -205,6 +217,7 @@ function notif_action_url($notif, $role = null)
             if ($student_id) {
                 $url = $base . 'supervisor-review.php?student_id=' . $student_id;
                 if ($week) $url .= '&week=' . $week;
+                $url .= '#instructor-feedback';
                 return $url;
             }
             return $base . 'supervisor-reports.php';

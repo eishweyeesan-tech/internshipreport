@@ -94,6 +94,36 @@ document.addEventListener('click', function(e) {
     }
 });
 
+function scrollToTargetHash(hash) {
+    if (!hash) return;
+    try {
+        var target = document.querySelector(hash);
+        if (target) {
+            setTimeout(function() {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                target.classList.add('ring-4', 'ring-teal-400/70', 'transition-all', 'duration-500');
+                setTimeout(function() {
+                    target.classList.remove('ring-4', 'ring-teal-400/70');
+                }, 2500);
+            }, 100);
+        }
+    } catch (err) {}
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.location.hash) {
+        setTimeout(function() {
+            scrollToTargetHash(window.location.hash);
+        }, 250);
+    }
+});
+
+window.addEventListener('hashchange', function() {
+    if (window.location.hash) {
+        scrollToTargetHash(window.location.hash);
+    }
+});
+
 function onNotificationItemClick(e, el) {
     e.preventDefault();
     var id = el.getAttribute('data-notif-id');
@@ -116,7 +146,15 @@ function onNotificationItemClick(e, el) {
       .catch(function() {})
       .finally(function() {
           if (redirectUrl && redirectUrl !== '#') {
-              window.location.href = redirectUrl;
+              var hashIdx = redirectUrl.indexOf('#');
+              var isSamePage = (hashIdx !== -1) && (redirectUrl.substring(0, hashIdx) === window.location.pathname || redirectUrl.substring(0, hashIdx) === window.location.pathname + window.location.search || redirectUrl.startsWith('#'));
+              if (isSamePage) {
+                  var hash = hashIdx !== -1 ? redirectUrl.substring(hashIdx) : redirectUrl;
+                  window.location.hash = hash;
+                  scrollToTargetHash(hash);
+              } else {
+                  window.location.href = redirectUrl;
+              }
           }
       });
 }

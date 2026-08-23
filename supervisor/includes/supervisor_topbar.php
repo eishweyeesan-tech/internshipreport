@@ -12,6 +12,7 @@
  */
 
 require_once __DIR__ . '/../../includes/ui_helpers.php';
+require_once __DIR__ . '/../../config/notify.php';
 
 $topbar_sup_id = (int)($_SESSION['user_id'] ?? 0);
 $topbar_sup_pic = $_SESSION['profile_pic'] ?? '';

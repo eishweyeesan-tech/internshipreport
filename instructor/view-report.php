@@ -467,7 +467,7 @@ function render_error($title, $msg, $icon) {
 
         <!-- ─── RIGHT (1/3): Evaluation Panel ─── -->
         <div class="lg:col-span-1">
-            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden sticky top-6">
+            <div id="evaluation-panel" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden sticky top-6 scroll-mt-24">
                 <div class="px-5 py-3 border-b border-slate-100">
                     <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="p-1 bg-purple-50 text-purple-600 rounded">⭐</span> Instructor Evaluation

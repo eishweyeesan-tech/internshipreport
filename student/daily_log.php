@@ -67,10 +67,43 @@ if (!empty($weeks)) {
     }
 }
 
+// Check submitted/completed weeks to auto-advance to next pending week
+$submitted_weeks = [];
+$sub_weeks_stmt = $db->prepare("
+    SELECT DISTINCT re.week_number 
+    FROM report_evaluations re
+    JOIN weekly_reflections wr ON wr.internship_id = re.student_id AND wr.week_number = re.week_number
+    WHERE re.student_id = ? 
+      AND re.student_signature_value IS NOT NULL 
+      AND re.student_signature_value != ''
+      AND re.report_status != 'rejected'
+");
+$sub_weeks_stmt->bind_param("i", $internship_id);
+$sub_weeks_stmt->execute();
+$sub_weeks_res = $sub_weeks_stmt->get_result();
+if ($sub_weeks_res) {
+    while ($sw_row = $sub_weeks_res->fetch_assoc()) {
+        $submitted_weeks[(int)$sw_row['week_number']] = true;
+    }
+}
+
+$auto_week = 1;
+if (!empty($weeks)) {
+    foreach (array_keys($weeks) as $wn) {
+        if (empty($submitted_weeks[$wn])) {
+            $auto_week = $wn;
+            break;
+        }
+    }
+    if (empty($auto_week) || !isset($weeks[$auto_week])) {
+        $auto_week = max(array_keys($weeks));
+    }
+}
+
 // SELECTED WEEK & LOCK STATUS
 $selected_week = (int) ($_GET['week'] ?? $_POST['selected_week'] ?? 0);
-if ($selected_week < 1 || $selected_week > count($weeks)) {
-    $selected_week = count($weeks) > 0 ? count($weeks) : 1;
+if ($selected_week < 1 || !isset($weeks[$selected_week])) {
+    $selected_week = $auto_week;
 }
 
 $log_locked = false;
@@ -117,53 +150,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
     } elseif (empty($log_date)) {
         $error = 'Please select a date.';
     } else {
-        $week_range = $weeks[$selected_week] ?? null;
-        if (!$week_range || $log_date < $week_range['start'] || $log_date > $week_range['end']) {
-            $error = "Date must be between {$week_range['start']} and {$week_range['end']} (Week {$selected_week}).";
-        } else {
-            $dup_stmt = $db->prepare("SELECT id FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
-            $dup_stmt->bind_param("is", $internship_id, $log_date);
-            $dup_stmt->execute();
-            $res = $dup_stmt->get_result();
-            if ($res && $res->fetch_row()) {
-                $error = "duplicate_log";
-            } else {
-                $attendance_status  = trim($_POST['attendance_status'] ?? 'present');
-                $reason_for_absence = trim($_POST['reason_for_absence'] ?? '');
-
-
-
-                $intended_task      = trim($_POST['intended_task'] ?? '');
-                $task_detail        = trim($_POST['task_detail'] ?? '');
-                $actual_task        = trim($_POST['actual_task'] ?? '');
-                $tools_used         = trim($_POST['tools_used'] ?? '');
-                $knowledge_gained   = trim($_POST['knowledge_gained'] ?? '');
-                $start_time         = trim($_POST['start_time'] ?? '09:00');
-                $end_time           = trim($_POST['end_time'] ?? '17:00');
-                $hours_worked       = trim($_POST['hours_worked'] ?? '08:00');
-
-                if ($attendance_status === 'absent') {
-                    $intended_task    = $reason_for_absence ?: 'Absent';
-                    $task_detail      = 'N/A - Absent';
-                    $actual_task      = 'N/A - Absent';
-                    $tools_used       = 'N/A - Absent';
-                    $knowledge_gained = 'N/A - Absent';
-                    $hours_worked     = '00:00';
+        // Sequential logging validation: verify all previous weekdays are logged
+        $logged_dates_map = [];
+        $ld_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ?");
+        $ld_stmt->bind_param("i", $internship_id);
+        $ld_stmt->execute();
+        $ld_res = $ld_stmt->get_result();
+        if ($ld_res) {
+            while ($row = $ld_res->fetch_assoc()) {
+                $logged_dates_map[$row['log_date']] = true;
+            }
+        }
+        
+        $missing_prior_date = null;
+        if (!empty($intern_start)) {
+            $start_dt = new DateTime($intern_start);
+            $target_dt = new DateTime($log_date);
+            $start_dt->setTime(0, 0);
+            $target_dt->setTime(0, 0);
+            
+            $chk = clone $start_dt;
+            while ($chk < $target_dt) {
+                $day_of_week = (int)$chk->format('N');
+                if ($day_of_week < 6) { // Weekdays only
+                    $chk_str = $chk->format('Y-m-d');
+                    if (empty($logged_dates_map[$chk_str])) {
+                        $missing_prior_date = $chk->format('d.m.Y');
+                        break;
+                    }
                 }
+                $chk->modify('+1 day');
+            }
+        }
+        
+        if ($missing_prior_date) {
+            $error = "error_skip_date:" . $missing_prior_date;
+        } else {
+            $week_range = $weeks[$selected_week] ?? null;
+            if (!$week_range || $log_date < $week_range['start'] || $log_date > $week_range['end']) {
+                $error = "Date must be between {$week_range['start']} and {$week_range['end']} (Week {$selected_week}).";
+            } else {
+                $dup_stmt = $db->prepare("SELECT id FROM daily_logs WHERE internship_id = ? AND log_date = ? LIMIT 1");
+                $dup_stmt->bind_param("is", $internship_id, $log_date);
+                $dup_stmt->execute();
+                $res = $dup_stmt->get_result();
+                if ($res && $res->fetch_row()) {
+                    $error = "duplicate_log";
+                } else {
+                    $attendance_status  = trim($_POST['attendance_status'] ?? 'present');
+                    $reason_for_absence = trim($_POST['reason_for_absence'] ?? '');
 
-                $ins_stmt = $db->prepare("INSERT INTO daily_logs
-                    (internship_id, log_date, attendance_status, reason_for_absence,
-                     task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins_stmt->bind_param("isssssssss",
-                    $internship_id, $log_date, $attendance_status, $reason_for_absence,
-                    $intended_task, $task_detail, $actual_task, $tools_used, $knowledge_gained, $hours_worked
-                );
-                $ins_stmt->execute();
+                    $intended_task      = trim($_POST['intended_task'] ?? '');
+                    $task_detail        = trim($_POST['task_detail'] ?? '');
+                    $actual_task        = trim($_POST['actual_task'] ?? '');
+                    $tools_used         = trim($_POST['tools_used'] ?? '');
+                    $knowledge_gained   = trim($_POST['knowledge_gained'] ?? '');
+                    $start_time         = trim($_POST['start_time'] ?? '09:00');
+                    $end_time           = trim($_POST['end_time'] ?? '17:00');
+                    $hours_worked       = trim($_POST['hours_worked'] ?? '08:00');
 
-                $success = "Daily log for {$log_date} saved successfully.";
-                $existing_logs[] = $log_date;
-                sort($existing_logs);
+                    if ($attendance_status === 'absent') {
+                        $intended_task    = $reason_for_absence ?: 'Absent';
+                        $task_detail      = 'N/A - Absent';
+                        $actual_task      = 'N/A - Absent';
+                        $tools_used       = 'N/A - Absent';
+                        $knowledge_gained = 'N/A - Absent';
+                        $hours_worked     = '00:00';
+                    }
+
+                    $ins_stmt = $db->prepare("INSERT INTO daily_logs
+                        (internship_id, log_date, attendance_status, reason_for_absence,
+                         task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                    $ins_stmt->bind_param("isssssssss",
+                        $internship_id, $log_date, $attendance_status, $reason_for_absence,
+                        $intended_task, $task_detail, $actual_task, $tools_used, $knowledge_gained, $hours_worked
+                    );
+                    $ins_stmt->execute();
+
+                    $success = "Daily log for {$log_date} saved successfully.";
+                    $existing_logs[] = $log_date;
+                    sort($existing_logs);
+                }
             }
         }
     }
@@ -295,6 +363,36 @@ if (!empty($selected_date)) {
     $adl_res = $adl_stmt->get_result();
     $active_day_log = $adl_res ? $adl_res->fetch_assoc() : null;
 }
+
+// Calculate the earliest unlogged weekday (next expected log date)
+$next_expected_date = '';
+if (!empty($intern_start)) {
+    $cursor = new DateTime($intern_start);
+    $limit_dt = !empty($intern_end) ? new DateTime($intern_end) : new DateTime('+1 year');
+    $cursor->setTime(0, 0);
+    $limit_dt->setTime(0, 0);
+    while ($cursor <= $limit_dt) {
+        $day_of_week = (int)$cursor->format('N');
+        if ($day_of_week < 6) { // Weekdays only
+            $c_iso = $cursor->format('Y-m-d');
+            if (empty($log_by_date[$c_iso])) {
+                $next_expected_date = $c_iso;
+                break;
+            }
+        }
+        $cursor->modify('+1 day');
+    }
+}
+
+// Form Date calculation
+$form_date = '';
+if ($editing_log && !empty($editing_log['log_date'])) {
+    $form_date = $editing_log['log_date'];
+} elseif (!empty($next_expected_date)) {
+    $form_date = $next_expected_date;
+} elseif (!empty($selected_date)) {
+    $form_date = $selected_date;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -364,9 +462,6 @@ if (!empty($selected_date)) {
         <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
             <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg> Dashboard
-            </a>
-            <a href="notifications.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
-                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg> Notifications
             </a>
             <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Log History
@@ -448,162 +543,6 @@ if (!empty($selected_date)) {
 
                 <?php else: ?>
 
-                <!-- ══════ WEEKDAY TIMELINE PILLS ══════ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-3.5 mb-6">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
-                            <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            Week <?= $selected_week ?> Daily Logs Timeline
-                        </span>
-                        <span class="text-caption font-bold text-slate-400">Click a day pill to view or log entry</span>
-                    </div>
-                    <div class="flex items-center gap-2 overflow-x-auto pb-1">
-                        <?php foreach ($week_dates as $d_iso): ?>
-                            <?php
-                            $d_obj = new DateTime($d_iso);
-                            $d_label = $d_obj->format('D, d M');
-                            $has_log = isset($log_by_date[$d_iso]);
-                            $is_active = ($d_iso === $selected_date);
-                            ?>
-                            <a href="daily_log.php?week=<?= $selected_week ?>&date=<?= $d_iso ?>" class="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 <?= $is_active ? 'bg-teal-700 text-white border-teal-700 shadow-sm' : ($has_log ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100') ?>">
-                                <span><?= $d_label ?></span>
-                                <?php if ($has_log): ?>
-                                <span class="w-4 h-4 rounded-full <?= $is_active ? 'bg-white text-teal-700' : 'bg-emerald-500 text-white' ?> flex items-center justify-center text-micro">✓</span>
-                                <?php else: ?>
-                                <span class="w-4 h-4 rounded-full <?= $is_active ? 'bg-teal-600 text-white' : 'bg-slate-200 text-slate-500' ?> flex items-center justify-center text-micro">+</span>
-                                <?php endif; ?>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-
-                <!-- ═══════════ DAILY LOG FORM / VIEW CARD ═══════════ -->
-                <?php if ($log_locked): ?>
-                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 mb-6">
-                    <div class="flex items-center gap-3">
-                        <svg class="w-6 h-6 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h.01M5 21h14a2 2 0 001.71-3L13.71 4.86a2 2 0 00-3.42 0L3.29 18a2 2 0 001.71 3z"/></svg>
-                        <div>
-                            <h2 class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Week <?= $selected_week ?> is Locked</h2>
-                            <p class="text-xs text-amber-600 mt-1">You have signed this week's report. Daily logs cannot be edited until the instructor reviews and rejects the report.</p>
-                        </div>
-                    </div>
-                </div>
-                <?php endif; ?>
-
-                <?php if ($active_day_log && !$editing_log): ?>
-
-                <!-- ════ SUBMITTED DAILY LOG — DATA CARD VIEW ════ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50/60 to-slate-50 flex items-center justify-between flex-wrap gap-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-sm shadow-sm">
-                                <?= (new DateTime($active_day_log['log_date']))->format('D') ?>
-                            </div>
-                            <div>
-                                <h2 class="text-sm font-black text-slate-800 flex items-center gap-2">
-                                    Daily Log — <?= (new DateTime($active_day_log['log_date']))->format('d M Y') ?>
-                                </h2>
-                                <p class="text-caption text-slate-400 font-semibold">
-                                    Week <?= $selected_week ?> • <?= (new DateTime($active_day_log['log_date']))->format('l') ?>
-                                </p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <?php if (!empty($active_day_log['created_at'])): ?>
-                            <span class="inline-flex items-center gap-1.5 text-label font-bold text-slate-600 bg-white border border-slate-200 px-3 py-1 rounded-full shadow-2xs">
-                                <svg class="w-3.5 h-3.5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                Submitted <?= htmlspecialchars((new DateTime($active_day_log['created_at']))->format('d M Y, h:i A')) ?>
-                            </span>
-                            <?php endif; ?>
-                            <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                Submitted
-                            </span>
-                            <?php if (!$log_locked): ?>
-                            <a href="daily_log.php?week=<?= $selected_week ?>&date=<?= $selected_date ?>&edit=<?= $active_day_log['id'] ?>" class="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200 transition">
-                                ✏️ Edit Log
-                            </a>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-
-                    <div class="p-6 space-y-5">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Attendance Status</span>
-                                <?php
-                                $att = $active_day_log['attendance_status'] ?? 'present';
-                                $reason = $active_day_log['reason_for_absence'] ?? '';
-                                $is_holiday = ($att === 'leave' || $att === 'absent') && stripos($reason, 'Public Holiday') === 0;
-                                ?>
-                                <?php if ($is_holiday): ?>
-                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200">Public Holiday</span>
-                                <?php elseif ($att === 'present'): ?>
-                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">Present</span>
-                                <?php else: ?>
-                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-lg border border-red-200">Absent</span>
-                                <?php endif; ?>
-                            </div>
-                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Working Duration</span>
-                                <p class="text-sm font-mono font-bold text-teal-700 flex items-center gap-2">
-                                    <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    <?= htmlspecialchars($active_day_log['calculated_duration'] ?? '08:00') ?> hrs
-                                </p>
-                            </div>
-                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Log Date</span>
-                                <p class="text-sm font-bold text-slate-700"><?= (new DateTime($active_day_log['log_date']))->format('d M Y (D)') ?></p>
-                            </div>
-                        </div>
-
-                        <?php if ($att === 'absent' || $is_holiday): ?>
-                        <div class="bg-red-50/60 rounded-xl p-4 border border-red-100">
-                            <span class="text-caption font-bold text-red-500 uppercase tracking-wider block mb-1">Reason for Absence / Leave</span>
-                            <p class="text-sm text-red-700 font-medium"><?= htmlspecialchars($reason ?: 'No reason provided.') ?></p>
-                        </div>
-                        <?php else: ?>
-
-                        <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                            <span class="text-caption font-bold text-teal-700 uppercase tracking-wider block mb-1">Intended Task / Summary</span>
-                            <p class="text-sm font-semibold text-slate-800 leading-relaxed"><?= htmlspecialchars($active_day_log['task_title'] ?: '—') ?></p>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Task Detail Breakdown</span>
-                                <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['task_detail'] ?: '—')) ?></p>
-                            </div>
-                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Actual Tasks Accomplished</span>
-                                <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['tasks_performed'] ?: '—')) ?></p>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-2">Tools & Tech Used</span>
-                                <?php if (!empty($active_day_log['tools_used'])): ?>
-                                    <div class="flex items-center gap-1.5 flex-wrap">
-                                        <?php foreach (explode(',', $active_day_log['tools_used']) as $tool): ?>
-                                            <span class="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-teal-700 shadow-2xs"><?= htmlspecialchars(trim($tool)) ?></span>
-                                        <?php endforeach; ?>
-                                    </div>
-                                <?php else: ?>
-                                    <p class="text-sm text-slate-400 italic">None specified</p>
-                                <?php endif; ?>
-                            </div>
-                            <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Knowledge Gained & Skills</span>
-                                <p class="text-sm text-slate-700 leading-relaxed"><?= htmlspecialchars($active_day_log['learnt_skills'] ?: '—') ?></p>
-                            </div>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <?php else: ?>
-
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 <?= $log_locked ? 'hidden' : '' ?>">
                     <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center gap-2">
                         <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg> <?= $editing_log ? 'Edit Log Entry' : 'New Log Entry' ?>
@@ -631,14 +570,15 @@ if (!empty($selected_date)) {
 
                         <!-- Date Picker -->
                         <div>
-                            <label class="block text-sm font-bold text-slate-500 mb-1">Log Date</label>
+                            <label class="block text-sm font-bold text-slate-500 mb-1">Log Date / Day <span class="text-slate-400 font-normal">/ ရက်စွဲရွေးချယ်ပါ</span></label>
                             <div id="logDateWrap" class="relative">
-                                <input type="text" name="log_date" id="logDate" required readonly <?= ($editing_log || $selected_week > 0) ? '' : 'disabled' ?>
-                                    value="<?= $editing_log ? htmlspecialchars($editing_log['log_date']) : '' ?>"
-                                    placeholder="<?= ($editing_log || $selected_week > 0) ? 'Select a date…' : 'Select a week first…' ?>"
-                                    class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                <input type="date" name="log_date" id="logDate" required
+                                    value="<?= htmlspecialchars($form_date ?? '') ?>"
+                                    min="<?= htmlspecialchars($intern_start ?? '') ?>"
+                                    max="<?= htmlspecialchars(!$editing_log && !empty($next_expected_date) ? $next_expected_date : ($intern_end ?? '')) ?>"
+                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition cursor-pointer">
                             </div>
-                            <p id="dateHint" class="text-sm text-slate-400 mt-1"><?= $editing_log ? 'Editing existing log' : 'Select a week first to open the calendar.' ?></p>
+                            <p id="dateHint" class="text-sm text-slate-400 mt-1"><?= $editing_log ? 'Editing existing log' : 'Choose a date from the calendar.' ?></p>
                         </div>
 
                         <!-- Attendance Status -->
@@ -726,7 +666,6 @@ if (!empty($selected_date)) {
                     </form>
                 </div>
                 <?php endif; ?>
-                <?php endif; ?>
 
                 <!-- ═══════════ LOG HISTORY TABLE ═══════════ -->
                 <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
@@ -745,7 +684,7 @@ if (!empty($selected_date)) {
                                 <option value="<?= $wn ?>" <?= $selected_week == $wn ? 'selected' : '' ?>>Week <?= $wn ?></option>
                                 <?php endforeach; ?>
                             </select>
-                            <button onclick="window.print()" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition group cursor-pointer">
+                            <button onclick="window.open('print_report.php?week=' + document.getElementById('tableWeekSelect').value, '_blank')" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition group cursor-pointer">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg> Print
                             </button>
                         </div>
@@ -892,9 +831,25 @@ if (!empty($selected_date)) {
 (function () {
     var weekRanges   = <?= json_encode($weeks, JSON_HEX_TAG) ?>;
     var existingLogs = <?= json_encode($existing_logs, JSON_HEX_TAG) ?>;
+    var submittedWeeks = <?= json_encode($submitted_weeks, JSON_HEX_TAG) ?>;
     var existingSet  = {};
     if (Array.isArray(existingLogs)) {
         existingLogs.forEach(function (d) { existingSet[d] = true; });
+    }
+
+    function getWeekForDate(iso) {
+        if (!iso) return 0;
+        if (weekRanges) {
+            for (var wn in weekRanges) {
+                if (weekRanges.hasOwnProperty(wn)) {
+                    var range = weekRanges[wn];
+                    if (iso >= range.start && iso <= range.end) {
+                        return parseInt(wn, 10);
+                    }
+                }
+            }
+        }
+        return 0;
     }
 
     var dateInput  = document.getElementById('logDate');
@@ -926,9 +881,80 @@ if (!empty($selected_date)) {
             if (!dateStr) return;
             var d   = new Date(dateStr + 'T00:00:00');
             var day = dayName(d);
+            var curWn = parseInt(weekSelect ? weekSelect.value : '<?= $selected_week ?>', 10);
+
+            var dow = d.getDay();
+            if (dow === 0 || dow === 6) {
+                fp.clear();
+                openDateAlertModal({
+                    title: 'ပိတ်ရက် ရွေးချယ်၍ မရပါ',
+                    badge: 'Weekend Day',
+                    message: 'Weekend days (Saturday & Sunday) are not available for daily logs. Please select a weekday.',
+                    myanmarNote: 'စနေ နှင့် တနင်္ဂနွေ ပိတ်ရက်များတွင် Daily Log ဖြည့်သွင်းခွင့် မရှိပါ။ တနင်္လာ မှ သောကြာ ကြား အလုပ်လုပ်ရက်ကို ရွေးချယ်ပေးပါရန်။',
+                    type: 'warning'
+                });
+                return;
+            }
+
+            var dateWeek = getWeekForDate(dateStr);
+            if (dateWeek > 0 && dateWeek !== curWn) {
+                fp.clear();
+                var isThatWeekSubmitted = submittedWeeks && Boolean(submittedWeeks[dateWeek]);
+                if (isThatWeekSubmitted) {
+                    openDateAlertModal({
+                        title: 'အစီရင်ခံစာ တင်ပြီးသော ရက်စွဲဖြစ်နေပါသည်',
+                        badge: 'Report Submitted (Locked)',
+                        message: 'This date belongs to Week ' + dateWeek + ', which has already been submitted and locked.',
+                        myanmarNote: 'ရွေးချယ်ထားသော ရက်စွဲသည် Week ' + dateWeek + ' မှ ရက်စွဲဖြစ်ပြီး Weekly Report တင်သွင်းပြီးဖြစ်၍ ပြင်ဆင်ခွင့် မရှိတော့ပါ။ လက်ရှိ Week ' + curWn + ' အတွင်းရှိ ရက်စွဲကိုသာ ရွေးချယ်ပေးပါရန်။',
+                        type: 'warning'
+                    });
+                } else {
+                    openDateAlertModal({
+                        title: 'အခြား Week မှ ရက်စွဲဖြစ်နေပါသည်',
+                        badge: 'Out of Current Week',
+                        message: 'This date belongs to Week ' + dateWeek + '.',
+                        myanmarNote: 'ရွေးချယ်ထားသော ရက်စွဲသည် Week ' + dateWeek + ' မှ ရက်စွဲဖြစ်ပါသည်။ လက်ရှိ Week ' + curWn + ' အတွင်းရှိ ရက်စွဲကိုသာ ရွေးချယ်ပေးပါရန်။',
+                        type: 'warning'
+                    });
+                }
+                return;
+            }
+
+            if (submittedWeeks && Boolean(submittedWeeks[curWn])) {
+                fp.clear();
+                openDateAlertModal({
+                    title: 'အစီရင်ခံစာ တင်ပြီးဖြစ်ပါသည်',
+                    badge: 'Report Submitted (Locked)',
+                    message: 'Week ' + curWn + ' report has already been submitted and is locked.',
+                    myanmarNote: 'Week ' + curWn + ' အတွက် Weekly Report တင်သွင်းပြီးဖြစ်၍ မှတ်တမ်းအသစ်ဖြည့်ခြင်း သို့မဟုတ် ပြင်ဆင်ခြင်း မပြုလုပ်နိုင်တော့ပါ။',
+                    type: 'warning'
+                });
+                return;
+            }
+
             if (existingSet[dateStr]) {
                 fp.clear();
-                showToast('A log for ' + dateStr + ' already exists.', 'error');
+                openDateAlertModal({
+                    title: 'မှတ်တမ်း ဖြည့်သွင်းပြီးဖြစ်ပါသည်',
+                    badge: 'Daily Log Exists',
+                    message: 'A daily log for ' + dateStr + ' already exists in Week ' + curWn + '.',
+                    myanmarNote: 'ရွေးချယ်ထားသော ရက်စွဲ (' + dateStr + ') အတွက် Daily Log ရေးသွင်းပြီး ဖြစ်ပါသည်။ ပြင်ဆင်လိုပါက အောက်ပါ History ဇယားတွင် Edit ပြုလုပ်နိုင်ပါသည်။',
+                    type: 'warning'
+                });
+                return;
+            }
+
+            // Sequential check
+            var missingDate = getMissingPriorDate(dateStr);
+            if (missingDate) {
+                fp.clear();
+                openDateAlertModal({
+                    title: 'ရက်ကျော်၍ ဖြည့်သွင်းခွင့် မရှိပါ',
+                    badge: 'Sequential Logging Required',
+                    message: 'Cannot skip days. Please log the missing working day (' + missingDate + ') first before logging this date.',
+                    myanmarNote: 'ရက်ကျော်၍ ဖြည့်သွင်းခွင့် မရှိပါ။ ကျန်ရှိနေသော အလုပ်လုပ်ရက် (' + missingDate + ') အတွက် Daily Log ကို အရင်ဖြည့်ပေးပါရန်။',
+                    type: 'warning'
+                });
                 return;
             }
 
@@ -938,6 +964,27 @@ if (!empty($selected_date)) {
             dateHint.className = 'text-sm text-emerald-600 font-semibold mt-1';
         }
     });
+
+    function getMissingPriorDate(targetIso) {
+        var internStart = '<?= $intern_start ?? '' ?>';
+        if (!internStart || !targetIso) return null;
+        var cur = new Date(internStart + 'T00:00:00');
+        var target = new Date(targetIso + 'T00:00:00');
+        while (cur < target) {
+            var day = cur.getDay();
+            if (day > 0 && day < 6) {
+                var y = cur.getFullYear();
+                var m = String(cur.getMonth() + 1).padStart(2, '0');
+                var d = String(cur.getDate()).padStart(2, '0');
+                var cIso = y + '-' + m + '-' + d;
+                if (!existingSet[cIso]) {
+                    return cIso;
+                }
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+        return null;
+    }
 
     function applyWeekSelection(wn) {
         if (!wn || !weekRanges[wn]) {
@@ -998,29 +1045,97 @@ if (!empty($selected_date)) {
         var wn  = parseInt(weekSelect.value);
         var val = dateInput.value;
         if (!wn) {
-            showToast('Please select a week first.', 'error');
+            openDateAlertModal({
+                title: 'Week ရွေးချယ်ပေးပါ',
+                badge: 'Week Required',
+                message: 'Please select a week first.',
+                myanmarNote: 'ကျေးဇူးပြု၍ Week ကို အရင်ဆုံးရွေးချယ်ပေးပါရန်။',
+                type: 'warning'
+            });
             e.preventDefault();
             return false;
         }
         if (!val) {
-            showToast('Please select a log date from the calendar.', 'error');
-            e.preventDefault();
-            return false;
-        }
-        var range = weekRanges[wn];
-        if (range && (val < range.start || val > range.end)) {
-            showToast('The selected date is outside Week ' + wn + '.', 'error');
+            openDateAlertModal({
+                title: 'ရက်စွဲ ရွေးချယ်ပေးပါ',
+                badge: 'Date Required',
+                message: 'Please select a log date from the calendar.',
+                myanmarNote: 'ကျေးဇူးပြု၍ ပြက္ခဒိန်မှ ရက်စွဲကို ရွေးချယ်ပေးပါရန်။',
+                type: 'warning'
+            });
             e.preventDefault();
             return false;
         }
         var dow = new Date(val + 'T00:00:00').getDay();
         if (dow === 0 || dow === 6) {
-            showToast('Weekends are not allowed. Please select a weekday.', 'error');
+            openDateAlertModal({
+                title: 'ပိတ်ရက် ရွေးချယ်၍ မရပါ',
+                badge: 'Weekend Day',
+                message: 'Weekend days are not allowed. Please select a weekday.',
+                myanmarNote: 'စနေ နှင့် တနင်္ဂနွေ ပိတ်ရက်များတွင် Daily Log ဖြည့်သွင်းခွင့် မရှိပါ။',
+                type: 'warning'
+            });
             e.preventDefault();
             return false;
         }
+
+        var dateWeek = getWeekForDate(val);
+        if (dateWeek > 0 && dateWeek !== wn) {
+            var isThatWeekSubmitted = submittedWeeks && Boolean(submittedWeeks[dateWeek]);
+            if (isThatWeekSubmitted) {
+                openDateAlertModal({
+                    title: 'အစီရင်ခံစာ တင်ပြီးသော ရက်စွဲဖြစ်နေပါသည်',
+                    badge: 'Report Submitted (Locked)',
+                    message: 'This date belongs to Week ' + dateWeek + ', which has already been submitted and locked.',
+                    myanmarNote: 'ရွေးချယ်ထားသော ရက်စွဲသည် Week ' + dateWeek + ' မှ ရက်စွဲဖြစ်ပြီး Weekly Report တင်သွင်းပြီးဖြစ်၍ ပြင်ဆင်ခွင့် မရှိတော့ပါ။ လက်ရှိ Week ' + wn + ' အတွင်းရှိ ရက်စွဲကိုသာ ရွေးချယ်ပေးပါရန်။',
+                    type: 'warning'
+                });
+            } else {
+                openDateAlertModal({
+                    title: 'အခြား Week မှ ရက်စွဲဖြစ်နေပါသည်',
+                    badge: 'Out of Current Week',
+                    message: 'The selected date is outside Week ' + wn + '.',
+                    myanmarNote: 'ရွေးချယ်ထားသော ရက်စွဲသည် Week ' + wn + ' အတွင်း မရှိပါ။',
+                    type: 'warning'
+                });
+            }
+            e.preventDefault();
+            return false;
+        }
+
+        if (submittedWeeks && Boolean(submittedWeeks[wn])) {
+            openDateAlertModal({
+                title: 'အစီရင်ခံစာ တင်ပြီးဖြစ်ပါသည်',
+                badge: 'Report Submitted (Locked)',
+                message: 'Week ' + wn + ' report has already been submitted and is locked.',
+                myanmarNote: 'Week ' + wn + ' အတွက် Weekly Report တင်သွင်းပြီးဖြစ်၍ မှတ်တမ်းအသစ်ဖြည့်ခြင်း သို့မဟုတ် ပြင်ဆင်ခြင်း မပြုလုပ်နိုင်တော့ပါ။',
+                type: 'warning'
+            });
+            e.preventDefault();
+            return false;
+        }
+
         if (existingSet[val]) {
-            showToast('A log for this date already exists.', 'error');
+            openDateAlertModal({
+                title: 'မှတ်တမ်း ဖြည့်သွင်းပြီးဖြစ်ပါသည်',
+                badge: 'Daily Log Exists',
+                message: 'A log for this date already exists.',
+                myanmarNote: 'ယခုရွေးချယ်ထားသော ရက်စွဲအတွက် Daily Log ထည့်သွင်းပြီးဖြစ်ပါသည်။',
+                type: 'warning'
+            });
+            e.preventDefault();
+            return false;
+        }
+
+        var missingDate = getMissingPriorDate(val);
+        if (missingDate) {
+            openDateAlertModal({
+                title: 'ရက်ကျော်၍ ဖြည့်သွင်းခွင့် မရှိပါ',
+                badge: 'Sequential Logging Required',
+                message: 'Cannot skip days. Please log the missing working day (' + missingDate + ') first before logging this date.',
+                myanmarNote: 'ရက်ကျော်၍ ဖြည့်သွင်းခွင့် မရှိပါ။ ကျန်ရှိနေသော အလုပ်လုပ်ရက် (' + missingDate + ') အတွက် Daily Log ကို အရင်ဖြည့်ပေးပါရန်။',
+                type: 'warning'
+            });
             e.preventDefault();
             return false;
         }
@@ -1071,6 +1186,71 @@ if (!empty($selected_date)) {
 </script>
 
 <script>
+function openDateAlertModal(opts) {
+    var modal = document.getElementById('dateAlertModal');
+    var card = document.getElementById('dateAlertCard');
+    if (!modal || !card) {
+        if (opts.message) showToast(opts.message, 'warning');
+        return;
+    }
+
+    var titleEl = document.getElementById('modalTitle');
+    var msgEl = document.getElementById('modalMessage');
+    var myanmarEl = document.getElementById('modalMyanmarNote');
+    var badgeEl = document.getElementById('modalBadge');
+    var badgeDot = document.getElementById('modalBadgeDot');
+    var iconContainer = document.getElementById('modalIconContainer');
+    var topBorder = document.getElementById('modalTopBorder');
+
+    var type = opts.type || 'warning';
+
+    if (titleEl) titleEl.textContent = opts.title || 'ရွေးချယ်၍ မရပါ';
+    if (msgEl) msgEl.textContent = opts.message || '';
+    if (myanmarEl) {
+        if (opts.myanmarNote) {
+            myanmarEl.innerHTML = '<svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>' + opts.myanmarNote + '</span>';
+            myanmarEl.classList.remove('hidden');
+        } else {
+            myanmarEl.classList.add('hidden');
+        }
+    }
+    if (badgeEl) badgeEl.textContent = opts.badge || 'သတိပေးချက်';
+
+    if (type === 'error') {
+        iconContainer.className = 'w-16 h-16 mx-auto mb-3.5 rounded-2xl bg-rose-50 text-rose-500 border border-rose-100 flex items-center justify-center shadow-xs';
+        badgeDot.className = 'w-1.5 h-1.5 rounded-full bg-rose-500';
+        topBorder.className = 'absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 to-red-600';
+    } else {
+        iconContainer.className = 'w-16 h-16 mx-auto mb-3.5 rounded-2xl bg-amber-50 text-amber-500 border border-amber-100 flex items-center justify-center shadow-xs';
+        badgeDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500';
+        topBorder.className = 'absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-rose-500 to-indigo-500';
+    }
+
+    modal.classList.remove('opacity-0', 'pointer-events-none');
+    modal.classList.add('opacity-100', 'pointer-events-auto');
+
+    card.classList.remove('scale-95', 'opacity-0');
+    card.classList.add('scale-100', 'opacity-100');
+}
+
+function closeDateAlertModal() {
+    var modal = document.getElementById('dateAlertModal');
+    var card = document.getElementById('dateAlertCard');
+    if (!modal || !card) return;
+
+    modal.classList.remove('opacity-100', 'pointer-events-auto');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+
+    card.classList.remove('scale-100', 'opacity-100');
+    card.classList.add('scale-95', 'opacity-0');
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeDateAlertModal();
+    }
+});
+
 function showToast(message, type) {
     var toast = document.createElement('div');
     var bgColor, icon;
@@ -1100,12 +1280,88 @@ function showToast(message, type) {
 <?php if ($error === 'duplicate_log'): ?>
 <script>
 (function () {
-    showToast('A daily log for this date has already been submitted. Please select a different date.', 'error');
+    openDateAlertModal({
+        title: 'မှတ်တမ်း ဖြည့်သွင်းပြီးဖြစ်ပါသည်',
+        badge: 'Daily Log Exists',
+        message: 'A daily log for this date has already been submitted.',
+        myanmarNote: 'ယခုရွေးချယ်ထားသော ရက်စွဲအတွက် Daily Log ထည့်သွင်းပြီးဖြစ်ပါသည်။',
+        type: 'warning'
+    });
+    var fp = document.getElementById('logDate');
+    if (fp) fp.value = '';
+})();
+</script>
+<?php elseif (strpos($error ?? '', 'skip_date_') === 0): ?>
+<?php $missing_d = substr($error, 10); ?>
+<script>
+(function () {
+    openDateAlertModal({
+        title: 'ရက်ကျော်၍ ဖြည့်သွင်းခွင့် မရှိပါ',
+        badge: 'Sequential Logging Required',
+        message: 'Cannot skip days. Please log the missing working day (<?= htmlspecialchars((new DateTime($missing_d))->format('d.m.Y')) ?>) first before logging this date.',
+        myanmarNote: 'ရက်ကျော်၍ ဖြည့်သွင်းခွင့် မရှိပါ။ ကျန်ရှိနေသော အလုပ်လုပ်ရက် (<?= htmlspecialchars((new DateTime($missing_d))->format('d.m.Y')) ?>) အတွက် Daily Log ကို အရင်ဖြည့်ပေးပါရန်။',
+        type: 'warning'
+    });
     var fp = document.getElementById('logDate');
     if (fp) fp.value = '';
 })();
 </script>
 <?php endif; ?>
 
+<!-- ═══════════ BEAUTIFUL CENTER ALERT BOARD MODAL ═══════════ -->
+<div id="dateAlertModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs transition-opacity duration-300 opacity-0 pointer-events-none" onclick="if(event.target === this) closeDateAlertModal()">
+    <div id="dateAlertCard" class="bg-white rounded-3xl shadow-2xl border border-slate-100/90 max-w-sm sm:max-w-md w-full p-6 sm:p-7 text-center transform transition-all duration-300 scale-95 opacity-0 relative overflow-hidden">
+        <!-- Decorative Accent Top Gradient -->
+        <div id="modalTopBorder" class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-rose-500 to-indigo-500"></div>
+
+        <!-- Close button (top right) -->
+        <button type="button" onclick="closeDateAlertModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-full transition cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+
+        <!-- Icon -->
+        <div id="modalIconContainer" class="w-16 h-16 mx-auto mb-3.5 rounded-2xl bg-amber-50 text-amber-500 border border-amber-100 flex items-center justify-center shadow-xs">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+        </div>
+
+        <!-- Badge -->
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-label font-bold uppercase tracking-wider bg-slate-100 text-slate-600 mb-2">
+            <span id="modalBadgeDot" class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            <span id="modalBadge">သတိပေးချက်</span>
+        </div>
+
+        <!-- Title -->
+        <h3 id="modalTitle" class="text-base sm:text-lg font-black text-slate-800 tracking-tight mb-2">
+            ရွေးချယ်၍ မရပါ
+        </h3>
+
+        <!-- English/Technical Message -->
+        <p id="modalMessage" class="text-xs sm:text-sm text-slate-500 font-medium leading-relaxed mb-3">
+            ဤရက်စွဲအား ရွေးချယ်ခွင့်မရှိပါ။
+        </p>
+
+        <!-- Myanmar Highlighted Note -->
+        <div id="modalMyanmarNote" class="bg-amber-50/80 border border-amber-200/80 rounded-2xl p-3.5 text-xs text-amber-900 font-semibold mb-5 leading-relaxed text-left flex items-start gap-2.5 shadow-2xs">
+            <svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>ရက်ကျော်ဖြည့်သွင်းခြင်းမပြုရပါ။</span>
+        </div>
+
+        <!-- Action Button -->
+        <div class="flex items-center justify-center">
+            <button type="button" onclick="closeDateAlertModal()" class="w-full sm:w-auto min-w-[150px] px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all transform active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
+                <span>နားလည်ပါပြီ</span>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

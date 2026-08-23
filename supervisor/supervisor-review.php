@@ -3,6 +3,7 @@ require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/internship_progress.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
+require_once __DIR__ . '/../config/notify.php';
 
 $sup_id = (int) $_SESSION['user_id'];
 $student_id = (int) ($_GET['student_id'] ?? 0);
@@ -765,7 +766,7 @@ foreach ($all_weeks_grades as $wg) {
             <!-- Company Instructor Feedback (read-only) -->
             <?php if ($instructor_eval && in_array($instructor_eval['report_status'], ['approved_by_instructor', 'approved_by_supervisor'], true)): ?>
 
-            <div class="bg-white rounded-2xl border border-emerald-200/60 shadow-sm overflow-hidden">
+            <div id="instructor-feedback" class="bg-white rounded-2xl border border-emerald-200/60 shadow-sm overflow-hidden scroll-mt-24">
                 <div class="px-6 py-4 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-white">
                     <h2 class="text-sm font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm">🏢</span> Company Instructor Feedback
@@ -853,7 +854,7 @@ foreach ($all_weeks_grades as $wg) {
             <?php endif; ?>
 
             <!-- ═══ UNIVERSITY EVALUATION FORM ═══ -->
-            <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+            <div id="university-evaluation" class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden scroll-mt-24">
                 <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-white">
                     <h2 class="text-sm font-bold text-indigo-700 uppercase tracking-wider flex items-center gap-2">
                         <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm">🎓</span> University Evaluation – Week <?= $week_num ?>

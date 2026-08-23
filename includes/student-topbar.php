@@ -65,10 +65,19 @@ if ($student_user_id > 0 && $db) {
 if (!function_exists('student_notif_url')) {
     function student_notif_url($type, $related_week, $announcement_id = null) {
         if ($announcement_id) {
-            return '#';
+            return 'student-dashboard.php';
         }
         $base = 'student-dashboard.php';
-        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved'], true) && $related_week) {
+        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved', 'report_needs_review', 'report_submitted'], true)) {
+            $url = $base . '?tab=weekly-report';
+            if ($related_week) $url .= '&week=' . (int)$related_week;
+            $url .= '#feedback-section';
+            return $url;
+        }
+        if (in_array($type, ['daily_log_added', 'daily_log_updated', 'student_behind_schedule'], true)) {
+            return 'daily_log.php' . ($related_week ? '?week=' . (int)$related_week : '') . '#daily-log-form';
+        }
+        if ($related_week) {
             return $base . '?week=' . (int)$related_week;
         }
         return $base;
