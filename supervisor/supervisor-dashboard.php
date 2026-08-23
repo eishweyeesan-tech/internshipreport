@@ -81,7 +81,7 @@ $weekEnd   = (clone $today)->modify('sunday this week')->format('Y-m-d');
 // ══════════════════════════════════════════════════════════════════════
 $stu_detail_sql = "
     SELECT u.id AS uid, u.username, u.email, ay.year_label AS academic_year, u.profile_pic,
-           u.username AS full_name, sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, sp.job_role,
+           u.username AS full_name, sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, u.position AS job_role,
            sp.internship_start_date, sp.internship_end_date
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
@@ -384,81 +384,30 @@ usort($tasks, function ($a, $b) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/notifications.js"></script>
     <script>
-    function onNotificationItemClick(e, el) {
-        e.preventDefault();
-        var id = el.getAttribute('data-notif-id');
-        var url = el.getAttribute('data-redirect-url') || 'supervisor-dashboard.php';
-        var fd = new FormData();
-        fd.append('notification_id', id);
-        fd.append('mark_notification_read', '1');
-        fetch(window.location.pathname, {
-            method: 'POST',
-            body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); })
-          .then(function(data) {
-              var badge = document.getElementById('notif-badge');
-              if (badge) {
-                  if (data.unread_count > 0) badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
-                  else badge.remove();
-              }
-              var item = el.closest('[data-notif-id]');
-              if (item) {
-                  item.classList.remove('bg-[#e7f3ff]', 'bg-teal-50/50');
-                  item.querySelector('.unread-dot')?.remove();
-              }
-          })
-          .catch(function() {})
-          .finally(function() {
-              window.location.href = url;
-          });
-    }
-
-    function toggleNotifDropdown() {
+    function toggleProfileDropdown(e) {
+        if (e) e.stopPropagation();
+        var dd = document.getElementById('profile-dropdown-menu') || document.getElementById('profileDropdownMenu');
+        if (dd) {
+            dd.classList.toggle('hidden');
+        }
         var nd = document.getElementById('notif-dropdown');
-        if (!nd) return;
-        var isHidden = nd.style.visibility === 'hidden' || nd.style.opacity === '0';
-        if (isHidden) {
-            nd.style.opacity = '1';
-            nd.style.visibility = 'visible';
-            nd.style.transform = 'translateY(0) scale(1)';
-            var pd = document.getElementById('profile-dropdown-menu');
-            if (pd) pd.classList.add('hidden');
-        } else {
+        if (nd) {
             nd.style.opacity = '0';
             nd.style.visibility = 'hidden';
             nd.style.transform = 'translateY(-8px) scale(0.95)';
         }
     }
 
-    function markAllNotifsRead() {
-        var fd = new FormData();
-        fd.append('mark_all_notifications_read', '1');
-        fetch(window.location.pathname, {
-            method: 'POST',
-            body: fd,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function(r) { return r.json(); })
-          .then(function(data) {
-              var badge = document.getElementById('notif-badge');
-              if (badge) badge.remove();
-              document.querySelectorAll('#notif-dropdown [data-notif-id]').forEach(function(item) {
-                  item.classList.remove('bg-[#e7f3ff]', 'bg-teal-50/50');
-                  item.querySelector('.unread-dot')?.remove();
-              });
-          })
-          .catch(function() {});
-    }
-
-    function toggleNotifOptions(btn) {
-        var menu = btn.nextElementSibling;
-        if (!menu) return;
-        document.querySelectorAll('.notif-options-menu').forEach(function(m) {
-            if (m !== menu) m.classList.add('hidden');
-        });
-        menu.classList.toggle('hidden');
-    }
+    document.addEventListener('click', function(e) {
+        var dd = document.getElementById('profile-dropdown-menu') || document.getElementById('profileDropdownMenu');
+        var btn = document.getElementById('profile-avatar-btn');
+        if (dd && !dd.classList.contains('hidden') && btn && !btn.contains(e.target) && !dd.contains(e.target)) {
+            dd.classList.add('hidden');
+        }
+    });
 
     function showToast(message, type) {
         var toast = document.createElement('div');
@@ -500,31 +449,28 @@ usort($tasks, function ($a, $b) {
 
 
                 <!-- ═══ 1. COMPACT WELCOME BANNER ═══ -->
-                <section class="bg-gradient-to-r from-[#005f73] via-[#0a9396] to-[#005f73] rounded-2xl p-5 sm:p-6 text-white shadow-md shadow-teal-900/10 relative overflow-hidden">
+                <section class="bg-gradient-to-r from-[#005f73] via-[#0a9396] to-[#005f73] rounded-2xl p-6 text-white shadow-md shadow-teal-900/10 relative overflow-hidden">
                     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_60%)]"></div>
                     <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div class="flex items-center gap-3.5">
-                            <div class="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-xl border border-white/20 shadow-xs shrink-0">
+                            <div class="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-2xl border border-white/20 shadow-xs shrink-0">
                                 👨‍🏫
                             </div>
                             <div>
-                                <div class="flex items-center gap-2 flex-wrap">
-                                    <h2 class="text-lg sm:text-xl font-black tracking-tight text-white">Welcome back, <?= htmlspecialchars(format_supervisor_name($sup_name)) ?>!</h2>
-                                </div>
-                                <p class="text-xs text-teal-100/90 font-medium mt-0.5">
+                                <h2 class="text-2xl font-bold tracking-tight text-white">Welcome back, <?= htmlspecialchars(format_supervisor_name($sup_name)) ?>!</h2>
+                                <p class="text-xs text-teal-100/90 font-medium mt-1">
                                     <?= date('l, d F Y') ?> · Overview of assigned interns and pending supervisory tasks
                                 </p>
                             </div>
-
                         </div>
 
                         <!-- Quick Badges -->
                         <div class="flex items-center gap-2.5 flex-wrap">
-                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-1.5 text-xs font-semibold">
+                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-2 text-xs font-semibold">
                                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                                 <span><?= $total_assigned ?> Assigned Students</span>
                             </div>
-                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-1.5 text-xs font-semibold">
+                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-2 text-xs font-semibold">
                                 <span class="w-2 h-2 rounded-full <?= $pending_reviews > 0 ? 'bg-amber-400' : 'bg-teal-300' ?>"></span>
                                 <span><?= $pending_reviews ?> Pending Review<?= $pending_reviews !== 1 ? 's' : '' ?></span>
                             </div>
@@ -533,231 +479,161 @@ usort($tasks, function ($a, $b) {
                 </section>
 
                 <!-- ═══ 2. KEY SUMMARY CARDS (ROW OF 4) ═══ -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     <!-- Card 1: Assigned Students -->
-                    <a href="my-students.php" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-teal-300 transition-all duration-200 flex flex-col justify-between">
+                    <a href="my-students.php" class="group bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md hover:border-teal-300 transition-all duration-200 ease-in-out flex flex-col justify-between">
                         <div class="flex items-start justify-between">
                             <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned Students</p>
-                                <p class="text-2xl font-black text-slate-800 mt-1.5"><?= $total_assigned ?></p>
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Assigned Students</p>
+                                <p class="text-2xl font-bold text-slate-800 mt-2"><?= $total_assigned ?></p>
                             </div>
-                            <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
+                            <div class="w-12 h-12 rounded-xl bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center text-xl shadow-xs group-hover:scale-105 transition-all duration-200">
                                 🎓
                             </div>
                         </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Active intern placements</span>
-                            <span class="font-bold text-teal-700 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">View All →</span>
+                        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <span class="text-xs text-slate-400 font-medium">Active intern placements</span>
+                            <span class="font-semibold text-teal-700 group-hover:translate-x-0.5 transition-all duration-200 inline-flex items-center gap-0.5">View All →</span>
                         </div>
                     </a>
 
                     <!-- Card 2: Pending Reports -->
-                    <a href="supervisor-reports.php?status=approved_by_instructor" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-amber-300 transition-all duration-200 flex flex-col justify-between">
+                    <a href="supervisor-reports.php?status=approved_by_instructor" class="group bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md hover:border-amber-300 transition-all duration-200 ease-in-out flex flex-col justify-between">
                         <div class="flex items-start justify-between">
                             <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Pending Reports</p>
-                                <p class="text-2xl font-black text-slate-800 mt-1.5"><?= $pending_reviews ?></p>
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Pending Reports</p>
+                                <p class="text-2xl font-bold text-slate-800 mt-2"><?= $pending_reviews ?></p>
                             </div>
-                            <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 border border-amber-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
+                            <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-700 border border-amber-100 flex items-center justify-center text-xl shadow-xs group-hover:scale-105 transition-all duration-200">
                                 📩
                             </div>
                         </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="<?= $pending_reviews > 0 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium' ?>">Awaiting supervisor grade</span>
-                            <span class="font-bold text-amber-700 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">Review →</span>
+                        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <span class="<?= $pending_reviews > 0 ? 'text-amber-600 font-semibold' : 'text-xs text-slate-400 font-medium' ?>">Awaiting supervisor grade</span>
+                            <span class="font-semibold text-amber-700 group-hover:translate-x-0.5 transition-all duration-200 inline-flex items-center gap-0.5">Review →</span>
                         </div>
                     </a>
 
                     <!-- Card 3: Behind Schedule -->
-                    <a href="my-students.php?status=red" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-red-300 transition-all duration-200 flex flex-col justify-between">
+                    <a href="my-students.php?status=red" class="group bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md hover:border-rose-300 transition-all duration-200 ease-in-out flex flex-col justify-between">
                         <div class="flex items-start justify-between">
                             <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Behind Schedule</p>
-                                <p class="text-2xl font-black <?= $behind_schedule > 0 ? 'text-red-600' : 'text-slate-800' ?> mt-1.5"><?= $behind_schedule ?></p>
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Behind Schedule</p>
+                                <p class="text-2xl font-bold <?= $behind_schedule > 0 ? 'text-rose-600' : 'text-slate-800' ?> mt-2"><?= $behind_schedule ?></p>
                             </div>
-                            <div class="w-11 h-11 rounded-xl bg-red-50 text-red-600 border border-red-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
+                            <div class="w-12 h-12 rounded-xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center text-xl shadow-xs group-hover:scale-105 transition-all duration-200">
                                 ⚠️
                             </div>
                         </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="<?= $behind_schedule > 0 ? 'text-red-600 font-semibold' : 'text-slate-400 font-medium' ?>"><?= $behind_schedule > 0 ? 'No logs submitted' : 'None behind' ?></span>
-                            <span class="font-bold text-red-600 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">Check →</span>
+                        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <span class="<?= $behind_schedule > 0 ? 'text-rose-600 font-semibold' : 'text-xs text-slate-400 font-medium' ?>"><?= $behind_schedule > 0 ? 'No logs submitted' : 'None behind' ?></span>
+                            <span class="font-semibold text-rose-600 group-hover:translate-x-0.5 transition-all duration-200 inline-flex items-center gap-0.5">Check →</span>
                         </div>
                     </a>
 
                     <!-- Card 4: Completed -->
-                    <a href="my-students.php?status=green" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all duration-200 flex flex-col justify-between">
+                    <a href="my-students.php?status=green" class="group bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all duration-200 ease-in-out flex flex-col justify-between">
                         <div class="flex items-start justify-between">
                             <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Completed</p>
-                                <p class="text-2xl font-black text-slate-800 mt-1.5"><?= $complete ?></p>
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Completed</p>
+                                <p class="text-2xl font-bold text-slate-800 mt-2"><?= $complete ?></p>
                             </div>
-                            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
+                            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center text-xl shadow-xs group-hover:scale-105 transition-all duration-200">
                                 ✅
                             </div>
                         </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-emerald-600 font-medium">On track / graded</span>
-                            <span class="font-bold text-emerald-700 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">Details →</span>
+                        <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <span class="text-xs text-emerald-700 font-medium">On track / graded</span>
+                            <span class="font-semibold text-emerald-700 group-hover:translate-x-0.5 transition-all duration-200 inline-flex items-center gap-0.5">Details →</span>
                         </div>
                     </a>
                 </div>
 
-
-
-                <!-- ═══ 3. 2-COLUMN SECTION: RECENT REPORTS + NEEDS ATTENTION ═══ -->
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-                    <!-- LEFT COLUMN (7 COLS): RECENT REPORTS -->
-                    <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden flex flex-col justify-between">
-                        <div>
-                            <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-white flex items-center justify-between">
-                                <div class="flex items-center gap-2.5">
-                                    <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-sm font-bold">
-                                        📄
-                                    </div>
-                                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Recent Reports</h3>
+                <!-- ═══ 3. RECENT REPORTS ═══ -->
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between">
+                    <div>
+                        <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-white flex items-center justify-between">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-sm font-bold">
+                                    📄
                                 </div>
-                                <a href="supervisor-reports.php" class="text-xs font-bold text-purple-600 hover:text-purple-800 hover:underline">
-                                    View All Reports →
-                                </a>
+                                <h3 class="text-lg font-semibold text-slate-700">Recent Reports</h3>
                             </div>
-
-                            <?php if (!empty($recent_reports)): ?>
-                            <div class="divide-y divide-slate-100">
-                                <?php foreach ($recent_reports as $rep):
-                                    $rep_student = $rep['full_name'] ?: $rep['username'];
-                                    $is_awaiting = ($rep['report_status'] === 'approved_by_instructor');
-                                    $is_graded = ($rep['report_status'] === 'approved_by_supervisor');
-                                ?>
-                                <div class="p-4 sm:px-6 hover:bg-slate-50/60 transition-colors duration-150 flex items-center justify-between gap-4">
-                                    <div class="flex items-center gap-3.5 min-w-0">
-                                        <?php if (!empty($rep['profile_pic'])): ?>
-                                        <img src="../uploads/avatars/<?= htmlspecialchars($rep['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0">
-                                        <?php else: ?>
-                                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
-                                            <?= strtoupper(substr($rep_student, 0, 1)) ?>
-                                        </div>
-                                        <?php endif; ?>
-                                        <div class="min-w-0">
-                                            <div class="flex items-center gap-2">
-                                                <p class="text-xs font-bold text-slate-800 truncate"><?= htmlspecialchars($rep_student) ?></p>
-                                                <span class="text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200/60 px-2 py-0.5 rounded-md shrink-0">
-                                                    Week <?= (int)$rep['week_number'] ?>
-                                                </span>
-                                            </div>
-                                            <p class="text-[11px] text-slate-400 truncate mt-0.5"><?= htmlspecialchars($rep['company_name'] ?: 'Internship Report') ?></p>
-                                            <p class="text-[10px] text-slate-400 mt-0.5">Submitted <?= (new DateTime($rep['evaluated_at']))->format('d M Y · h:i A') ?></p>
-                                        </div>
-                                    </div>
-
-                                    <div class="flex items-center gap-2.5 shrink-0">
-                                        <?php if ($is_awaiting): ?>
-                                        <div class="hidden sm:inline-flex flex-col items-end gap-0.5">
-                                            <span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                                                ✅ Instructor Approved
-                                            </span>
-                                            <span class="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-md">
-                                                <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Ready for Review
-                                            </span>
-                                        </div>
-                                        <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
-                                            Review & Grade →
-                                        </a>
-                                        <?php elseif ($is_graded): ?>
-                                        <span class="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Supervisor Approved
-                                        </span>
-                                        <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
-                                            View →
-                                        </a>
-                                        <?php else: ?>
-                                        <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg shadow-xs transition-all duration-150">
-                                            View →
-                                        </a>
-                                        <?php endif; ?>
-                                    </div>
-
-                                </div>
-                                <?php endforeach; ?>
-                            </div>
-                            <?php else: ?>
-                            <div class="p-10 text-center">
-                                <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-xl mx-auto mb-2">📭</div>
-                                <p class="text-xs font-semibold text-slate-500">No recent reports submitted yet.</p>
-                                <p class="text-[11px] text-slate-400 mt-1">Submitted reports approved by instructors will show here for grading.</p>
-                            </div>
-                            <?php endif; ?>
-                        </div>
-
-                        <div class="px-6 py-3 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Supervisor grading portal</span>
-                            <a href="supervisor-reports.php" class="font-bold text-purple-600 hover:text-purple-800">
-                                Browse all submitted reports →
+                            <a href="supervisor-reports.php" class="text-xs font-semibold text-purple-600 hover:text-purple-800 transition-all duration-200">
+                                View All Reports →
                             </a>
                         </div>
-                    </div>
 
-                    <!-- RIGHT COLUMN (5 COLS): NEEDS ATTENTION / ACTION REQUIRED -->
-                    <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden flex flex-col justify-between">
-                        <div>
-                            <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-white flex items-center justify-between">
-                                <div class="flex items-center gap-2.5">
-                                    <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-sm font-bold">
-                                        ⚡
+                        <?php if (!empty($recent_reports)): ?>
+                        <div class="divide-y divide-slate-100">
+                            <?php foreach ($recent_reports as $rep):
+                                $rep_student = $rep['full_name'] ?: $rep['username'];
+                                $is_awaiting = ($rep['report_status'] === 'approved_by_instructor');
+                                $is_graded = ($rep['report_status'] === 'approved_by_supervisor' || $rep['report_status'] === 'graded');
+                            ?>
+                            <div class="px-6 py-4 hover:bg-slate-50/80 transition-all duration-200 ease-in-out flex items-center justify-between gap-4">
+                                <div class="flex items-center gap-3.5 min-w-0">
+                                    <?php if (!empty($rep['profile_pic'])): ?>
+                                    <img src="../uploads/avatars/<?= htmlspecialchars($rep['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0">
+                                    <?php else: ?>
+                                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">
+                                        <?= strtoupper(substr($rep_student, 0, 1)) ?>
                                     </div>
-                                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Needs Attention</h3>
-                                </div>
-                                <span class="text-xs font-bold <?= count($tasks) > 0 ? 'text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full' : 'text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full' ?>">
-                                    <?= count($tasks) ?> <?= count($tasks) === 1 ? 'Task' : 'Tasks' ?>
-                                </span>
-                            </div>
-
-                            <?php if (!empty($tasks)): ?>
-                            <div class="divide-y divide-slate-100 max-h-[380px] overflow-y-auto">
-                                <?php foreach ($tasks as $task): ?>
-                                <div class="p-4 hover:bg-slate-50/70 transition-colors duration-150 flex items-center justify-between gap-3">
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-center gap-2 flex-wrap mb-1">
-                                            <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md border <?= $task['badge_cls'] ?>">
-                                                <?= $task['badge'] ?>
+                                    <?php endif; ?>
+                                    <div class="min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <p class="text-sm font-semibold text-slate-800 truncate"><?= htmlspecialchars($rep_student) ?></p>
+                                            <span class="text-xs font-semibold text-purple-700 bg-purple-50 ring-1 ring-purple-600/20 px-2 py-0.5 rounded-full shrink-0">
+                                                Week <?= (int)$rep['week_number'] ?>
                                             </span>
                                         </div>
-                                        <p class="text-xs font-bold text-slate-800 truncate"><?= $task['title'] ?></p>
-                                        <p class="text-[11px] text-slate-400 truncate mt-0.5"><?= $task['subtitle'] ?></p>
-                                    </div>
-
-                                    <div class="flex items-center gap-1.5 shrink-0">
-                                        <?php if (!empty($task['can_warn'])): ?>
-                                        <form method="POST" class="inline" onsubmit="return confirm('Send a reminder warning notification to <?= htmlspecialchars($task['title']) ?>?');">
-                                            <input type="hidden" name="student_id" value="<?= (int)$task['student_id'] ?>">
-                                            <button type="submit" name="send_warning" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-bold rounded-lg transition cursor-pointer" title="Send Warning Notification">
-                                                ⚠️ Warn
-                                            </button>
-                                        </form>
-                                        <?php endif; ?>
-                                        <a href="<?= htmlspecialchars($task['url']) ?>" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg transition">
-                                            <?= $task['action_label'] ?> →
-                                        </a>
+                                        <p class="text-xs text-slate-400 font-medium truncate mt-0.5"><?= htmlspecialchars($rep['company_name'] ?: 'Internship Report') ?></p>
+                                        <p class="text-xs text-slate-400 font-medium mt-0.5">Submitted <?= (new DateTime($rep['evaluated_at']))->format('d M Y · h:i A') ?></p>
                                     </div>
                                 </div>
-                                <?php endforeach; ?>
-                            </div>
-                            <?php else: ?>
-                            <div class="p-10 text-center">
-                                <div class="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center text-2xl mx-auto mb-2 text-emerald-600">🎉</div>
-                                <p class="text-xs font-bold text-emerald-700">All caught up!</p>
-                                <p class="text-[11px] text-slate-400 mt-1">You have no pending reviews, behind-schedule students, or incomplete evaluations.</p>
-                            </div>
-                            <?php endif; ?>
-                        </div>
 
-                        <div class="px-6 py-3 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Prioritized supervisory actions</span>
-                            <span class="text-slate-500 font-semibold"><?= $behind_schedule ?> behind · <?= $pending_reviews ?> awaiting</span>
+                                <div class="flex items-center gap-2.5 shrink-0">
+                                    <?php if ($is_awaiting): ?>
+                                    <div class="hidden sm:inline-flex flex-col items-end gap-1">
+                                        <span class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 ring-1 ring-emerald-600/20 px-2.5 py-0.5 rounded-full">
+                                            ✅ Instructor Approved
+                                        </span>
+                                        <span class="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 ring-1 ring-blue-600/20 px-2.5 py-0.5 rounded-full">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Ready for Review
+                                        </span>
+                                    </div>
+                                    <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3.5 py-2 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-semibold rounded-xl shadow-xs transition-all duration-200 ease-in-out">
+                                        Review & Grade →
+                                    </a>
+                                    <?php elseif ($is_graded): ?>
+                                    <span class="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 ring-1 ring-teal-600/20 px-2.5 py-0.5 rounded-full">
+                                         <span class="w-1.5 h-1.5 rounded-full bg-teal-500"></span> Supervisor Approved
+                                    </span>
+                                    <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all duration-200 ease-in-out">
+                                        View →
+                                    </a>
+                                    <?php else: ?>
+                                    <a href="view-student-dashboard.php?id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all duration-200 ease-in-out">
+                                        View →
+                                    </a>
+                                    <?php endif; ?>
+                                </div>
+
+                            </div>
+                            <?php endforeach; ?>
                         </div>
+                        <?php else: ?>
+                        <div class="p-12 text-center">
+                            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-xl mx-auto mb-2">📭</div>
+                            <p class="text-sm font-semibold text-slate-600">No recent reports submitted yet.</p>
+                            <p class="text-xs text-slate-400 font-medium mt-1">Submitted reports approved by instructors will show here for grading.</p>
+                        </div>
+                        <?php endif; ?>
                     </div>
 
+                    <div class="px-6 py-4 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between text-xs">
+                        <span class="text-xs text-slate-400 font-medium">Supervisor grading portal</span>
+                    </div>
                 </div>
 
             </div>

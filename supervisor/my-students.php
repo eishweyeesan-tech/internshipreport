@@ -22,9 +22,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
     if ($warn_student_id > 0) {
         // Verify student is assigned to this supervisor
         $chk = $db->prepare("
-            SELECT u.id, u.username, u.academic_year, sp.full_name, sp.student_roll, sp.company_name
+            SELECT u.id, u.username, ay.year_label AS academic_year, u.username AS full_name, sp.student_roll, COALESCE(c.company_name, '') AS company_name
             FROM users u
             JOIN student_profiles sp ON sp.user_id = u.id
+            LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
+            LEFT JOIN companies c ON c.id = sp.company_id
             WHERE u.id = ? AND sp.supervisor_id = ? AND u.role = 'student'
         ");
         $chk->bind_param("ii", $warn_student_id, $sup_id);
@@ -137,7 +139,7 @@ $total_assigned = (int) ($row[0] ?? 0);
 $sql = "
     SELECT u.id AS uid, u.username, u.email, u.phone, ay.year_label AS academic_year, u.status AS user_status, u.profile_pic, u.is_warned,
            u.username AS full_name, sp.student_roll, sp.major,
-           COALESCE(c.company_name, '') AS company_name, sp.job_role,
+           COALESCE(c.company_name, '') AS company_name, u.position AS job_role,
            sp.internship_start_date, sp.internship_end_date
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
@@ -171,7 +173,7 @@ if (!empty($all_students)) {
     $res = $att_q->get_result();
     if ($res) {
         while ($row = $res->fetch_assoc()) {
-            $attendance[(int) $row['internship_id']] = $row;
+            $attendance[(int) ($row['student_id'] ?? $row['internship_id'] ?? 0)] = $row;
         }
     }
 }
@@ -414,49 +416,49 @@ function build_query_url($overrides = []) {
                 </div>
                 <?php endif; ?>
 
-                <!-- ═══ PAGE HEADER & SUMMARY PILLS ═══ -->
+                <!-- ═══ PAGE HEADER ═══ -->
                 <div class="flex items-center justify-between flex-wrap gap-4">
                     <div>
-                        <h2 class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+                        <h2 class="text-2xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
                             <span>🎓</span> My Students
                         </h2>
-                        <p class="text-xs sm:text-sm text-slate-400 mt-1 font-medium">Interns currently assigned to you, with live weekly progress</p>
+                        <p class="text-xs text-slate-400 font-medium mt-1">Interns currently assigned to you, with live weekly progress</p>
                     </div>
                     <div class="flex items-center gap-2.5 flex-wrap">
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 shadow-xs">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700 shadow-xs">
                             👥 <?= $total_assigned ?> assigned
                         </span>
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-bold text-amber-700 shadow-xs">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 rounded-xl text-xs font-semibold shadow-xs">
                             ⏳ <?= $pending_reviews ?> awaiting review
                         </span>
                     </div>
                 </div>
 
                 <!-- ═══ CONTROLS CARD: STATUS CHIPS, INSTANT SEARCH & ACADEMIC YEAR ═══ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-4">
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-4">
                     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
 
                         <!-- Status Filter Chips -->
-                        <div class="flex items-center gap-1.5 flex-wrap" id="statusChipsContainer">
-                            <button type="button" data-status="" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === '' ? 'bg-slate-800 text-white border-slate-800 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">
+                        <div class="flex items-center gap-2 flex-wrap" id="statusChipsContainer">
+                            <button type="button" data-status="" class="status-chip px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out cursor-pointer <?= $filter_status === '' ? 'bg-slate-800 text-white border-slate-800 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">
                                 All <span class="ml-1 opacity-75">(<?= $status_counts['all'] ?>)</span>
                             </button>
-                            <button type="button" data-status="red" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'red' ? 'bg-red-500 text-white border-red-500 shadow-xs' : 'bg-white text-red-600 border-red-200 hover:bg-red-50' ?>">
+                            <button type="button" data-status="red" class="status-chip px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out cursor-pointer <?= $filter_status === 'red' ? 'bg-rose-600 text-white border-rose-600 shadow-xs' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50' ?>">
                                 🔴 Behind Schedule <?= $status_counts['red'] > 0 ? '(' . $status_counts['red'] . ')' : '' ?>
                             </button>
-                            <button type="button" data-status="amber" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'amber' ? 'bg-amber-500 text-white border-amber-500 shadow-xs' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50' ?>">
+                            <button type="button" data-status="amber" class="status-chip px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out cursor-pointer <?= $filter_status === 'amber' ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50' ?>">
                                 🟡 In Progress
                             </button>
-                            <button type="button" data-status="green" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'green' ? 'bg-emerald-500 text-white border-emerald-500 shadow-xs' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50' ?>">
+                            <button type="button" data-status="green" class="status-chip px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out cursor-pointer <?= $filter_status === 'green' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50' ?>">
                                 🟢 Complete
                             </button>
-                            <button type="button" data-status="none" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'none' ? 'bg-slate-600 text-white border-slate-600 shadow-xs' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50' ?>">
+                            <button type="button" data-status="none" class="status-chip px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out cursor-pointer <?= $filter_status === 'none' ? 'bg-slate-700 text-white border-slate-700 shadow-xs' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50' ?>">
                                 ⚪ Not Started
                             </button>
                         </div>
 
                         <!-- Right Filters: Live Search + Academic Year -->
-                        <div class="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+                        <div class="flex items-center gap-3 flex-wrap sm:flex-nowrap">
 
                             <!-- Live / Instant Search Bar with Clear Button -->
                             <div class="relative w-full sm:w-64">
@@ -467,7 +469,7 @@ function build_query_url($overrides = []) {
                                        id="studentSearchInput"
                                        value="<?= htmlspecialchars($search) ?>"
                                        placeholder="Search student, roll, company…"
-                                       class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200"
+                                       class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl pl-8 pr-8 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 ease-in-out"
                                        autocomplete="off"
                                        spellcheck="false">
                                 <button type="button"
@@ -481,7 +483,7 @@ function build_query_url($overrides = []) {
 
                             <!-- Academic Year Select Dropdown -->
                             <div class="relative min-w-[10rem] w-full sm:w-auto">
-                                <select id="academicYearSelect" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 text-slate-700 rounded-xl text-xs font-semibold px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 cursor-pointer">
+                                <select id="academicYearSelect" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 text-slate-700 rounded-xl text-xs font-semibold px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 ease-in-out cursor-pointer">
                                     <option value="all" <?= ($filter_year === 'all' || empty($filter_year)) ? 'selected' : '' ?>>All Academic Years</option>
                                     <?php foreach ($available_years as $ay): ?>
                                     <option value="<?= htmlspecialchars($ay) ?>" <?= $filter_year === $ay ? 'selected' : '' ?>>
@@ -494,29 +496,28 @@ function build_query_url($overrides = []) {
                     </div>
 
                     <!-- Dynamic Count Row -->
-                    <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <div class="pt-3 border-t border-slate-100 flex items-center text-xs text-slate-500">
                         <p id="dynamicResultCount" class="font-medium text-slate-600">
                             Showing <span class="font-bold text-slate-800" id="visibleCountNumber"><?= count($all_students) ?></span> students
                         </p>
-                        <span class="text-slate-400 hidden sm:inline text-[11px]">Sorted by Academic Year & Roll Number</span>
                     </div>
                 </div>
 
                 <!-- ═══ STUDENTS TABLE ═══ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden w-full">
-                    <div class="w-full overflow-x-auto pb-4">
-                        <table class="w-full text-left text-xs sm:text-sm min-w-[1100px]" id="studentsTable">
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden w-full">
+                    <div class="w-full overflow-x-auto">
+                        <table class="w-full text-left text-sm min-w-[1100px]" id="studentsTable">
                             <thead>
-                                <tr class="bg-slate-50/80 border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
-                                    <th class="px-4 py-3 text-left min-w-[200px]">Student</th>
-                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[90px]">Roll No.</th>
-                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[120px]">Academic Year</th>
-                                    <th class="px-3 py-3 text-left min-w-[140px]">Company</th>
-                                    <th class="px-3 py-3 text-left min-w-[120px]">Role</th>
-                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[130px]">Progress</th>
-                                    <th class="px-3 py-3 text-center whitespace-nowrap min-w-[80px]">Reports</th>
-                                    <th class="px-3 py-3 text-left whitespace-nowrap min-w-[140px]">Status</th>
-                                    <th class="px-4 py-3 text-right whitespace-nowrap min-w-[200px]">Action</th>
+                                <tr class="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 text-slate-500 font-semibold uppercase tracking-wider text-xs">
+                                    <th class="px-6 py-4 text-left min-w-[200px]">Student</th>
+                                    <th class="px-6 py-4 text-left whitespace-nowrap min-w-[90px]">Roll No.</th>
+                                    <th class="px-6 py-4 text-left whitespace-nowrap min-w-[120px]">Academic Year</th>
+                                    <th class="px-6 py-4 text-left min-w-[140px]">Company</th>
+                                    <th class="px-6 py-4 text-left min-w-[120px]">Role</th>
+                                    <th class="px-6 py-4 text-left whitespace-nowrap min-w-[130px]">Progress</th>
+                                    <th class="px-6 py-4 text-center whitespace-nowrap min-w-[80px]">Reports</th>
+                                    <th class="px-6 py-4 text-left whitespace-nowrap min-w-[140px]">Status</th>
+                                    <th class="px-6 py-4 text-right whitespace-nowrap min-w-[140px]">Action</th>
                                 </tr>
                             </thead>
 
@@ -547,7 +548,7 @@ function build_query_url($overrides = []) {
                                     $is_warned = (bool) ($s['is_warned'] ?? 0);
                                     $pending_week = $student_pending[$uid] ?? null;
                                 ?>
-                                <tr class="student-row hover:bg-slate-50/70 transition-colors duration-150"
+                                <tr class="student-row hover:bg-slate-50/80 transition-all duration-200 ease-in-out"
                                     data-uid="<?= $uid ?>"
                                     data-name="<?= htmlspecialchars(strtolower($name), ENT_QUOTES, 'UTF-8') ?>"
                                     data-roll="<?= htmlspecialchars(strtolower($roll), ENT_QUOTES, 'UTF-8') ?>"
@@ -558,97 +559,93 @@ function build_query_url($overrides = []) {
                                     data-status="<?= $status ?>">
 
                                     <!-- 1. Student -->
-                                    <td class="px-4 py-3">
-                                        <a href="view-student-dashboard.php?id=<?= $uid ?>" class="flex items-center gap-2.5 group min-w-0">
+                                    <td class="px-6 py-4">
+                                        <a href="view-student-dashboard.php?id=<?= $uid ?>" class="flex items-center gap-3 group min-w-0">
                                             <?php if (!empty($s['profile_pic'])): ?>
-                                            <img src="../uploads/avatars/<?= htmlspecialchars($s['profile_pic']) ?>" alt="Avatar" class="w-8 h-8 rounded-xl object-cover ring-1 ring-slate-200 shadow-xs shrink-0">
+                                            <img src="../uploads/avatars/<?= htmlspecialchars($s['profile_pic']) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover ring-1 ring-slate-200 shadow-xs shrink-0">
                                             <?php else: ?>
-                                            <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
+                                            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">
                                                 <?= strtoupper(substr($name, 0, 1)) ?>
                                             </div>
                                             <?php endif; ?>
                                             <div class="min-w-0 flex-1">
-                                                <p class="font-bold text-slate-800 group-hover:text-indigo-600 transition truncate text-xs leading-tight"><?= htmlspecialchars($name) ?></p>
-                                                <p class="text-[11px] text-slate-400 font-medium truncate"><?= htmlspecialchars($s['email']) ?></p>
+                                                <p class="font-semibold text-slate-800 group-hover:text-indigo-600 transition truncate text-sm leading-snug"><?= htmlspecialchars($name) ?></p>
+                                                <p class="text-xs text-slate-400 font-medium truncate"><?= htmlspecialchars($s['email']) ?></p>
                                             </div>
                                         </a>
                                     </td>
 
                                     <!-- 2. Roll Number -->
-                                    <td class="px-3 py-3 whitespace-nowrap">
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-slate-100 text-slate-700 border border-slate-200/80">
                                             <?= htmlspecialchars($roll) ?>
                                         </span>
                                     </td>
 
                                     <!-- 3. Academic Year -->
-                                    <td class="px-3 py-3 whitespace-nowrap">
-                                        <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/60 whitespace-nowrap">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-50 text-teal-700 ring-1 ring-teal-600/20 whitespace-nowrap">
                                             <?= htmlspecialchars($ay) ?>
                                         </span>
                                     </td>
 
                                     <!-- 4. Company -->
-                                    <td class="px-3 py-3">
-                                        <span class="text-slate-700 font-medium text-xs block truncate" title="<?= htmlspecialchars($s['company_name'] ?? '') ?>">
+                                    <td class="px-6 py-4">
+                                        <span class="text-slate-600 font-normal text-sm leading-relaxed block truncate" title="<?= htmlspecialchars($s['company_name'] ?? '') ?>">
                                             <?= htmlspecialchars($s['company_name'] ?: '—') ?>
                                         </span>
                                     </td>
 
                                     <!-- 5. Role -->
-                                    <td class="px-3 py-3">
-                                        <div class="text-xs text-slate-700 font-medium">
+                                    <td class="px-6 py-4">
+                                        <div class="text-sm text-slate-600 font-normal leading-relaxed">
                                             <p class="truncate" title="<?= htmlspecialchars($s['job_role'] ?? '') ?>"><?= htmlspecialchars($s['job_role'] ?: '—') ?></p>
                                             <?php if (!empty($s['major'])): ?>
-                                            <p class="text-[11px] text-slate-400 truncate mt-0.5" title="<?= htmlspecialchars($s['major']) ?>"><?= htmlspecialchars($s['major']) ?></p>
+                                            <p class="text-xs text-slate-400 font-medium truncate mt-0.5" title="<?= htmlspecialchars($s['major']) ?>"><?= htmlspecialchars($s['major']) ?></p>
                                             <?php endif; ?>
                                         </div>
                                     </td>
 
                                     <!-- 6. Progress -->
-                                    <td class="px-3 py-3 whitespace-nowrap">
+                                    <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="flex items-center gap-2">
                                             <div class="w-20 bg-slate-100 rounded-full h-1.5 overflow-hidden">
                                                 <div class="h-1.5 rounded-full bg-gradient-to-r <?= progress_bar_color($att_pct) ?> transition-all duration-500" style="width: <?= $att_pct ?>%"></div>
                                             </div>
-                                            <span class="text-[11px] font-bold text-slate-700 shrink-0"><?= $att_pct ?>%</span>
+                                            <span class="text-xs font-bold text-slate-700 shrink-0"><?= $att_pct ?>%</span>
                                         </div>
-                                        <p class="text-[10px] text-slate-400 mt-0.5 whitespace-nowrap">
+                                        <p class="text-xs text-slate-400 font-medium mt-0.5 whitespace-nowrap">
                                             <?= $not_started ? 'Not started' : 'Week ' . (int) ($student_progress[$uid]['completed'] ?? 0) . '/' . (int) ($student_progress[$uid]['total'] ?? 0) ?>
                                         </p>
                                     </td>
 
                                     <!-- 7. Reports -->
-                                    <td class="px-3 py-3 text-center whitespace-nowrap">
+                                    <td class="px-6 py-4 text-center whitespace-nowrap">
                                         <div class="inline-flex flex-col items-center">
-                                            <a href="supervisor-reports.php?student_id=<?= $uid ?>" class="inline-flex items-center gap-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-indigo-600 px-2 py-0.5 rounded-lg transition" title="View reports for <?= htmlspecialchars($name) ?>">
+                                            <a href="supervisor-reports.php?student_id=<?= $uid ?>" class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-indigo-600 px-2.5 py-1 rounded-xl transition-all duration-200 ease-in-out" title="View reports for <?= htmlspecialchars($name) ?>">
                                                 📄 <?= $r_count ?>
                                             </a>
                                             <?php if ($g_count > 0): ?>
-                                             <span class="text-[10px] text-emerald-600 font-bold mt-0.5" title="Graded weeks">✓ <?= $g_count ?></span>
+                                             <span class="text-xs text-emerald-600 font-bold mt-0.5" title="Graded weeks">✓ <?= $g_count ?></span>
                                             <?php endif; ?>
                                         </div>
                                     </td>
 
                                     <!-- 8. Status -->
-                                    <td class="px-3 py-3 whitespace-nowrap">
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold <?= $label[1] ?> px-2.5 py-1 rounded-lg border whitespace-nowrap">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold <?= $label[1] ?> px-2.5 py-1 rounded-full border whitespace-nowrap">
                                             <span class="w-2 h-2 rounded-full <?= $dot ?>"></span>
                                             <?= $label[0] ?>
                                         </span>
                                     </td>
 
                                     <!-- 9. Action -->
-                                    <td class="px-4 py-3 text-right whitespace-nowrap">
-                                        <div class="inline-flex items-center justify-end gap-1.5 flex-nowrap">
-                                            <!-- Unified View & Grade / View Details Button -->
+                                    <td class="px-6 py-4 text-right whitespace-nowrap">
+                                        <div class="inline-flex items-center justify-end gap-2 flex-nowrap min-h-[30px]">
+                                            <!-- View & Grade Button (Pending Report) -->
                                             <?php if ($pending_week): ?>
-                                            <a href="view-student-dashboard.php?id=<?= $uid ?>&week=<?= (int)$pending_week ?>" class="inline-flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-all shrink-0" title="Review & grade pending report">
+                                            <a href="view-student-dashboard.php?id=<?= $uid ?>&week=<?= (int)$pending_week ?>" class="inline-flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-all duration-200 ease-in-out shrink-0" title="Review & grade pending report">
                                                 <i class="fa-regular fa-eye mr-1.5"></i> View &amp; Grade
-                                            </a>
-                                            <?php else: ?>
-                                            <a href="view-student-dashboard.php?id=<?= $uid ?>" class="inline-flex items-center px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-all shrink-0" title="View student dashboard & details">
-                                                <i class="fa-regular fa-eye mr-1.5"></i> View Details
                                             </a>
                                             <?php endif; ?>
 
@@ -666,6 +663,10 @@ function build_query_url($overrides = []) {
                                                     ⚠️ Send Warning
                                                 </button>
                                                 <?php endif; ?>
+                                            <?php endif; ?>
+
+                                            <?php if (!$pending_week && $status !== 'red'): ?>
+                                            <span class="text-slate-300 text-xs font-mono select-none">—</span>
                                             <?php endif; ?>
                                         </div>
                                     </td>

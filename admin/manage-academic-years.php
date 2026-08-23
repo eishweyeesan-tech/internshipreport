@@ -27,7 +27,7 @@ $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 // Fetch all academic years with student counts from users table and supervisor counts from assignments table
 $ay_rows = $db->query("
     SELECT ay.*,
-           (SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND (u.academic_year_id = ay.id OR u.academic_year = ay.year_label)) AS student_count,
+           (SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND u.academic_year_id = ay.id) AS student_count,
            (SELECT COUNT(*) FROM supervisor_academic_assignments saa WHERE saa.academic_year_id = ay.id) AS supervisor_count
     FROM academic_years ay
     ORDER BY ay.start_date DESC, ay.year_label DESC
@@ -63,6 +63,12 @@ $selected_year_history = [];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Academic Years – Admin – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/notifications.js"></script>
     <script>
     (function() {
         var theme = localStorage.getItem('theme');
@@ -72,7 +78,10 @@ $selected_year_history = [];
         darkMode: 'class',
         theme: {
             extend: {
-                fontFamily: { 'inter': ['Inter', 'sans-serif'] },
+                fontFamily: {
+                    'sans': ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    'inter': ['Inter', 'sans-serif'],
+                },
                 fontSize: {
                     'micro': '0.5rem',
                     'caption': '0.6875rem',
@@ -85,7 +94,7 @@ $selected_year_history = [];
     }
     </script>
 </head>
-<body class="bg-slate-50 font-sans antialiased">
+<body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 

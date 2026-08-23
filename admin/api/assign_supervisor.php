@@ -67,8 +67,8 @@ switch ($action) {
         $total_supervisors = get_total_supervisors_for_year($db, $academic_year_id);
 
         // Student count for this year
-        $st_cnt = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND (u.academic_year_id = ? OR u.academic_year = (SELECT year_label FROM academic_years WHERE id = ?))");
-        $st_cnt->bind_param("ii", $academic_year_id, $academic_year_id);
+        $st_cnt = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND u.academic_year_id = ?");
+        $st_cnt->bind_param("i", $academic_year_id);
         $st_cnt->execute();
         $st_res = $st_cnt->get_result();
         $st_row = $st_res ? $st_res->fetch_row() : null;

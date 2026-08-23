@@ -105,11 +105,15 @@ $reflection = $weekly_report ? [
 ] : null;
 
 $evaluation = ($weekly_report && !empty($weekly_report['instructor_grade'])) ? [
-    'grade'               => $weekly_report['instructor_grade'],
-    'comment'             => $weekly_report['instructor_comments'],
-    'instructor_comments' => $weekly_report['instructor_comments'],
-    'report_status'       => $weekly_report['status'],
-    'evaluated_at'        => $weekly_report['submitted_at'],
+    'grade'                   => $weekly_report['instructor_grade'],
+    'comment'                 => $weekly_report['instructor_comments'],
+    'instructor_comments'     => $weekly_report['instructor_comments'],
+    'report_status'           => $weekly_report['status'],
+    'evaluated_at'            => $weekly_report['submitted_at'],
+    'student_signature_type'  => $weekly_report['student_signature_type'] ?? null,
+    'student_signature_value' => $weekly_report['student_signature_value'] ?? null,
+    'signature_type'          => $weekly_report['instructor_signature_type'] ?? $weekly_report['signature_type'] ?? null,
+    'signature_value'         => $weekly_report['instructor_signature_value'] ?? $weekly_report['signature_value'] ?? null,
 ] : null;
 
 // ── Handle Rejection ─────────────────────────────────────────────
@@ -141,11 +145,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_report'])) {
         $res = $rep_stmt->get_result();
         $weekly_report = $res ? $res->fetch_assoc() : null;
         $evaluation = ($weekly_report && !empty($weekly_report['instructor_grade'])) ? [
-            'grade'               => $weekly_report['instructor_grade'],
-            'comment'             => $weekly_report['instructor_comments'],
-            'instructor_comments' => $weekly_report['instructor_comments'],
-            'report_status'       => $weekly_report['status'],
-            'evaluated_at'        => $weekly_report['submitted_at'],
+            'grade'                   => $weekly_report['instructor_grade'],
+            'comment'                 => $weekly_report['instructor_comments'],
+            'instructor_comments'     => $weekly_report['instructor_comments'],
+            'report_status'           => $weekly_report['status'],
+            'evaluated_at'            => $weekly_report['submitted_at'],
+            'student_signature_type'  => $weekly_report['student_signature_type'] ?? null,
+            'student_signature_value' => $weekly_report['student_signature_value'] ?? null,
+            'signature_type'          => $weekly_report['instructor_signature_type'] ?? $weekly_report['signature_type'] ?? null,
+            'signature_value'         => $weekly_report['instructor_signature_value'] ?? $weekly_report['signature_value'] ?? null,
         ] : null;
         $eval_msg = 'rejected';
     }
@@ -203,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
         $instructor_label = ($profile['instructor_name'] ?? '') ?: 'Your instructor';
         $notif_title = 'Report Approved by Instructor';
         $notif_msg = $instructor_label . ' has signed and approved your Week ' . $week_number . ' report with grade "' . ucfirst(str_replace('_', ' ', $grade)) . '".';
-        $student_link = '../student/student-dashboard.php?week=' . (int)$week_number;
+        $student_link = 'student-dashboard.php?tab=weekly-report&week=' . (int)$week_number . '#instructor-evaluation';
         createNotification($db, $student_id, $notif_title, $notif_msg, $student_link, 'instructor_approved', $week_number, $student_id);
 
         // Notify assigned supervisor
@@ -228,11 +236,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
         $res = $rep_stmt->get_result();
         $weekly_report = $res ? $res->fetch_assoc() : null;
         $evaluation = ($weekly_report && !empty($weekly_report['instructor_grade'])) ? [
-            'grade'               => $weekly_report['instructor_grade'],
-            'comment'             => $weekly_report['instructor_comments'],
-            'instructor_comments' => $weekly_report['instructor_comments'],
-            'report_status'       => $weekly_report['status'],
-            'evaluated_at'        => $weekly_report['submitted_at'],
+            'grade'                   => $weekly_report['instructor_grade'],
+            'comment'                 => $weekly_report['instructor_comments'],
+            'instructor_comments'     => $weekly_report['instructor_comments'],
+            'report_status'           => $weekly_report['status'],
+            'evaluated_at'            => $weekly_report['submitted_at'],
+            'student_signature_type'  => $weekly_report['student_signature_type'] ?? null,
+            'student_signature_value' => $weekly_report['student_signature_value'] ?? null,
+            'signature_type'          => $weekly_report['instructor_signature_type'] ?? $weekly_report['signature_type'] ?? null,
+            'signature_value'         => $weekly_report['instructor_signature_value'] ?? $weekly_report['signature_value'] ?? null,
         ] : null;
         $eval_msg = 'saved';
     }
@@ -518,17 +530,22 @@ function render_error($title, $msg, $icon) {
                     </div>
 
                     <!-- Display Signatures -->
+                    <?php
+                    $has_student_sig = !empty($evaluation['student_signature_type']) && !empty($evaluation['student_signature_value']);
+                    $has_instructor_sig = !empty($evaluation['signature_type']) && !empty($evaluation['signature_value']);
+                    $instructor_display_name = $profile['instructor_name'] ?? '';
+                    ?>
                     <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
                         <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-2">Signatures</span>
                         <!-- Student Signature -->
-                        <?php if (!empty($evaluation['student_signature_type']) && !empty($evaluation['student_signature_value'])): ?>
+                        <?php if ($has_student_sig): ?>
                         <div class="mb-3 pb-3 border-b border-slate-200">
                             <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">Student</span>
-                            <?php if ($evaluation['student_signature_type'] === 'typed'): ?>
+                            <?php if (($evaluation['student_signature_type'] ?? '') === 'typed'): ?>
                                 <p class="student-sig-preview" style="font-family:'Great Vibes',cursive; font-size:24px; color:#1e293b;">
                                     <?= htmlspecialchars($evaluation['student_signature_value']) ?>
                                 </p>
-                            <?php elseif ($evaluation['student_signature_type'] === 'uploaded'): ?>
+                            <?php elseif (($evaluation['student_signature_type'] ?? '') === 'uploaded'): ?>
                                 <img src="../uploads/signatures/<?= htmlspecialchars($evaluation['student_signature_value']) ?>" alt="Student Signature" class="max-h-14 object-contain">
                             <?php endif; ?>
                         </div>
@@ -536,12 +553,18 @@ function render_error($title, $msg, $icon) {
                         <!-- Instructor Signature -->
                         <div>
                             <span class="text-sm font-bold text-slate-400 uppercase tracking-wider block mb-1">Instructor</span>
-                            <?php if ($evaluation['signature_type'] === 'typed'): ?>
+                            <?php if ($has_instructor_sig && ($evaluation['signature_type'] ?? '') === 'typed'): ?>
                                 <p class="sig-preview sig-type-great" style="font-family:'Great Vibes',cursive; font-size:28px; color:#1e293b;">
                                     <?= htmlspecialchars($evaluation['signature_value']) ?>
                                 </p>
-                            <?php elseif ($evaluation['signature_type'] === 'uploaded'): ?>
+                            <?php elseif ($has_instructor_sig && ($evaluation['signature_type'] ?? '') === 'uploaded'): ?>
                                 <img src="../uploads/signatures/<?= htmlspecialchars($evaluation['signature_value']) ?>" alt="Instructor Signature" class="max-h-16 object-contain">
+                            <?php elseif (!empty($instructor_display_name)): ?>
+                                <p class="sig-preview sig-type-great" style="font-family:'Great Vibes',cursive; font-size:28px; color:#1e293b;">
+                                    <?= htmlspecialchars($instructor_display_name) ?>
+                                </p>
+                            <?php else: ?>
+                                <p class="text-xs font-semibold text-slate-600">✓ Signed</p>
                             <?php endif; ?>
                         </div>
                     </div>

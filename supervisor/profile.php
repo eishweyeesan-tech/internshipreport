@@ -25,7 +25,7 @@ handle_notification_ajax_actions($db, $sup_id);
 $unread_notif_count = 0;
 $recent_notifications = [];
 try {
-    $notif_stmt2 = $db->prepare("SELECT id, title, message, type, related_week, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
+    $notif_stmt2 = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 10");
     $notif_stmt2->bind_param("i", $sup_id);
     $notif_stmt2->execute();
     $res = $notif_stmt2->get_result();
@@ -244,123 +244,123 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                 <?php endif; ?>
 
                 <!-- Avatar Header -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex items-center gap-5">
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex items-center gap-5">
                     <div class="relative w-16 h-16 shrink-0">
                         <?php if ($profile_pic): ?>
-                            <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-16 h-16 rounded-full object-cover">
+                            <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-16 h-16 rounded-2xl object-cover ring-2 ring-slate-100 shadow-xs">
                         <?php else: ?>
-                            <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl font-bold">
+                            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#005f73] to-teal-700 text-white flex items-center justify-center text-xl font-bold shadow-xs">
                                 <?= strtoupper($sup['username'][0]) ?>
                             </div>
                         <?php endif; ?>
-                        <div class="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200" title="Change avatar">
-                            <svg class="w-2.5 h-2.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <div class="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center border border-slate-200 shadow-xs" title="Change avatar">
+                            <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                         </div>
                     </div>
                     <div>
-                        <h2 class="text-sm font-black text-slate-800"><?= htmlspecialchars($sup['username']) ?></h2>
-                        <p class="text-sm text-slate-400 mt-0.5"><?= htmlspecialchars($sup['email']) ?></p>
-                        <span class="text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded mt-1.5 inline-block">👨‍🏫 University Supervisor</span>
+                        <h2 class="text-2xl font-bold text-slate-800 tracking-tight leading-tight"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></h2>
+                        <p class="text-xs text-slate-400 font-medium mt-1"><?= htmlspecialchars($sup['email']) ?></p>
+                        <span class="text-xs font-semibold text-teal-700 bg-teal-50 ring-1 ring-teal-600/20 px-3 py-1 rounded-full mt-2 inline-block">👨‍🏫 University Supervisor</span>
                     </div>
                 </div>
 
                 <?php if ($avatar_msg): ?>
-                <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
+                <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2">
                     <span>✅</span> <?= htmlspecialchars($avatar_msg) ?>
                 </div>
                 <?php endif; ?>
 
                 <!-- ════ PROFILE PICTURE UPLOAD ════ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100">
-                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-violet-50 text-violet-600 rounded">📷</span> Profile Picture
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                        <h3 class="text-lg font-semibold text-slate-700 flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center text-xs font-bold">📷</span> Profile Picture
                         </h3>
                     </div>
-                    <form method="POST" enctype="multipart/form-data" class="p-5">
+                    <form method="POST" enctype="multipart/form-data" class="p-6">
                         <input type="hidden" name="update_avatar" value="1">
                         <div class="flex items-center gap-5">
                             <?php if ($profile_pic): ?>
-                                <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Current avatar" class="w-14 h-14 rounded-full object-cover border border-slate-200">
+                                <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Current avatar" class="w-16 h-16 rounded-2xl object-cover border border-slate-200 shadow-xs">
                             <?php else: ?>
-                                <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold border border-slate-200">
+                                <div class="w-16 h-16 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl font-bold border border-teal-200/60 shadow-xs">
                                     <?= strtoupper(substr(format_supervisor_name($sup_name), 0, 1)) ?>
                                 </div>
                             <?php endif; ?>
                             <div class="flex-1">
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Upload New Picture</label>
-                                <input type="file" name="avatar" accept="image/jpeg,image/png" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 file:cursor-pointer">
-                                <p class="text-sm text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Upload New Picture</label>
+                                <input type="file" name="avatar" accept="image/jpeg,image/png" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-teal-500 transition-all duration-200 ease-in-out file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 file:cursor-pointer">
+                                <p class="text-xs text-slate-400 font-medium mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
                             </div>
                         </div>
-                        <div class="flex justify-start pt-3">
-                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">📷 Upload Picture</button>
+                        <div class="flex justify-start pt-4">
+                            <button type="submit" class="px-5 py-2.5 bg-[#005f73] hover:bg-[#0a9396] text-white font-semibold text-xs rounded-xl shadow-xs transition-all duration-200 ease-in-out cursor-pointer">📷 Upload Picture</button>
                         </div>
                     </form>
                 </div>
 
                 <!-- ════ SUPERVISOR INFORMATION ════ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100">
-                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-indigo-50 text-indigo-600 rounded">🧑‍💼</span> Supervisor Information
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                        <h3 class="text-lg font-semibold text-slate-700 flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">🧑‍💼</span> Supervisor Information
                         </h3>
                     </div>
-                    <div class="p-5">
+                    <div class="p-6">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Full Name</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></p>
+                            <div class="p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Full Name</p>
+                                <p class="text-sm font-semibold text-slate-800 mt-1"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></p>
                             </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Username</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['username']) ?></p>
+                            <div class="p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Username</p>
+                                <p class="text-sm font-semibold text-slate-800 mt-1"><?= htmlspecialchars($sup['username']) ?></p>
                             </div>
 
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Email</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5 break-all"><?= htmlspecialchars($sup['email']) ?></p>
+                            <div class="p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Email</p>
+                                <p class="text-sm font-semibold text-slate-800 mt-1 break-all"><?= htmlspecialchars($sup['email']) ?></p>
                             </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Phone</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['phone'] ?? '') ?: '—' ?></p>
+                            <div class="p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Phone</p>
+                                <p class="text-sm font-semibold text-slate-800 mt-1"><?= htmlspecialchars($sup['phone'] ?? '') ?: '—' ?></p>
                             </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Department</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['department'] ?? '') ?: '—' ?></p>
+                            <div class="p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Department</p>
+                                <p class="text-sm font-semibold text-slate-800 mt-1"><?= htmlspecialchars($sup['department'] ?? '') ?: '—' ?></p>
                             </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Position / Job Title</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['position'] ?? '') ?: '—' ?></p>
+                            <div class="p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Position / Job Title</p>
+                                <p class="text-sm font-semibold text-slate-800 mt-1"><?= htmlspecialchars($sup['position'] ?? '') ?: '—' ?></p>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- ════ SECURITY & LAST LOGIN ════ -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100">
-                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🛡️</span> Security & Last Login
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                        <h3 class="text-lg font-semibold text-slate-700 flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs font-bold">🛡️</span> Security & Last Login
                         </h3>
                     </div>
-                    <div class="p-5">
+                    <div class="p-6">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                                <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0"></span>
+                            <div class="flex items-center gap-3.5 p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <span class="w-3 h-3 bg-emerald-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-sm font-bold text-slate-500 uppercase">Account Status</p>
-                                    <p class="text-xs font-semibold text-emerald-600">Active</p>
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Account Status</p>
+                                    <p class="text-sm font-semibold text-emerald-600 mt-0.5">Active</p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                                <span class="w-2.5 h-2.5 bg-blue-500 rounded-full shrink-0"></span>
+                            <div class="flex items-center gap-3.5 p-4 bg-slate-50/70 border border-slate-200/60 rounded-2xl">
+                                <span class="w-3 h-3 bg-blue-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-sm font-bold text-slate-500 uppercase">Last Login Detected</p>
+                                    <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Last Login Detected</p>
                                     <?php if ($last_login_at): ?>
-                                        <p class="text-xs font-semibold text-slate-700"><?= date('d M Y, h:i A', strtotime($last_login_at)) ?></p>
+                                        <p class="text-sm font-semibold text-slate-700 mt-0.5"><?= date('d M Y, h:i A', strtotime($last_login_at)) ?></p>
                                     <?php else: ?>
-                                        <p class="text-xs font-semibold text-slate-400">No login recorded yet</p>
+                                        <p class="text-sm font-normal text-slate-400 mt-0.5">No login recorded yet</p>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -369,74 +369,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                 </div>
 
                 <!-- Section 1: Account Info -->
-                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100">
-                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-blue-50 text-blue-600 rounded">👤</span> Account Information
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                        <h3 class="text-lg font-semibold text-slate-700 flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold">👤</span> Account Information
                         </h3>
                     </div>
-                    <form method="POST" class="p-5 space-y-4">
+                    <form method="POST" class="p-6 space-y-4">
                         <input type="hidden" name="update_profile" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Full Name</label>
-                                <input type="text" name="new_name" value="<?= htmlspecialchars($sup['username']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Full Name</label>
+                                <input type="text" name="new_name" value="<?= htmlspecialchars($sup['username']) ?>" required class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 ease-in-out">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Email Address</label>
-                                <input type="email" name="new_email" value="<?= htmlspecialchars($sup['email']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Email Address</label>
+                                <input type="email" name="new_email" value="<?= htmlspecialchars($sup['email']) ?>" required class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 ease-in-out">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Phone</label>
-                                <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09-123456789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Phone</label>
+                                <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09-123456789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid phone number" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 ease-in-out">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Department</label>
-                                <input type="text" name="department" value="<?= htmlspecialchars($sup['department'] ?? '') ?>" placeholder="e.g. Computer Science" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Department</label>
+                                <input type="text" name="department" value="<?= htmlspecialchars($sup['department'] ?? '') ?>" placeholder="e.g. Computer Science" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 ease-in-out">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Position / Job Title</label>
-                                <input type="text" name="position" value="<?= htmlspecialchars($sup['position'] ?? '') ?>" placeholder="e.g. Senior Lecturer" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Position / Job Title</label>
+                                <input type="text" name="position" value="<?= htmlspecialchars($sup['position'] ?? '') ?>" placeholder="e.g. Senior Lecturer" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 ease-in-out">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Role</label>
-                                <div class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 font-semibold cursor-default select-none">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Role</label>
+                                <div class="w-full bg-slate-100 border border-slate-200/80 rounded-xl px-3.5 py-2 text-sm text-slate-500 font-semibold cursor-default select-none">
                                     👨‍🏫 University Supervisor
                                 </div>
                             </div>
                         </div>
-                        <div class="flex justify-start pt-1">
-                            <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">💾 Save Profile</button>
+                        <div class="flex justify-start pt-2">
+                            <button type="submit" class="px-5 py-2.5 bg-[#005f73] hover:bg-[#0a9396] text-white font-semibold text-xs rounded-xl shadow-xs transition-all duration-200 ease-in-out cursor-pointer">💾 Save Profile</button>
                         </div>
                     </form>
                 </div>
 
                 <!-- Section 2: Change Password -->
-                <div id="security-section" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100">
-                        <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-amber-50 text-amber-600 rounded">🔑</span> Security & Password
+                <div id="security-section" class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+                        <h3 class="text-lg font-semibold text-slate-700 flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-xs font-bold">🔑</span> Security & Password
                         </h3>
                     </div>
-                    <form method="POST" class="p-5 space-y-4">
+                    <form method="POST" class="p-6 space-y-4">
                         <input type="hidden" name="change_password" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Current Password</label>
-                                <input type="password" name="current_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Current Password</label>
+                                <input type="password" name="current_password" required class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-amber-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 ease-in-out">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
-                                <input type="password" name="new_password" required minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
-                                <p class="text-sm text-slate-400 mt-0.5">Min 6 characters</p>
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">New Password</label>
+                                <input type="password" name="new_password" required minlength="6" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-amber-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 ease-in-out">
+                                <p class="text-xs text-slate-400 font-medium mt-1">Min 6 characters</p>
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>
-                                <input type="password" name="confirm_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Confirm New Password</label>
+                                <input type="password" name="confirm_password" required class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-amber-500 rounded-xl px-3.5 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all duration-200 ease-in-out">
                             </div>
                         </div>
-                        <div class="flex justify-start pt-1">
-                            <button type="submit" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">🔒 Update Password</button>
+                        <div class="flex justify-start pt-2">
+                            <button type="submit" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs rounded-xl shadow-xs transition-all duration-200 ease-in-out cursor-pointer">🔒 Update Password</button>
                         </div>
                     </form>
                 </div>

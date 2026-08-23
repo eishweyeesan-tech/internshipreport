@@ -25,7 +25,7 @@ if ($uid <= 0) {
 $profile_stmt = $db->prepare("
     SELECT u.id, u.username, u.email, ay.year_label AS academic_year, u.created_at, u.profile_pic,
            u.username AS full_name, sp.student_roll, sp.major,
-           COALESCE(c.company_name, '') AS company_name, sp.job_role,
+           COALESCE(c.company_name, '') AS company_name, u.position AS job_role,
            sp.internship_start_date, sp.internship_end_date, sp.company_id,
            sup_u.username AS supervisor_name
     FROM users u
@@ -101,8 +101,13 @@ if (empty($weeks)) {
 }
 
 // ── Fetch all data ───────────────────────────────────────────────
-$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date ASC");
-$all_logs_stmt->bind_param("i", $uid);
+if ($intern_start && $intern_end) {
+    $all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date >= ? AND log_date <= ? ORDER BY log_date ASC");
+    $all_logs_stmt->bind_param("iss", $uid, $intern_start, $intern_end);
+} else {
+    $all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date ASC");
+    $all_logs_stmt->bind_param("i", $uid);
+}
 $all_logs_stmt->execute();
 $res = $all_logs_stmt->get_result();
 $all_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
@@ -132,12 +137,15 @@ foreach ($all_reports as $r) {
         $refs_by_week[$wn] = $ref_item;
     }
     $eval_by_week[$wn] = [
-        'week_number'         => $wn,
-        'grade'               => $r['instructor_grade'],
-        'comment'             => $r['instructor_comments'],
-        'instructor_comments' => $r['instructor_comments'],
-        'report_status'       => $r['status'],
-        'evaluated_at'        => $r['submitted_at'],
+        'week_number'             => $wn,
+        'grade'                   => $r['instructor_grade'],
+        'comment'                 => $r['instructor_comments'],
+        'instructor_comments'     => $r['instructor_comments'],
+        'report_status'           => $r['status'],
+        'evaluated_at'            => $r['submitted_at'],
+        'student_signature_type'  => $r['student_signature_type'] ?? null,
+        'student_signature_value' => $r['student_signature_value'] ?? null,
+        'student_signed_at'       => $r['student_signed_at'] ?? null,
     ];
     if (!empty($r['supervisor_grade'])) {
         $sup_eval_by_week[$wn] = [
@@ -145,6 +153,7 @@ foreach ($all_reports as $r) {
             'weekly_grade'        => $r['supervisor_grade'],
             'supervisor_comments' => $r['supervisor_comments'],
             'supervisor_name'     => $r['supervisor_name'],
+            'evaluated_at'        => $r['submitted_at'],
         ];
     }
 }
@@ -166,19 +175,35 @@ foreach ($all_logs as $log) {
 // ── Stats ────────────────────────────────────────────────────────
 $total_logs_count = count($all_logs);
 
-$present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status = 'present'");
-$present_stmt->bind_param("i", $uid);
-$present_stmt->execute();
-$res = $present_stmt->get_result();
-$p_row = $res ? $res->fetch_row() : null;
-$total_present = (int) ($p_row[0] ?? 0);
+if ($intern_start && $intern_end) {
+    $present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date >= ? AND log_date <= ? AND attendance_status = 'present'");
+    $present_stmt->bind_param("iss", $uid, $intern_start, $intern_end);
+    $present_stmt->execute();
+    $res = $present_stmt->get_result();
+    $p_row = $res ? $res->fetch_row() : null;
+    $total_present = (int) ($p_row[0] ?? 0);
 
-$absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave')");
-$absent_stmt->bind_param("i", $uid);
-$absent_stmt->execute();
-$res = $absent_stmt->get_result();
-$a_row = $res ? $res->fetch_row() : null;
-$total_absent = (int) ($a_row[0] ?? 0);
+    $absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date >= ? AND log_date <= ? AND attendance_status IN ('absent','leave')");
+    $absent_stmt->bind_param("iss", $uid, $intern_start, $intern_end);
+    $absent_stmt->execute();
+    $res = $absent_stmt->get_result();
+    $a_row = $res ? $res->fetch_row() : null;
+    $total_absent = (int) ($a_row[0] ?? 0);
+} else {
+    $present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status = 'present'");
+    $present_stmt->bind_param("i", $uid);
+    $present_stmt->execute();
+    $res = $present_stmt->get_result();
+    $p_row = $res ? $res->fetch_row() : null;
+    $total_present = (int) ($p_row[0] ?? 0);
+
+    $absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave')");
+    $absent_stmt->bind_param("i", $uid);
+    $absent_stmt->execute();
+    $res = $absent_stmt->get_result();
+    $a_row = $res ? $res->fetch_row() : null;
+    $total_absent = (int) ($a_row[0] ?? 0);
+}
 
 $total_weeks = count($weeks);
 $total_reflections = count($all_refs);
@@ -223,52 +248,34 @@ foreach ($weeks as $wn => $wr) {
 }
 
 // ── Filtered week/month ──────────────────────────────────────────
-$filter_week = isset($_GET['week']) ? (int) $_GET['week'] : 0;
-$filter_month = $_GET['month'] ?? '';
+$default_week = !empty($weeks) ? (isset($weeks[1]) ? 1 : (int) array_key_first($weeks)) : 0;
+$default_month = !empty($months) ? (string) array_key_first($months) : '';
 
-// ── Scoped stats for selected period ─────────────────────────────
+if ($view_mode === 'weekly') {
+    if (isset($_GET['week'])) {
+        $filter_week = ($_GET['week'] === 'all' || $_GET['week'] === '0') ? 0 : (int) $_GET['week'];
+    } else {
+        $filter_week = $default_week;
+    }
+    $filter_month = '';
+} else {
+    if (isset($_GET['month'])) {
+        $filter_month = ($_GET['month'] === 'all' || $_GET['month'] === '0') ? '' : trim($_GET['month']);
+    } else {
+        $filter_month = $default_month;
+    }
+    $filter_week = 0;
+}
+
+// ── Stats for full internship period ─────────────────────────────
 $display_logs_count  = $total_logs_count;
 $display_present     = $total_present;
 $display_absent      = $total_absent;
 $display_reflections = $total_reflections;
 $display_hours       = $total_hours;
 $display_mins        = $total_mins;
-
-if ($view_mode === 'weekly' && $filter_week > 0 && isset($weeks[$filter_week])) {
-    $wl = $logs_by_week[$filter_week] ?? [];
-    $display_logs_count = count($wl);
-    $display_present = 0;
-    $display_absent = 0;
-    $display_minutes = 0;
-    foreach ($wl as $log) {
-        if ($log['attendance_status'] === 'present') $display_present++;
-        else $display_absent++;
-        $p = explode(':', $log['calculated_duration']);
-        if (count($p) === 2) $display_minutes += ((int)$p[0] * 60) + (int)$p[1];
-    }
-    $display_reflections = isset($refs_by_week[$filter_week]) ? 1 : 0;
-    $display_hours = floor($display_minutes / 60);
-    $display_mins  = $display_minutes % 60;
-} elseif ($view_mode === 'monthly' && $filter_month && isset($months[$filter_month])) {
-    $display_logs_count = 0;
-    $display_present = 0;
-    $display_absent = 0;
-    $display_minutes = 0;
-    $display_reflections = 0;
-    foreach ($months[$filter_month]['weeks'] as $wn) {
-        $wl = $logs_by_week[$wn] ?? [];
-        $display_logs_count += count($wl);
-        foreach ($wl as $log) {
-            if ($log['attendance_status'] === 'present') $display_present++;
-            else $display_absent++;
-            $p = explode(':', $log['calculated_duration']);
-            if (count($p) === 2) $display_minutes += ((int)$p[0] * 60) + (int)$p[1];
-        }
-        if (isset($refs_by_week[$wn])) $display_reflections++;
-    }
-    $display_hours = floor($display_minutes / 60);
-    $display_mins  = $display_minutes % 60;
-}
+$all_recorded_days   = $display_present + $display_absent;
+$all_att_rate        = $all_recorded_days > 0 ? (int)round(($display_present / $all_recorded_days) * 100) : 0;
 
 // Back link
 $back_url = ($role === 'admin') ? 'admin/admin-dashboard.php?tab=history' : 'supervisor/my-students.php';
@@ -298,10 +305,18 @@ $sgd = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= htmlspecialchars($student_name) ?> – Log History</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Great+Vibes&display=swap" rel="stylesheet">
+    <script src="assets/js/main.js"></script>
     <script>
     tailwind.config = {
         theme: {
             extend: {
+                fontFamily: {
+                    'sans': ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                    'inter': ['Inter', 'sans-serif'],
+                },
                 fontSize: {
                     'micro': '0.5rem',
                     'caption': '0.6875rem',
@@ -312,26 +327,125 @@ $sgd = [
         }
     }
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap" rel="stylesheet">
     <style>
     html { scrollbar-gutter: stable; overflow-y: scroll; }
     @media print {
-        .no-print { display: none !important; }
-        body { background: white !important; }
+        @page {
+            size: A4 portrait;
+            margin: 15mm 15mm 15mm 15mm;
+        }
+        body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+            font-size: 9.5pt !important;
+            line-height: 1.35 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        #web-app-container, .no-print, button, form button, #printModal {
+            display: none !important;
+        }
+        #printable-report {
+            display: block !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .print-doc-table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            margin-top: 6px !important;
+            margin-bottom: 12px !important;
+        }
+        .print-doc-table thead {
+            display: table-header-group !important;
+        }
+        .print-doc-table tr {
+            page-break-inside: avoid !important;
+        }
+        .print-doc-table th, .print-doc-table td {
+            border: 1px solid #334155 !important;
+            padding: 4px 6px !important;
+            font-size: 8.5pt !important;
+        }
+        .print-doc-table th {
+            background-color: #f8fafc !important;
+            color: #0f172a !important;
+            font-weight: 700 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+        .print-card-box {
+            border: 1px solid #cbd5e1 !important;
+            page-break-inside: avoid !important;
+            margin-bottom: 10px !important;
+            padding: 10px !important;
+            border-radius: 4px !important;
+        }
+        .print-section-title {
+            font-size: 11pt !important;
+            font-weight: 800 !important;
+            text-transform: uppercase !important;
+            border-bottom: 1.5px solid #0f172a !important;
+            padding-bottom: 3px !important;
+            margin-top: 16px !important;
+            margin-bottom: 8px !important;
+            color: #0f172a !important;
+        }
     }
     </style>
+    <script>
+    function openPrintModal() {
+        var m = document.getElementById('printModal');
+        if (m) m.classList.remove('hidden');
+    }
+    function closePrintModal() {
+        var m = document.getElementById('printModal');
+        if (m) m.classList.add('hidden');
+    }
+    function toggleFullReport(cb) {
+        var sum = document.getElementById('print_opt_summary');
+        var logs = document.getElementById('print_opt_logs');
+        var ref = document.getElementById('print_opt_reflections');
+        var ev = document.getElementById('print_opt_evaluations');
+        if (sum) sum.checked = cb.checked;
+        if (logs) logs.checked = cb.checked;
+        if (ref) ref.checked = cb.checked;
+        if (ev) ev.checked = cb.checked;
+    }
+    function executePrint() {
+        var sum = document.getElementById('print_opt_summary') ? document.getElementById('print_opt_summary').checked : true;
+        var logs = document.getElementById('print_opt_logs') ? document.getElementById('print_opt_logs').checked : true;
+        var ref = document.getElementById('print_opt_reflections') ? document.getElementById('print_opt_reflections').checked : true;
+        var ev = document.getElementById('print_opt_evaluations') ? document.getElementById('print_opt_evaluations').checked : true;
+        
+        var elSum = document.getElementById('print-doc-summary');
+        var elLogs = document.getElementById('print-doc-logs');
+        var elRef = document.getElementById('print-doc-reflections');
+        var elEv = document.getElementById('print-doc-evaluations');
+        
+        if (elSum) elSum.style.display = sum ? 'block' : 'none';
+        if (elLogs) elLogs.style.display = logs ? 'block' : 'none';
+        if (elRef) elRef.style.display = ref ? 'block' : 'none';
+        if (elEv) elEv.style.display = ev ? 'block' : 'none';
+        
+        closePrintModal();
+        setTimeout(function() {
+            window.print();
+        }, 100);
+    }
+    </script>
 </head>
-<body class="bg-slate-100 font-sans antialiased p-4 sm:p-6 md:p-8">
+<body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-sans antialiased p-4 sm:p-6 md:p-8">
 
-<div class="max-w-7xl mx-auto w-full space-y-6">
+<div id="web-app-container" class="max-w-7xl mx-auto w-full space-y-6">
 
     <!-- ════ TOP NAVIGATION ════ -->
     <div class="flex items-center justify-between no-print">
-        <a href="<?= htmlspecialchars($back_url) ?>" class="inline-flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-            Back to Dashboard
+        <a href="<?= htmlspecialchars($back_url) ?>" class="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200/80 text-slate-700 text-xs font-semibold rounded-xl shadow-xs transition-all duration-200 ease-in-out">
+            <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            <span>Back to Dashboard</span>
         </a>
         <div class="text-xs text-slate-400 font-medium">
             Student Management &amp; Audit Log
@@ -339,7 +453,7 @@ $sgd = [
     </div>
 
     <!-- ════ PAGE HEADER / STUDENT PROFILE BANNER ════ -->
-    <div class="bg-white border border-slate-200 shadow-sm rounded-2xl p-5 no-print">
+    <div class="bg-white border border-slate-200/80 shadow-sm rounded-2xl p-6 no-print">
         <div class="flex items-start justify-between flex-wrap gap-4">
             <div class="flex items-center gap-4">
                 <?php if (!empty($profile_pic)): ?>
@@ -407,35 +521,35 @@ $sgd = [
             <!-- View Mode Toggle -->
             <div class="flex items-center gap-2">
                 <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">View:</span>
-                <a href="?uid=<?= $uid ?>&mode=weekly<?= $filter_week ? "&week={$filter_week}" : '' ?>" class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Weekly</a>
-                <a href="?uid=<?= $uid ?>&mode=monthly<?= $filter_month ? "&month={$filter_month}" : '' ?>" class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Monthly</a>
+                <a href="?uid=<?= $uid ?>&mode=weekly" class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Weekly</a>
+                <a href="?uid=<?= $uid ?>&mode=monthly" class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Monthly</a>
             </div>
 
             <!-- Week / Month Filter Jump Selectors -->
             <?php if ($view_mode === 'weekly' && !empty($weeks)): ?>
             <div class="flex items-center gap-2">
                 <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Jump to:</span>
-                <select onchange="if(this.value) window.location.href='?uid=<?= $uid ?>&mode=weekly&week='+this.value; else window.location.href='?uid=<?= $uid ?>&mode=weekly';" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer">
-                    <option value="">All Weeks (<?= count($weeks) ?> weeks)</option>
+                <select onchange="window.location.href='?uid=<?= $uid ?>&mode=weekly&week=' + this.value;" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer">
+                    <option value="all" <?= ($filter_week === 0) ? 'selected' : '' ?>>All Weeks (<?= count($weeks) ?> weeks)</option>
                     <?php foreach ($weeks as $wn => $wr): ?>
-                    <option value="<?= $wn ?>" <?= $filter_week === $wn ? 'selected' : '' ?>>Week <?= $wn ?> (<?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M Y') ?>)</option>
+                    <option value="<?= $wn ?>" <?= ($filter_week === $wn) ? 'selected' : '' ?>>Week <?= $wn ?> (<?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M Y') ?>)</option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <?php elseif ($view_mode === 'monthly' && !empty($months)): ?>
             <div class="flex items-center gap-2">
                 <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Jump to:</span>
-                <select onchange="if(this.value) window.location.href='?uid=<?= $uid ?>&mode=monthly&month='+this.value; else window.location.href='?uid=<?= $uid ?>&mode=monthly';" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer">
-                    <option value="">All Months (<?= count($months) ?> months)</option>
+                <select onchange="window.location.href='?uid=<?= $uid ?>&mode=monthly&month=' + encodeURIComponent(this.value);" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer">
+                    <option value="all" <?= ($filter_month === '' || $filter_month === 'all') ? 'selected' : '' ?>>All Months (<?= count($months) ?> months)</option>
                     <?php foreach ($months as $mk => $mv): ?>
-                    <option value="<?= htmlspecialchars($mk) ?>" <?= $filter_month === $mk ? 'selected' : '' ?>><?= htmlspecialchars($mv['label']) ?></option>
+                    <option value="<?= htmlspecialchars($mk) ?>" <?= ($filter_month === $mk) ? 'selected' : '' ?>><?= htmlspecialchars($mv['label']) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
             <?php endif; ?>
 
             <!-- Print Action -->
-            <button onclick="window.print()" class="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-xs cursor-pointer">
+            <button onclick="openPrintModal()" class="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition shadow-xs cursor-pointer">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2m-16-5V9a2 2 0 012-2h12a2 2 0 012 2v4m-12 9h8a2 2 0 002-2v-3a2 2 0 00-2-2H8a2 2 0 00-2 2v3a2 2 0 002 2z"/></svg>
                 Print Report
             </button>
@@ -583,7 +697,13 @@ $sgd = [
                         <?php if (!empty($week_eval['student_signature_type']) && $week_eval['student_signature_type'] === 'typed'): ?>
                             <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval['student_signature_value']) ?></span>
                         <?php else: ?>
-                            <img src="<?= htmlspecialchars($week_eval['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
+                            <?php
+                            $sig_src_w = $week_eval['student_signature_value'];
+                            if (!str_starts_with($sig_src_w, 'data:') && !str_starts_with($sig_src_w, 'http') && !str_starts_with($sig_src_w, 'uploads/')) {
+                                $sig_src_w = 'uploads/signatures/' . $sig_src_w;
+                            }
+                            ?>
+                            <img src="<?= htmlspecialchars($sig_src_w) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
                         <?php endif; ?>
                         <span class="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-caption font-bold shrink-0">&#10003; Signed</span>
                     </div>
@@ -631,7 +751,7 @@ $sgd = [
                                 </p>
                                 <?php if (!empty($week_eval['signature_value'])): ?>
                                 <div class="flex items-center gap-1.5">
-                                    <?php if ($week_eval['signature_type'] === 'typed'): ?>
+                                    <?php if (($week_eval['signature_type'] ?? '') === 'typed'): ?>
                                         <span class="inline-flex items-center px-2 py-0.5 bg-white border border-slate-200 rounded max-h-[26px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 0.8rem; line-height: 1;"><?= htmlspecialchars($week_eval['signature_value']) ?></span>
                                     <?php else: ?>
                                         <img src="<?= htmlspecialchars($week_eval['signature_value']) ?>" alt="Instructor Signature" class="h-5 object-contain">
@@ -677,10 +797,12 @@ $sgd = [
                                 <p class="text-xs italic text-slate-400">No written comments provided.</p>
                                 <?php endif; ?>
                             </div>
+                            <?php if (!empty($week_sup_eval['evaluated_at'])): ?>
                             <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                 <?= htmlspecialchars((new DateTime($week_sup_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
                             </p>
+                            <?php endif; ?>
                             <?php else: ?>
                             <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
                                 <div>
@@ -881,7 +1003,13 @@ $sgd = [
                             <?php if (!empty($week_eval_m['student_signature_type']) && $week_eval_m['student_signature_type'] === 'typed'): ?>
                                 <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval_m['student_signature_value']) ?></span>
                             <?php else: ?>
-                                <img src="<?= htmlspecialchars($week_eval_m['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
+                                <?php
+                                $sig_src_m = $week_eval_m['student_signature_value'];
+                                if (!str_starts_with($sig_src_m, 'data:') && !str_starts_with($sig_src_m, 'http') && !str_starts_with($sig_src_m, 'uploads/')) {
+                                    $sig_src_m = 'uploads/signatures/' . $sig_src_m;
+                                }
+                                ?>
+                                <img src="<?= htmlspecialchars($sig_src_m) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
                             <?php endif; ?>
                             <span class="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-caption font-bold shrink-0">&#10003; Signed</span>
                         </div>
@@ -929,7 +1057,7 @@ $sgd = [
                                     </p>
                                     <?php if (!empty($week_eval_m['signature_value'])): ?>
                                     <div class="flex items-center gap-1.5">
-                                        <?php if ($week_eval_m['signature_type'] === 'typed'): ?>
+                                        <?php if (($week_eval_m['signature_type'] ?? '') === 'typed'): ?>
                                             <span class="inline-flex items-center px-2 py-0.5 bg-white border border-slate-200 rounded max-h-[26px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 0.8rem; line-height: 1;"><?= htmlspecialchars($week_eval_m['signature_value']) ?></span>
                                         <?php else: ?>
                                             <img src="<?= htmlspecialchars($week_eval_m['signature_value']) ?>" alt="Instructor Signature" class="h-5 object-contain">
@@ -975,10 +1103,12 @@ $sgd = [
                                 <p class="text-xs italic text-slate-400">No written comments provided.</p>
                                 <?php endif; ?>
                             </div>
+                            <?php if (!empty($week_sup_eval_m['evaluated_at'])): ?>
                             <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                 <?= htmlspecialchars((new DateTime($week_sup_eval_m['evaluated_at']))->format('d M Y, h:i A')) ?>
                             </p>
+                            <?php endif; ?>
                             <?php else: ?>
                             <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
                                 <div>
@@ -1009,7 +1139,304 @@ $sgd = [
     <?php endif; ?>
 <?php endif; ?>
 
-    <div class="text-center text-sm text-slate-400 py-4 no-print">Powered by InternReport</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- ══════════════════ PRINT SELECTION MODAL DIALOG ═════════════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="printModal" class="hidden fixed inset-0 z-[9999] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-sm w-full p-5 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+            <h3 class="text-sm font-bold text-slate-800">Print Internship Report</h3>
+            <button type="button" onclick="closePrintModal()" class="text-slate-400 hover:text-slate-600 text-lg leading-none cursor-pointer">✕</button>
+        </div>
+        
+        <p class="text-xs text-slate-500">Choose sections to include in the printable report:</p>
+        
+        <div class="space-y-2 text-xs text-slate-700 font-medium">
+            <label class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
+                <input type="checkbox" id="print_opt_summary" checked class="accent-indigo-600 rounded">
+                <span>Student Summary</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
+                <input type="checkbox" id="print_opt_logs" checked class="accent-indigo-600 rounded">
+                <span>Daily Logs</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
+                <input type="checkbox" id="print_opt_reflections" checked class="accent-indigo-600 rounded">
+                <span>Weekly Reflections</span>
+            </label>
+            <label class="flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-50 cursor-pointer border border-slate-100">
+                <input type="checkbox" id="print_opt_evaluations" checked class="accent-indigo-600 rounded">
+                <span>Signatures &amp; Evaluations</span>
+            </label>
+            <div class="pt-1">
+                <label class="flex items-center gap-2.5 p-2 rounded-xl bg-indigo-50/60 hover:bg-indigo-50 cursor-pointer border border-indigo-200 text-indigo-900 font-bold">
+                    <input type="checkbox" id="print_opt_full" onchange="toggleFullReport(this)" checked class="accent-indigo-600 rounded">
+                    <span>Full Internship Report</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <button type="button" onclick="closePrintModal()" class="px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" onclick="executePrint()" class="px-4 py-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5">
+                <span>Print Selected</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<!-- ══════════════════ REALISTIC A4 UNIVERSITY PRINT LAYOUT ═════════════════ -->
+<!-- ═══════════════════════════════════════════════════════════════════════════ -->
+<div id="printable-report" class="hidden print:block text-black bg-white">
+    
+    <!-- ── Document Header ── -->
+    <div class="text-center border-b-2 border-black pb-3 mb-4">
+        <h1 class="text-base font-black uppercase tracking-wider text-black">UNIVERSITY INTERNSHIP REPORT / LOGBOOK</h1>
+        <p class="text-[9pt] text-gray-700 font-semibold mt-0.5 uppercase tracking-wide">Student Internship Training &amp; Evaluation Record</p>
+    </div>
+
+    <!-- ── 1. Student Summary & Overall Attendance ── -->
+    <div id="print-doc-summary" class="mb-4">
+        <div class="print-section-title">1. Student Information</div>
+        <table class="w-full text-xs mb-3 border-collapse">
+            <tbody>
+                <tr>
+                    <td class="font-bold py-1 w-1/4">Student Name:</td>
+                    <td class="py-1 w-1/4"><?= htmlspecialchars($student_name) ?></td>
+                    <td class="font-bold py-1 w-1/4">Roll Number:</td>
+                    <td class="py-1 w-1/4"><?= htmlspecialchars($student_roll ?: '—') ?></td>
+                </tr>
+                <tr>
+                    <td class="font-bold py-1">Major / Department:</td>
+                    <td class="py-1"><?= htmlspecialchars($major ?: '—') ?></td>
+                    <td class="font-bold py-1">Academic Year:</td>
+                    <td class="py-1"><?= htmlspecialchars($academic_year ?: '—') ?></td>
+                </tr>
+                <tr>
+                    <td class="font-bold py-1">Host Company:</td>
+                    <td class="py-1"><?= htmlspecialchars($company_name ?: '—') ?></td>
+                    <td class="font-bold py-1">Job Role / Position:</td>
+                    <td class="py-1"><?= htmlspecialchars($student['job_role'] ?? '—') ?></td>
+                </tr>
+                <tr>
+                    <td class="font-bold py-1">University Supervisor:</td>
+                    <td class="py-1"><?= htmlspecialchars($supervisor_name ?: '—') ?></td>
+                    <td class="font-bold py-1">Company Instructor:</td>
+                    <td class="py-1"><?= htmlspecialchars($student['contact_person'] ?? '—') ?></td>
+                </tr>
+                <tr>
+                    <td class="font-bold py-1">Internship Period:</td>
+                    <td class="py-1" colspan="3">
+                        <?= $intern_start ? (new DateTime($intern_start))->format('d M Y') : '—' ?> to <?= $intern_end ? (new DateTime($intern_end))->format('d M Y') : '—' ?>
+                        (<?= $total_weeks ?> Weeks)
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="print-section-title">2. Internship Summary &amp; Attendance</div>
+        <table class="w-full text-xs mb-3 border-collapse">
+            <tbody>
+                <tr>
+                    <td class="font-bold py-1 w-1/4">Total Recorded Days:</td>
+                    <td class="py-1 w-1/4"><?= $all_recorded_days ?> days</td>
+                    <td class="font-bold py-1 w-1/4">Overall Attendance Rate:</td>
+                    <td class="py-1 w-1/4 font-bold"><?= $all_att_rate ?>%</td>
+                </tr>
+                <tr>
+                    <td class="font-bold py-1">Days Present:</td>
+                    <td class="py-1"><?= $total_present ?> days</td>
+                    <td class="font-bold py-1">Days Absent / Leave:</td>
+                    <td class="py-1"><?= $total_absent ?> days</td>
+                </tr>
+                <tr>
+                    <td class="font-bold py-1">Total Hours Worked:</td>
+                    <td class="py-1" colspan="3"><?= $total_hours ?>h <?= $total_mins ?>m</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── 2. Daily Activity Logs ── -->
+    <div id="print-doc-logs" class="mb-4">
+        <div class="print-section-title">3. Daily Activity Logs</div>
+        <?php if (!empty($all_logs)): ?>
+        <table class="print-doc-table w-full text-xs border-collapse">
+            <thead>
+                <tr>
+                    <th class="py-1 px-1.5 text-left font-bold w-[75px]">Date</th>
+                    <th class="py-1 px-1.5 text-left font-bold w-[65px]">Attendance</th>
+                    <th class="py-1 px-1.5 text-left font-bold w-[120px]">Intended Task</th>
+                    <th class="py-1 px-1.5 text-left font-bold">Actual Tasks Performed</th>
+                    <th class="py-1 px-1.5 text-left font-bold w-[95px]">Tools / Tech</th>
+                    <th class="py-1 px-1.5 text-left font-bold w-[95px]">Skills Learned</th>
+                    <th class="py-1 px-1.5 text-center font-bold w-[45px]">Hours</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($all_logs as $log):
+                    $st = strtolower($log['attendance_status'] ?? 'present');
+                    $is_abs = in_array($st, ['absent', 'leave'], true);
+                    $is_hol = ($st === 'leave') || stripos($log['reason_for_absence'] ?? '', 'Public Holiday') === 0;
+                ?>
+                <tr>
+                    <td class="py-1 px-1.5 font-semibold whitespace-nowrap align-top">
+                        <?= (new DateTime($log['log_date']))->format('d/m/Y') ?><br>
+                        <span class="text-[8pt] text-gray-500 font-normal"><?= (new DateTime($log['log_date']))->format('D') ?></span>
+                    </td>
+                    <td class="py-1 px-1.5 whitespace-nowrap align-top font-medium">
+                        <?= $is_hol ? 'Holiday' : ($is_abs ? 'Absent' : 'Present') ?>
+                    </td>
+                    <td class="py-1 px-1.5 align-top">
+                        <?= $is_abs ? (!empty($log['reason_for_absence']) ? 'Reason: ' . htmlspecialchars($log['reason_for_absence']) : '—') : htmlspecialchars($log['task_title'] ?: '—') ?>
+                    </td>
+                    <td class="py-1 px-1.5 align-top">
+                        <?= $is_abs ? '—' : nl2br(htmlspecialchars($log['tasks_performed'] ?: ($log['actual_tasks'] ?? '—'))) ?>
+                    </td>
+                    <td class="py-1 px-1.5 align-top text-[8pt]">
+                        <?= ($is_abs || empty($log['tools_used'])) ? '—' : htmlspecialchars($log['tools_used']) ?>
+                    </td>
+                    <td class="py-1 px-1.5 align-top text-[8pt]">
+                        <?= ($is_abs || empty($log['learnt_skills'])) ? '—' : nl2br(htmlspecialchars($log['learnt_skills'])) ?>
+                    </td>
+                    <td class="py-1 px-1.5 text-center font-mono align-top text-[8.5pt]">
+                        <?= htmlspecialchars($log['calculated_duration'] ?: '00:00') ?>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php else: ?>
+        <p class="text-xs italic text-slate-500 py-2">No daily log records available.</p>
+        <?php endif; ?>
+    </div>
+
+    <!-- ── 3. Weekly Reflections ── -->
+    <div id="print-doc-reflections" class="mb-4">
+        <div class="print-section-title">4. Weekly Reflections</div>
+        <?php if (!empty($weeks)): ?>
+            <?php foreach ($weeks as $wn => $wr):
+                $w_rep = $refs_by_week[$wn] ?? null;
+                $has_ref = $w_rep && (!empty($w_rep['what_done']) || !empty($w_rep['how_done']) || !empty($w_rep['why_done']));
+                $w_start_fmt = (new DateTime($wr['start']))->format('d M Y');
+                $w_end_fmt   = (new DateTime($wr['end']))->format('d M Y');
+            ?>
+            <div class="print-card-box">
+                <div class="font-bold text-xs uppercase border-b border-gray-300 pb-1 mb-1.5 text-black">
+                    Week <?= $wn ?> (<?= $w_start_fmt ?> – <?= $w_end_fmt ?>)
+                </div>
+                <?php if ($has_ref): ?>
+                <div class="space-y-1.5 text-xs">
+                    <div>
+                        <span class="font-bold text-black">What was done:</span>
+                        <p class="mt-0.5 text-gray-900"><?= nl2br(htmlspecialchars($w_rep['what_done'] ?? '—')) ?></p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-black">How was it done:</span>
+                        <p class="mt-0.5 text-gray-900"><?= nl2br(htmlspecialchars($w_rep['how_done'] ?? '—')) ?></p>
+                    </div>
+                    <div>
+                        <span class="font-bold text-black">Why was it done:</span>
+                        <p class="mt-0.5 text-gray-900"><?= nl2br(htmlspecialchars($w_rep['why_done'] ?? '—')) ?></p>
+                    </div>
+                </div>
+                <?php else: ?>
+                <p class="text-xs italic text-gray-500">No weekly reflection submitted for Week <?= $wn ?>.</p>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+
+    <!-- ── 4. Signatures & Evaluations ── -->
+    <div id="print-doc-evaluations" class="mb-4">
+        <div class="print-section-title">5. Signatures &amp; Evaluations</div>
+        <?php if (!empty($weeks)): ?>
+            <?php foreach ($weeks as $wn => $wr):
+                $w_rep = $refs_by_week[$wn] ?? null;
+                $w_start_fmt = (new DateTime($wr['start']))->format('d M Y');
+                $w_end_fmt   = (new DateTime($wr['end']))->format('d M Y');
+            ?>
+            <div class="print-card-box">
+                <div class="font-bold text-xs uppercase border-b border-gray-300 pb-1 mb-2 text-black">
+                    Week <?= $wn ?> (<?= $w_start_fmt ?> – <?= $w_end_fmt ?>)
+                </div>
+                <div class="grid grid-cols-3 gap-3 text-xs">
+                    <!-- Student Signature -->
+                    <div class="border-r border-gray-300 pr-2">
+                        <p class="font-bold uppercase text-[9pt] text-gray-700">Student Signature</p>
+                        <?php if (!empty($w_rep['student_signature_value'])): ?>
+                            <?php if (($w_rep['student_signature_type'] ?? '') === 'typed'): ?>
+                                <div class="text-sm font-bold italic font-serif my-1"><?= htmlspecialchars($w_rep['student_signature_value']) ?></div>
+                            <?php else: ?>
+                                <?php
+                                $sig_src = $w_rep['student_signature_value'];
+                                if (!str_starts_with($sig_src, 'data:') && !str_starts_with($sig_src, 'http') && !str_starts_with($sig_src, 'uploads/')) {
+                                    $sig_src = 'uploads/signatures/' . $sig_src;
+                                }
+                                ?>
+                                <img src="<?= htmlspecialchars($sig_src) ?>" alt="Signature" class="max-h-7 my-1 object-contain">
+                            <?php endif; ?>
+                            <p class="text-[8pt] text-gray-500">Date: <?= !empty($w_rep['student_signed_at']) ? (new DateTime($w_rep['student_signed_at']))->format('d M Y') : (!empty($w_rep['submitted_at']) ? (new DateTime($w_rep['submitted_at']))->format('d M Y') : '—') ?></p>
+                        <?php else: ?>
+                            <p class="text-gray-400 italic text-[8.5pt]">Not signed</p>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Instructor Feedback -->
+                    <div class="border-r border-gray-300 pr-2">
+                        <p class="font-bold uppercase text-[9pt] text-gray-700">Instructor Assessment</p>
+                        <?php if (!empty($w_rep['instructor_grade']) || in_array($w_rep['status'] ?? '', ['approved_by_instructor', 'graded', 'approved_by_supervisor'], true)): ?>
+                            <p class="font-semibold">Grade/Status: <?= htmlspecialchars(ucfirst($w_rep['instructor_grade'] ?? 'Approved')) ?></p>
+                            <?php if (!empty($w_rep['instructor_comments'])): ?>
+                                <p class="text-[8.5pt] text-gray-700 italic my-0.5">"<?= htmlspecialchars($w_rep['instructor_comments']) ?>"</p>
+                            <?php endif; ?>
+                            <?php if (!empty($w_rep['instructor_signature_value'])): ?>
+                                <?php
+                                $i_sig_src = $w_rep['instructor_signature_value'];
+                                if (!str_starts_with($i_sig_src, 'data:') && !str_starts_with($i_sig_src, 'http') && !str_starts_with($i_sig_src, 'uploads/')) {
+                                    $i_sig_src = 'uploads/signatures/' . $i_sig_src;
+                                }
+                                ?>
+                                <img src="<?= htmlspecialchars($i_sig_src) ?>" alt="Instructor Signature" class="max-h-7 my-1 object-contain">
+                            <?php endif; ?>
+                            <p class="text-[8pt] text-gray-500">Date: <?= !empty($w_rep['instructor_signed_at']) ? (new DateTime($w_rep['instructor_signed_at']))->format('d M Y') : '—' ?></p>
+                        <?php else: ?>
+                            <p class="text-gray-400 italic text-[8.5pt]">Pending Review</p>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Supervisor Evaluation -->
+                    <div>
+                        <p class="font-bold uppercase text-[9pt] text-gray-700">Supervisor Evaluation</p>
+                        <?php if (!empty($w_rep['supervisor_grade'])): ?>
+                            <p class="font-bold">Grade: <?= htmlspecialchars($w_rep['supervisor_grade']) ?></p>
+                            <?php if (!empty($w_rep['supervisor_comments'])): ?>
+                                <p class="text-[8.5pt] text-gray-700 italic my-0.5">"<?= htmlspecialchars($w_rep['supervisor_comments']) ?>"</p>
+                            <?php endif; ?>
+                            <p class="text-[8pt] text-gray-500">Supervisor: <?= htmlspecialchars($w_rep['supervisor_name'] ?: ($supervisor_name ?: 'Supervisor')) ?></p>
+                            <p class="text-[8pt] text-gray-500">Date: <?= !empty($w_rep['evaluated_at']) ? (new DateTime($w_rep['evaluated_at']))->format('d M Y') : (!empty($w_rep['submitted_at']) ? (new DateTime($w_rep['submitted_at']))->format('d M Y') : '—') ?></p>
+                        <?php else: ?>
+                            <p class="text-gray-400 italic text-[8.5pt]">Pending Evaluation</p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+
+    <!-- ── Document Footer ── -->
+    <div class="mt-6 pt-3 border-t border-black text-center text-[8pt] text-gray-600 flex justify-between">
+        <span>Student: <?= htmlspecialchars($student_name) ?> (Roll: <?= htmlspecialchars($student_roll ?: '—') ?>)</span>
+        <span>Official University Internship Logbook &amp; Report</span>
+        <span>Date: <?= date('d M Y') ?></span>
+    </div>
 </div>
 
 </body>

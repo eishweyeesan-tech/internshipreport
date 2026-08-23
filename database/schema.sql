@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS student_profiles (
     company_id INT DEFAULT NULL,
     student_roll VARCHAR(50) DEFAULT '',
     major VARCHAR(100) DEFAULT '',
-    job_role VARCHAR(100) DEFAULT '',
     internship_start_date DATE DEFAULT NULL,
     internship_end_date DATE DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -122,6 +121,12 @@ CREATE TABLE IF NOT EXISTS weekly_reports (
     supervisor_grade ENUM('A', 'B', 'C', 'D', 'F') DEFAULT NULL,
     supervisor_comments TEXT DEFAULT NULL,
     status ENUM('pending', 'approved_by_instructor', 'graded', 'rejected') NOT NULL DEFAULT 'pending',
+    student_signature_type VARCHAR(20) DEFAULT NULL,
+    student_signature_value TEXT DEFAULT NULL,
+    student_signed_at DATETIME DEFAULT NULL,
+    instructor_signature_type VARCHAR(20) DEFAULT NULL,
+    instructor_signature_value TEXT DEFAULT NULL,
+    instructor_signed_at DATETIME DEFAULT NULL,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_student_week (student_id, week_number),
     FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
@@ -134,6 +139,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     title VARCHAR(150) NOT NULL,
     message TEXT NOT NULL,
     link VARCHAR(255) DEFAULT NULL,
+    type VARCHAR(50) NOT NULL DEFAULT 'system_notice',
     is_read TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE

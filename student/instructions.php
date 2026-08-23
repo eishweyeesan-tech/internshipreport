@@ -12,7 +12,7 @@ $internship_id = $user_id;
 $db = $mysqli ?? $conn;
 
 $profile_stmt = $db->prepare("SELECT sp.student_roll, sp.internship_start_date, sp.internship_end_date,
-    COALESCE(c.company_name, '') AS company_name, sp.job_role, sp.supervisor_id,
+    COALESCE(c.company_name, '') AS company_name, u.position AS job_role, sp.supervisor_id,
     u.username, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id

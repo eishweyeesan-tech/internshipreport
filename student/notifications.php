@@ -81,13 +81,16 @@ $res = $all_stmt->get_result();
 $notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 if (!function_exists('student_notif_url')) {
-    function student_notif_url($type, $related_week, $announcement_id = null) {
+    function student_notif_url($type, $related_week, $announcement_id = null, $title = '', $message = '') {
         if ($announcement_id) {
             return 'student-dashboard.php';
         }
         $base = 'student-dashboard.php';
-        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved'], true) && $related_week) {
-            return $base . '?week=' . (int)$related_week;
+        if (!$related_week && preg_match('/week\s*(\d+)/i', $title . ' ' . $message, $m)) {
+            $related_week = (int)$m[1];
+        }
+        if ($related_week) {
+            return $base . '?tab=weekly-report&week=' . (int)$related_week . '#instructor-evaluation';
         }
         return $base;
     }
@@ -231,7 +234,7 @@ if (!function_exists('student_notif_meta')) {
                 <?php foreach ($notifications as $notif): ?>
                 <?php
                     $meta      = student_notif_meta($notif['type'] ?? 'info');
-                    $notif_url = !empty($notif['link']) ? $notif['link'] : student_notif_url($notif['type'] ?? 'info', $notif['related_week'] ?? null, $notif['announcement_id'] ?? null);
+                    $notif_url = notif_action_url($notif, 'student');
                 ?>
                 <div onclick="onNotificationItemClick(event, this)" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" data-fallback-href="<?= htmlspecialchars($notif_url) ?>"
                      class="flex items-start gap-4 px-5 py-4 cursor-pointer transition-all duration-150 border-b border-slate-100 last:border-0 <?= !$notif['is_read'] ? 'bg-blue-50/60 hover:bg-blue-50' : 'hover:bg-slate-50' ?>">

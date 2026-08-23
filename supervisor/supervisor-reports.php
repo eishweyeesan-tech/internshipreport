@@ -254,24 +254,24 @@ function build_query_url($overrides = []) {
                 <!-- ═══ PAGE HEADER ═══ -->
                 <div class="flex items-center justify-between flex-wrap gap-4">
                     <div>
-                        <h2 class="text-2xl font-black text-slate-800 tracking-tight">📄 Reports</h2>
-                        <p class="text-sm text-slate-400 mt-1 font-medium">Weekly reports submitted by your assigned students</p>
+                        <h2 class="text-2xl font-bold text-slate-800 tracking-tight">📄 Reports</h2>
+                        <p class="text-xs text-slate-400 font-medium mt-1">Weekly reports submitted by your assigned students</p>
                     </div>
                     <div class="flex items-center gap-2 flex-wrap">
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600">📄 <?= $total_reports ?> total</span>
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl text-xs font-bold text-blue-700">🔵 <?= $pending_reviews ?> ready for review</span>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-600 shadow-xs">📄 <?= $total_reports ?> total</span>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 ring-1 ring-blue-600/20 rounded-xl text-xs font-semibold shadow-xs">🔵 <?= $pending_reviews ?> ready for review</span>
                     </div>
                 </div>
 
                 <!-- ═══ FILTERS ═══ -->
-                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-4">
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6">
                     <div class="flex flex-wrap items-center gap-3">
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                            <a href="?<?= http_build_query(build_query_url(['status' => '', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === '' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">All</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_instructor', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'approved_by_instructor' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50' ?>">🔵 Ready for Review</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_supervisor', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'approved_by_supervisor' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50' ?>">✅ Graded</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'rejected', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'rejected' ? 'bg-red-600 text-white border-red-600 shadow-xs' : 'bg-white text-red-700 border-red-200 hover:bg-red-50' ?>">✕ Rejected</a>
-                            <a href="?<?= http_build_query(build_query_url(['status' => 'pending', 'page' => ''])) ?>" class="px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 <?= $filter_status === 'pending' ? 'bg-slate-700 text-white border-slate-700 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">⏳ Waiting for Instructor</a>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <a href="?<?= http_build_query(build_query_url(['status' => '', 'page' => ''])) ?>" class="px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out <?= $filter_status === '' ? 'bg-slate-800 text-white border-slate-800 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">All</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_instructor', 'page' => ''])) ?>" class="px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out <?= $filter_status === 'approved_by_instructor' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50' ?>">🔵 Ready for Review</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'approved_by_supervisor', 'page' => ''])) ?>" class="px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out <?= $filter_status === 'approved_by_supervisor' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50' ?>">✅ Graded</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'rejected', 'page' => ''])) ?>" class="px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out <?= $filter_status === 'rejected' ? 'bg-rose-600 text-white border-rose-600 shadow-xs' : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50' ?>">✕ Rejected</a>
+                            <a href="?<?= http_build_query(build_query_url(['status' => 'pending', 'page' => ''])) ?>" class="px-3.5 py-1.5 text-xs font-semibold rounded-full border transition-all duration-200 ease-in-out <?= $filter_status === 'pending' ? 'bg-slate-700 text-white border-slate-700 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">⏳ Waiting for Instructor</a>
                         </div>
 
                         <div class="flex-1"></div>
@@ -281,7 +281,7 @@ function build_query_url($overrides = []) {
                             <?php if ($search): ?><input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>"><?php endif; ?>
 
                             <?php if (!empty($available_weeks)): ?>
-                            <select name="week" onchange="this.form.submit()" class="bg-slate-100/80 border border-transparent focus:border-indigo-300 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all duration-200 cursor-pointer">
+                            <select name="week" onchange="this.form.submit()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:bg-white transition-all duration-200 ease-in-out cursor-pointer">
                                 <option value="">All weeks</option>
                                 <?php foreach ($available_weeks as $wk): ?>
                                 <option value="<?= (int)$wk ?>" <?= $filter_week === (int)$wk ? 'selected' : '' ?>>Week <?= (int)$wk ?></option>
@@ -290,7 +290,7 @@ function build_query_url($overrides = []) {
                             <?php endif; ?>
 
                             <?php if (!empty($available_companies)): ?>
-                            <select name="company" onchange="this.form.submit()" class="bg-slate-100/80 border border-transparent focus:border-indigo-300 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all duration-200 cursor-pointer max-w-[13rem]">
+                            <select name="company" onchange="this.form.submit()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:bg-white transition-all duration-200 ease-in-out cursor-pointer max-w-[13rem]">
                                 <option value="">All companies</option>
                                 <?php foreach ($available_companies as $comp): ?>
                                 <option value="<?= htmlspecialchars($comp) ?>" <?= $filter_company === $comp ? 'selected' : '' ?>><?= htmlspecialchars($comp) ?></option>
@@ -299,12 +299,12 @@ function build_query_url($overrides = []) {
                             <?php endif; ?>
 
                             <!-- Academic Year Filter -->
-                            <select name="year" onchange="this.form.submit()" class="bg-white border border-teal-200 text-slate-700 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 cursor-pointer max-w-[14rem]">
+                            <select name="year" onchange="this.form.submit()" class="bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs px-3 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:bg-white transition-all duration-200 ease-in-out cursor-pointer max-w-[14rem]">
                                 <?= render_academic_year_options($db, $filter_year, true, 'All Academic Years') ?>
                             </select>
 
                             <?php if ($filter_status || $filter_week || $filter_company || ($filter_year && $filter_year !== 'all') || $search || $filter_student_id): ?>
-                            <a href="supervisor-reports.php" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all duration-200">✕ Clear</a>
+                            <a href="supervisor-reports.php" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-all duration-200 ease-in-out">✕ Clear</a>
                             <?php endif; ?>
                         </form>
                     </div>
@@ -312,33 +312,33 @@ function build_query_url($overrides = []) {
 
                 <?php if ($filter_student_id > 0 && !empty($filtered_student_name)): ?>
                 <!-- Student Filter Indicator Banner -->
-                <div class="mb-4 p-3.5 bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200 rounded-xl flex items-center justify-between shadow-xs">
+                <div class="p-4 bg-gradient-to-r from-teal-50 to-blue-50 border border-teal-200 rounded-2xl flex items-center justify-between shadow-xs">
                     <div class="flex items-center gap-2.5">
-                        <span class="w-6 h-6 rounded-md bg-teal-600 text-white flex items-center justify-center text-xs font-bold">🎓</span>
+                        <span class="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">🎓</span>
                         <div>
-                            <span class="text-xs font-bold text-teal-800">Showing reports for:</span>
-                            <span class="text-xs font-black text-slate-800 ml-1"><?= htmlspecialchars($filtered_student_name) ?></span>
+                            <span class="text-xs font-semibold text-teal-800">Showing reports for:</span>
+                            <span class="text-xs font-bold text-slate-800 ml-1"><?= htmlspecialchars($filtered_student_name) ?></span>
                         </div>
                     </div>
-                    <a href="?<?= http_build_query(build_query_url(['student_id' => null, 'uid' => null])) ?>" class="text-xs font-bold text-teal-700 hover:text-teal-900 bg-white/80 hover:bg-white border border-teal-200 px-2.5 py-1 rounded-lg transition shadow-xs">
+                    <a href="?<?= http_build_query(build_query_url(['student_id' => null, 'uid' => null])) ?>" class="text-xs font-semibold text-teal-700 hover:text-teal-900 bg-white/80 hover:bg-white border border-teal-200 px-3 py-1.5 rounded-xl transition-all duration-200 shadow-xs">
                         ✕ Show All Students
                     </a>
                 </div>
                 <?php endif; ?>
 
                 <!-- ═══ REPORTS TABLE ═══ -->
-                <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
                     <?php if (!empty($reports)): ?>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left">
                             <thead>
                                 <tr class="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
-                                    <th class="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Student</th>
-                                    <th class="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Company</th>
-                                    <th class="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Week</th>
-                                    <th class="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                                    <th class="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider">Submitted</th>
-                                    <th class="px-6 py-3.5 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Action</th>
+                                    <th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Student</th>
+                                    <th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Company</th>
+                                    <th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Week</th>
+                                    <th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                                    <th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">Submitted</th>
+                                    <th class="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
@@ -346,72 +346,72 @@ function build_query_url($overrides = []) {
                                     $rep_student = $rep['full_name'] ?: $rep['username'];
                                     $rep_status  = $rep['report_status'];
                                 ?>
-                                <tr class="hover:bg-slate-50/60 transition-colors duration-150">
+                                <tr class="hover:bg-slate-50/80 transition-all duration-200 ease-in-out">
                                     <td class="px-6 py-4">
-                                        <div class="flex items-center gap-3">
-                                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-md shadow-purple-500/20">
+                                        <div class="flex items-center gap-3.5">
+                                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-sm font-bold shrink-0 shadow-md shadow-purple-500/20">
                                                 <?= strtoupper(substr($rep_student, 0, 1)) ?>
                                             </div>
                                             <div class="min-w-0">
-                                                <a href="view-student-dashboard.php?id=<?= (int)$rep['uid'] ?>" class="text-sm font-bold text-slate-800 hover:text-purple-600 transition-colors duration-150 truncate block"><?= htmlspecialchars($rep_student) ?></a>
+                                                <a href="view-student-dashboard.php?id=<?= (int)$rep['uid'] ?>" class="text-sm font-semibold text-slate-800 hover:text-purple-600 transition-colors duration-150 truncate block"><?= htmlspecialchars($rep_student) ?></a>
                                                 <p class="text-xs text-slate-400 font-medium"><?= htmlspecialchars($rep['student_roll'] ?: $rep['username']) ?></p>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <span class="text-sm font-medium text-blue-600 truncate block max-w-[14rem]"><?= htmlspecialchars($rep['company_name'] ?: '—') ?></span>
+                                        <span class="text-sm font-normal text-slate-600 leading-relaxed truncate block max-w-[14rem]"><?= htmlspecialchars($rep['company_name'] ?: '—') ?></span>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <span class="inline-flex items-center gap-1.5 text-sm font-bold text-slate-700">
+                                        <span class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-700">
                                             Week <?= (int)$rep['week_number'] ?>
                                             <?php if (!empty($rep['weekly_grade'])): ?>
-                                             <span class="text-xs font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-lg"><?= htmlspecialchars($rep['weekly_grade']) ?></span>
+                                             <span class="text-xs font-bold text-emerald-700 bg-emerald-50 ring-1 ring-emerald-600/20 px-2 py-0.5 rounded-full"><?= htmlspecialchars($rep['weekly_grade']) ?></span>
                                             <?php endif; ?>
                                         </span>
                                     </td>
                                     <td class="px-6 py-4">
                                         <?php if ($rep_status === 'approved_by_instructor'): ?>
                                         <div class="inline-flex flex-col items-start gap-1">
-                                            <span class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-lg whitespace-nowrap">
+                                            <span class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 ring-1 ring-emerald-600/20 px-2.5 py-1 rounded-full whitespace-nowrap">
                                                 ✅ Instructor Approved
                                             </span>
-                                            <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md whitespace-nowrap">
+                                            <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 bg-blue-50 ring-1 ring-blue-600/20 px-2.5 py-0.5 rounded-full whitespace-nowrap">
                                                 <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
                                                 Ready for Review
                                             </span>
                                         </div>
                                         <?php elseif ($rep_status === 'approved_by_supervisor' || $rep_status === 'graded'): ?>
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 ring-1 ring-emerald-600/20 px-2.5 py-1 rounded-full whitespace-nowrap">
                                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                             ✅ Supervisor Approved
                                         </span>
                                         <?php elseif ($rep_status === 'rejected'): ?>
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
-                                            <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-700 bg-rose-50 ring-1 ring-rose-600/20 px-2.5 py-1 rounded-full whitespace-nowrap">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
                                             ❌ Rejected
                                         </span>
                                         <?php else: ?>
-                                        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                                        <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 ring-1 ring-slate-200 px-2.5 py-1 rounded-full whitespace-nowrap">
                                             <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
                                             ⏳ Waiting for Instructor
                                         </span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="px-6 py-4">
-                                        <span class="text-xs text-slate-500 font-medium"><?= htmlspecialchars((new DateTime($rep['evaluated_at']))->format('d M Y, h:i A')) ?></span>
+                                        <span class="text-xs text-slate-400 font-medium"><?= htmlspecialchars((new DateTime($rep['evaluated_at']))->format('d M Y, h:i A')) ?></span>
                                     </td>
                                     <td class="px-6 py-4 text-right">
-                                        <div class="inline-flex items-center justify-end gap-1.5 flex-nowrap">
+                                        <div class="inline-flex items-center justify-end gap-2 flex-nowrap">
                                             <?php if ($rep_status === 'approved_by_instructor'): ?>
-                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg transition-all duration-200 shadow-xs whitespace-nowrap">
+                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-semibold rounded-xl transition-all duration-200 ease-in-out shadow-xs whitespace-nowrap">
                                                 📝 Review & Grade
                                             </a>
                                             <?php else: ?>
-                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition-all duration-200 whitespace-nowrap">
+                                            <a href="supervisor-review.php?student_id=<?= (int)$rep['student_id'] ?>&week=<?= (int)$rep['week_number'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-all duration-200 ease-in-out whitespace-nowrap">
                                                 👁️ View
                                             </a>
                                             <?php endif; ?>
-                                            <a href="../view_student_history.php?uid=<?= (int)$rep['student_id'] ?>" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition-all duration-200 whitespace-nowrap" title="View 13-week report history">
+                                            <a href="../view_student_history.php?uid=<?= (int)$rep['student_id'] ?>" class="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition-all duration-200 ease-in-out whitespace-nowrap" title="View 13-week report history">
                                                 📜 History
                                             </a>
                                         </div>
@@ -422,20 +422,19 @@ function build_query_url($overrides = []) {
                         </table>
                     </div>
 
-
                     <!-- Pagination -->
                     <?php if ($total_pages > 1): ?>
                     <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
                         <p class="text-xs text-slate-400 font-medium">Showing <?= $total_filtered > 0 ? ($offset + 1) : 0 ?>–<?= min($offset + $per_page, $total_filtered) ?> of <?= $total_filtered ?> reports</p>
                         <div class="flex items-center gap-1.5">
                             <?php if ($page > 1): ?>
-                            <a href="?<?= http_build_query(build_query_url(['page' => $page - 1])) ?>" class="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all duration-200">← Prev</a>
+                            <a href="?<?= http_build_query(build_query_url(['page' => $page - 1])) ?>" class="px-3.5 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all duration-200 ease-in-out">← Prev</a>
                             <?php endif; ?>
                             <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                            <a href="?<?= http_build_query(build_query_url(['page' => $i])) ?>" class="w-8 h-8 flex items-center justify-center text-xs font-bold rounded-lg transition-all duration-200 <?= $i === $page ? 'bg-slate-800 text-white' : 'text-slate-600 bg-slate-100 hover:bg-slate-200' ?>"><?= $i ?></a>
+                            <a href="?<?= http_build_query(build_query_url(['page' => $i])) ?>" class="w-8 h-8 flex items-center justify-center text-xs font-semibold rounded-xl transition-all duration-200 ease-in-out <?= $i === $page ? 'bg-slate-800 text-white' : 'text-slate-600 bg-slate-100 hover:bg-slate-200' ?>"><?= $i ?></a>
                             <?php endfor; ?>
                             <?php if ($page < $total_pages): ?>
-                            <a href="?<?= http_build_query(build_query_url(['page' => $page + 1])) ?>" class="px-3 py-1.5 text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-all duration-200">Next →</a>
+                            <a href="?<?= http_build_query(build_query_url(['page' => $page + 1])) ?>" class="px-3.5 py-1.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-all duration-200 ease-in-out">Next →</a>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -446,7 +445,7 @@ function build_query_url($overrides = []) {
                         <p class="text-base font-bold text-slate-500">No reports found</p>
                         <p class="text-sm text-slate-400 mt-1.5"><?= $search || $filter_status || $filter_week || $filter_company ? 'Try adjusting your filters or search terms.' : 'No weekly reports have been submitted by your students yet.' ?></p>
                         <?php if ($search || $filter_status || $filter_week || $filter_company): ?>
-                        <a href="supervisor-reports.php" class="mt-5 inline-block text-xs font-bold text-indigo-600 hover:underline">✕ Clear all filters</a>
+                        <a href="supervisor-reports.php" class="mt-5 inline-block text-xs font-semibold text-teal-600 hover:underline">✕ Clear all filters</a>
                         <?php endif; ?>
                     </div>
                     <?php endif; ?>

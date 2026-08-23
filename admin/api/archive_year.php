@@ -76,8 +76,8 @@ try {
     // NOTE: Supervisor accounts are intentionally NOT deactivated or deleted.
     // Only student records are archived. Supervisor accounts remain permanently active.
     // Historical supervisor assignments are preserved in supervisor_academic_assignments table.
-    $stu_stmt = $db->prepare("UPDATE users SET status = 'Archived' WHERE role = 'student' AND (academic_year_id = ? OR academic_year = ?)");
-    $stu_stmt->bind_param("is", $id, $year_label);
+    $stu_stmt = $db->prepare("UPDATE users SET status = 'Archived' WHERE role = 'student' AND academic_year_id = ?");
+    $stu_stmt->bind_param("i", $id);
     $stu_stmt->execute();
     $archived_students_count = $stu_stmt->affected_rows;
 

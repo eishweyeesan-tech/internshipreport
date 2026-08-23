@@ -51,25 +51,30 @@ if (!isset($unread_notif_count) || !isset($recent_notifications)) {
 
 $student_academic_year = '';
 if ($student_user_id > 0 && $db) {
-    $student_year_stmt = $db->prepare("SELECT u.academic_year FROM users u WHERE u.id = ? LIMIT 1");
-    $student_year_stmt->bind_param("i", $student_user_id);
-    $student_year_stmt->execute();
-    $_res = $student_year_stmt->get_result();
-    $student_year_row = $_res ? $_res->fetch_assoc() : null;
-    if ($student_year_row) {
-        $student_academic_year = trim((string) ($student_year_row['academic_year'] ?? ''));
+    $student_year_stmt = $db->prepare("SELECT ay.year_label AS academic_year FROM users u LEFT JOIN academic_years ay ON ay.id = u.academic_year_id WHERE u.id = ? LIMIT 1");
+    if ($student_year_stmt) {
+        $student_year_stmt->bind_param("i", $student_user_id);
+        $student_year_stmt->execute();
+        $_res = $student_year_stmt->get_result();
+        $student_year_row = $_res ? $_res->fetch_assoc() : null;
+        if ($student_year_row) {
+            $student_academic_year = trim((string) ($student_year_row['academic_year'] ?? ''));
+        }
+        $student_year_stmt->close();
     }
-    $student_year_stmt->close();
 }
 
 if (!function_exists('student_notif_url')) {
-    function student_notif_url($type, $related_week, $announcement_id = null) {
+    function student_notif_url($type, $related_week, $announcement_id = null, $title = '', $message = '') {
         if ($announcement_id) {
             return '#';
         }
         $base = 'student-dashboard.php';
-        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved'], true) && $related_week) {
-            return $base . '?week=' . (int)$related_week;
+        if (!$related_week && preg_match('/week\s*(\d+)/i', $title . ' ' . $message, $m)) {
+            $related_week = (int)$m[1];
+        }
+        if ($related_week) {
+            return $base . '?tab=weekly-report&week=' . (int)$related_week . '#instructor-evaluation';
         }
         return $base;
     }
@@ -120,7 +125,7 @@ if (!function_exists('student_notif_url')) {
                             }
                         ?>
                         <?php
-                            $_notif_href = !empty($_notif['link']) ? $_notif['link'] : notif_action_url($_notif, 'student');
+                            $_notif_href = notif_action_url($_notif, 'student');
                         ?>
                         <a href="<?= htmlspecialchars($_notif_href) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-teal-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_notif['is_read'] ? 'bg-teal-50/40' : '' ?>" onclick="return onNotificationItemClick(event, this)" data-notif-id="<?= (int)$_notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($_notif_href) ?>" data-fallback-href="<?= htmlspecialchars($_notif_href) ?>">
                             <?php if (!$_notif['is_read']): ?>

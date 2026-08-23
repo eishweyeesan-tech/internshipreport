@@ -11,7 +11,7 @@ $internship_id = $user_id;
 $db = $mysqli ?? $conn;
 
 // FETCH INTERNSHIP DATE RANGE
-$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.major, sp.job_role, sp.internship_start_date, sp.internship_end_date,
+$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.major, u.position AS job_role, sp.internship_start_date, sp.internship_end_date,
     COALESCE(c.company_name, '') AS company_name, u.username, u.profile_pic
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
@@ -272,20 +272,38 @@ if (!empty($weeks[$selected_week])) {
     }
 }
 
+$is_new_mode = isset($_GET['new']) && $_GET['new'] == '1';
+
 $selected_date = trim($_GET['date'] ?? $_POST['log_date'] ?? '');
 if ($editing_log && !empty($editing_log['log_date'])) {
     $selected_date = $editing_log['log_date'];
+} elseif ($is_new_mode) {
+    $first_unlogged = null;
+    foreach ($week_dates as $wd) {
+        if (!isset($log_by_date[$wd])) {
+            $first_unlogged = $wd;
+            break;
+        }
+    }
+    $selected_date = $first_unlogged ?: ($week_dates[0] ?? date('Y-m-d'));
 } elseif (empty($selected_date) || (!empty($week_dates) && !in_array($selected_date, $week_dates, true))) {
     $today_iso = date('Y-m-d');
     if (!empty($week_dates) && in_array($today_iso, $week_dates, true)) {
         $selected_date = $today_iso;
     } elseif (!empty($week_dates)) {
-        $selected_date = $week_dates[0];
+        $latest_log_date = null;
+        foreach (array_reverse($week_dates) as $wd) {
+            if (isset($log_by_date[$wd])) {
+                $latest_log_date = $wd;
+                break;
+            }
+        }
+        $selected_date = $latest_log_date ?: $week_dates[0];
     }
 }
 
 $active_day_log = null;
-if (!empty($selected_date)) {
+if (!$is_new_mode && !empty($selected_date)) {
     $adl_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date = ? LIMIT 1");
     $adl_stmt->bind_param("is", $internship_id, $selected_date);
     $adl_stmt->execute();
@@ -489,7 +507,7 @@ if (!empty($selected_date)) {
 
                 <?php if ($active_day_log && !$editing_log): ?>
 
-                <!-- ════ SUBMITTED DAILY LOG — DATA CARD VIEW ════ -->
+                <!-- ════ SUBMITTED DAILY LOG — DATA CARD VIEW (READ-ONLY SUMMARY) ════ -->
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mb-6">
                     <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50/60 to-slate-50 flex items-center justify-between flex-wrap gap-3">
                         <div class="flex items-center gap-3">
@@ -516,70 +534,68 @@ if (!empty($selected_date)) {
                                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                                 Submitted
                             </span>
-                            <?php if (!$log_locked): ?>
-                            <a href="daily_log.php?week=<?= $selected_week ?>&date=<?= $selected_date ?>&edit=<?= $active_day_log['id'] ?>" class="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200 transition">
-                                ✏️ Edit Log
-                            </a>
-                            <?php endif; ?>
                         </div>
                     </div>
 
                     <div class="p-6 space-y-5">
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Attendance Status</span>
+                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">ရက်စွဲ / နေ့</span>
+                                <p class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                    <?= (new DateTime($active_day_log['log_date']))->format('d F Y — l') ?>
+                                </p>
+                            </div>
+                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">တက်ရောက်မှုအခြေအနေ</span>
                                 <?php
                                 $att = $active_day_log['attendance_status'] ?? 'present';
                                 $reason = $active_day_log['reason_for_absence'] ?? '';
                                 $is_holiday = ($att === 'leave' || $att === 'absent') && stripos($reason, 'Public Holiday') === 0;
                                 ?>
                                 <?php if ($is_holiday): ?>
-                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200">Public Holiday</span>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200">🏖️ Public Holiday</span>
                                 <?php elseif ($att === 'present'): ?>
-                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">Present</span>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200">✅ Present</span>
                                 <?php else: ?>
-                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-lg border border-red-200">Absent</span>
+                                <span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 px-2.5 py-1 rounded-lg border border-red-200">❌ Absent</span>
                                 <?php endif; ?>
                             </div>
                             <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Working Duration</span>
+                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">ကြာချိန်</span>
                                 <p class="text-sm font-mono font-bold text-teal-700 flex items-center gap-2">
                                     <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    <?= htmlspecialchars($active_day_log['calculated_duration'] ?? '08:00') ?> hrs
+                                    ⏱ <?= htmlspecialchars($active_day_log['calculated_duration'] ?? '08:00') ?> hrs
                                 </p>
-                            </div>
-                            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">Log Date</span>
-                                <p class="text-sm font-bold text-slate-700"><?= (new DateTime($active_day_log['log_date']))->format('d M Y (D)') ?></p>
                             </div>
                         </div>
 
                         <?php if ($att === 'absent' || $is_holiday): ?>
                         <div class="bg-red-50/60 rounded-xl p-4 border border-red-100">
-                            <span class="text-caption font-bold text-red-500 uppercase tracking-wider block mb-1">Reason for Absence / Leave</span>
+                            <span class="text-caption font-bold text-red-500 uppercase tracking-wider block mb-1">ခွင့် / ပျက်ကွက်ရသည့် အကြောင်းအရင်း</span>
                             <p class="text-sm text-red-700 font-medium"><?= htmlspecialchars($reason ?: 'No reason provided.') ?></p>
                         </div>
                         <?php else: ?>
 
                         <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                            <span class="text-caption font-bold text-teal-700 uppercase tracking-wider block mb-1">Intended Task / Summary</span>
+                            <span class="text-caption font-bold text-teal-700 uppercase tracking-wider block mb-1">ဆောင်ရွက်မည့်လုပ်ငန်း</span>
                             <p class="text-sm font-semibold text-slate-800 leading-relaxed"><?= htmlspecialchars($active_day_log['task_title'] ?: '—') ?></p>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Task Detail Breakdown</span>
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">ဆောင်ရွက်မည့်လုပ်ငန်း (အသေးစိတ်)</span>
                                 <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['task_detail'] ?: '—')) ?></p>
                             </div>
                             <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Actual Tasks Accomplished</span>
-                                <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($active_day_log['tasks_performed'] ?: '—')) ?></p>
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</span>
+                                <p class="text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars(($active_day_log['tasks_performed'] ?: ($active_day_log['actual_tasks'] ?? '')) ?: '—')) ?></p>
                             </div>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-2">Tools & Tech Used</span>
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-2">အသုံးပြုသောပစ္စည်းများ</span>
                                 <?php if (!empty($active_day_log['tools_used'])): ?>
                                     <div class="flex items-center gap-1.5 flex-wrap">
                                         <?php foreach (explode(',', $active_day_log['tools_used']) as $tool): ?>
@@ -591,11 +607,38 @@ if (!empty($selected_date)) {
                                 <?php endif; ?>
                             </div>
                             <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
-                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">Knowledge Gained & Skills</span>
+                                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">လေ့လာသိရှိသော အသိပညာ</span>
                                 <p class="text-sm text-slate-700 leading-relaxed"><?= htmlspecialchars($active_day_log['learnt_skills'] ?: '—') ?></p>
                             </div>
                         </div>
+                        <?php if (!empty($active_day_log['challenges'])): ?>
+                        <div class="bg-slate-50/70 rounded-xl p-4 border border-slate-100">
+                            <span class="text-caption font-bold text-amber-600 uppercase tracking-wider block mb-1">အခက်အခဲ / စိန်ခေါ်မှုများ</span>
+                            <p class="text-sm text-slate-700 leading-relaxed"><?= htmlspecialchars($active_day_log['challenges']) ?></p>
+                        </div>
                         <?php endif; ?>
+                        <?php endif; ?>
+
+                        <!-- Actions bar -->
+                        <div class="pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-3">
+                            <div class="flex items-center gap-2">
+                                <?php if (!$log_locked): ?>
+                                <a href="daily_log.php?week=<?= $selected_week ?>&date=<?= $selected_date ?>&edit=<?= $active_day_log['id'] ?>" class="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition cursor-pointer">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                    Edit Log
+                                </a>
+                                <?php endif; ?>
+                                <button type="button" onclick="openLogDetailModal(<?= htmlspecialchars(json_encode($active_day_log, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG), ENT_QUOTES, 'UTF-8') ?>)" class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl border border-slate-200 transition cursor-pointer">
+                                    <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    View Details
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <a href="daily_log.php?week=<?= $selected_week ?>&new=1" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-xl transition cursor-pointer">
+                                    <span class="text-sm font-bold">+</span> Log for Another Date
+                                </a>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -631,7 +674,7 @@ if (!empty($selected_date)) {
                             <label class="block text-sm font-bold text-slate-500 mb-1">Log Date</label>
                             <div id="logDateWrap" class="relative">
                                 <input type="text" name="log_date" id="logDate" required readonly <?= ($editing_log || $selected_week > 0) ? '' : 'disabled' ?>
-                                    value="<?= $editing_log ? htmlspecialchars($editing_log['log_date']) : '' ?>"
+                                    value="<?= $editing_log ? htmlspecialchars($editing_log['log_date']) : (!empty($selected_date) && !isset($log_by_date[$selected_date]) ? htmlspecialchars($selected_date) : '') ?>"
                                     placeholder="<?= ($editing_log || $selected_week > 0) ? 'Select a date…' : 'Select a week first…' ?>"
                                     class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed">
                             </div>
@@ -903,40 +946,46 @@ if (!empty($selected_date)) {
         return existingLogs;
     }
 
-    var fp = flatpickr(dateInput, {
-        dateFormat:    'Y-m-d',
-        disableMobile: true,
-        weekStart:    0,
-        disable:      buildDisableList(),
-        maxDate:      null,
-        minDate:      null,
-        clickOpens:   false,
-        allowInput:   false,
-        onDayCreate: function (dObj, dStr, fp, dayElem) {
-            var dateStr = fmtDate(dayElem.dateObj);
-            if (existingSet[dateStr]) {
-                dayElem.classList.add('fp-log-exists');
-                dayElem.setAttribute('title', 'Already submitted — cannot select');
-            }
-        },
-        onChange: function (selectedDates, dateStr) {
-            if (!dateStr) return;
-            var d   = new Date(dateStr + 'T00:00:00');
-            var day = dayName(d);
-            if (existingSet[dateStr]) {
-                fp.clear();
-                showToast('A log for ' + dateStr + ' already exists.', 'error');
-                return;
-            }
+    var fp = null;
+    if (dateInput) {
+        fp = flatpickr(dateInput, {
+            dateFormat:    'Y-m-d',
+            disableMobile: true,
+            weekStart:    0,
+            disable:      buildDisableList(),
+            maxDate:      null,
+            minDate:      null,
+            clickOpens:   false,
+            allowInput:   false,
+            onDayCreate: function (dObj, dStr, fp, dayElem) {
+                var dateStr = fmtDate(dayElem.dateObj);
+                if (existingSet[dateStr]) {
+                    dayElem.classList.add('fp-log-exists');
+                    dayElem.setAttribute('title', 'Already submitted — cannot select');
+                }
+            },
+            onChange: function (selectedDates, dateStr) {
+                if (!dateStr) return;
+                var d   = new Date(dateStr + 'T00:00:00');
+                var day = dayName(d);
+                if (existingSet[dateStr]) {
+                    fp.clear();
+                    showToast('A log for ' + dateStr + ' already exists.', 'error');
+                    return;
+                }
 
-            dateHint.textContent = day + ', ' +
-                d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) +
-                ' — ready to submit.';
-            dateHint.className = 'text-sm text-emerald-600 font-semibold mt-1';
-        }
-    });
+                if (dateHint) {
+                    dateHint.textContent = day + ', ' +
+                        d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) +
+                        ' — ready to submit.';
+                    dateHint.className = 'text-sm text-emerald-600 font-semibold mt-1';
+                }
+            }
+        });
+    }
 
     function applyWeekSelection(wn) {
+        if (!dateInput || !fp) return;
         if (!wn || !weekRanges[wn]) {
             fp.set('clickOpens', false);
             fp.clear();
@@ -980,14 +1029,17 @@ if (!empty($selected_date)) {
 
     if (weekSelect) {
         weekSelect.addEventListener('change', function () {
-            fp.clear();
+            if (fp) fp.clear();
             applyWeekSelection(parseInt(this.value));
-            fp.open();
+            if (fp) fp.open();
         });
 
         var initWn = parseInt(weekSelect.value);
         if (initWn) {
             applyWeekSelection(initWn);
+            if (dateInput && dateInput.value && !existingSet[dateInput.value] && fp) {
+                fp.setDate(dateInput.value, true);
+            }
         }
     }
 
@@ -1091,6 +1143,149 @@ function showToast(message, type) {
         toast.style.transform = 'translateY(10px)';
         setTimeout(function() { toast.remove(); }, 300);
     }, 3000);
+}
+</script>
+
+<!-- ═══════════ LOG DETAIL MODAL ═══════════ -->
+<div id="logDetailModal" class="hidden fixed inset-0 z-[999] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onclick="closeLogDetailModal()"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden z-10 max-h-[90vh] flex flex-col">
+        <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-teal-50/60 to-slate-50 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-sm shadow-sm" id="modalDayAbbr">
+                    —
+                </div>
+                <div>
+                    <h3 class="text-sm font-black text-slate-800" id="modalTitle">Daily Log Details</h3>
+                    <p class="text-caption text-slate-400 font-semibold" id="modalSubtitle">Week <?= $selected_week ?></p>
+                </div>
+            </div>
+            <button type="button" onclick="closeLogDetailModal()" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold transition cursor-pointer">✕</button>
+        </div>
+        <div class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">ရက်စွဲ / နေ့</span>
+                    <p class="font-bold text-slate-700" id="modalDateDisplay">—</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">တက်ရောက်မှုအခြေအနေ</span>
+                    <p id="modalAttendanceDisplay">—</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <span class="text-caption font-bold text-slate-400 uppercase tracking-wider block mb-1">ကြာချိန်</span>
+                    <p class="font-mono font-bold text-teal-700" id="modalDurationDisplay">—</p>
+                </div>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-3.5 border border-slate-100" id="modalReasonWrap" style="display:none;">
+                <span class="text-caption font-bold text-red-500 uppercase tracking-wider block mb-1">ခွင့် / ပျက်ကွက်ရသည့် အကြောင်းအရင်း</span>
+                <p class="text-red-700 font-medium" id="modalReasonDisplay">—</p>
+            </div>
+            <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-100" id="modalIntendedWrap">
+                <span class="text-caption font-bold text-teal-700 uppercase tracking-wider block mb-1">ဆောင်ရွက်မည့်လုပ်ငန်း</span>
+                <p class="font-semibold text-slate-800 text-sm leading-relaxed" id="modalIntendedDisplay">—</p>
+            </div>
+            <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-100" id="modalDetailWrap">
+                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">ဆောင်ရွက်မည့်လုပ်ငန်း (အသေးစိတ်)</span>
+                <p class="text-slate-700 leading-relaxed whitespace-pre-line" id="modalDetailDisplay">—</p>
+            </div>
+            <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-100" id="modalActualWrap">
+                <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</span>
+                <p class="text-slate-700 leading-relaxed whitespace-pre-line" id="modalActualDisplay">—</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="modalExtraWrap">
+                <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-100">
+                    <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1.5">အသုံးပြုသောပစ္စည်းများ</span>
+                    <p class="text-slate-700" id="modalToolsDisplay">—</p>
+                </div>
+                <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-100">
+                    <span class="text-caption font-bold text-slate-500 uppercase tracking-wider block mb-1">လေ့လာသိရှိသော အသိပညာ</span>
+                    <p class="text-slate-700" id="modalSkillsDisplay">—</p>
+                </div>
+            </div>
+            <div class="bg-slate-50/70 rounded-xl p-3.5 border border-slate-100" id="modalChallengesWrap" style="display:none;">
+                <span class="text-caption font-bold text-amber-600 uppercase tracking-wider block mb-1">အခက်အခဲ / စိန်ခေါ်မှုများ</span>
+                <p class="text-slate-700 leading-relaxed" id="modalChallengesDisplay">—</p>
+            </div>
+        </div>
+        <div class="px-6 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+            <span class="text-caption text-slate-400 font-semibold" id="modalSubmittedAt"></span>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="closeLogDetailModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition cursor-pointer">Close</button>
+                <a href="#" id="modalEditBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-sm transition cursor-pointer">✏️ Edit Log</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openLogDetailModal(log) {
+    if (!log) return;
+    var modal = document.getElementById('logDetailModal');
+    if (!modal) return;
+
+    var d = new Date(log.log_date + 'T00:00:00');
+    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var dayName = days[d.getDay()];
+    var fullDate = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+    var fullDay = d.toLocaleDateString('en-US', { weekday: 'long' });
+
+    document.getElementById('modalDayAbbr').textContent = dayName;
+    document.getElementById('modalTitle').textContent = 'Daily Log — ' + fullDate;
+    document.getElementById('modalSubtitle').textContent = fullDay;
+    document.getElementById('modalDateDisplay').textContent = fullDate + ' (' + dayName + ')';
+
+    var att = log.attendance_status || 'present';
+    var reason = log.reason_for_absence || '';
+    var isHoliday = (att === 'leave' || att === 'absent') && reason.toLowerCase().indexOf('public holiday') === 0;
+
+    var attHtml = '';
+    if (isHoliday) {
+        attHtml = '<span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-200">🏖️ Public Holiday</span>';
+    } else if (att === 'present') {
+        attHtml = '<span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-lg border border-emerald-200">✅ Present</span>';
+    } else {
+        attHtml = '<span class="inline-flex items-center gap-1.5 text-xs font-bold text-red-700 bg-red-100 px-2.5 py-0.5 rounded-lg border border-red-200">❌ Absent</span>';
+    }
+    document.getElementById('modalAttendanceDisplay').innerHTML = attHtml;
+    document.getElementById('modalDurationDisplay').textContent = (log.calculated_duration || '08:00') + ' hrs';
+
+    var reasonWrap = document.getElementById('modalReasonWrap');
+    if (att === 'absent' || isHoliday || reason) {
+        reasonWrap.style.display = 'block';
+        document.getElementById('modalReasonDisplay').textContent = reason || 'No reason specified';
+    } else {
+        reasonWrap.style.display = 'none';
+    }
+
+    document.getElementById('modalIntendedDisplay').textContent = log.task_title || '—';
+    document.getElementById('modalDetailDisplay').textContent = log.task_detail || '—';
+    document.getElementById('modalActualDisplay').textContent = log.tasks_performed || log.actual_tasks || '—';
+    document.getElementById('modalToolsDisplay').textContent = log.tools_used || '—';
+    document.getElementById('modalSkillsDisplay').textContent = log.learnt_skills || '—';
+
+    var chWrap = document.getElementById('modalChallengesWrap');
+    if (log.challenges) {
+        chWrap.style.display = 'block';
+        document.getElementById('modalChallengesDisplay').textContent = log.challenges;
+    } else {
+        chWrap.style.display = 'none';
+    }
+
+    var subText = log.created_at ? ('Submitted: ' + log.created_at) : '';
+    document.getElementById('modalSubmittedAt').textContent = subText;
+
+    var editBtn = document.getElementById('modalEditBtn');
+    if (editBtn) {
+        editBtn.href = 'daily_log.php?week=' + encodeURIComponent(<?= json_encode($selected_week) ?>) + '&date=' + encodeURIComponent(log.log_date) + '&edit=' + encodeURIComponent(log.id);
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeLogDetailModal() {
+    var modal = document.getElementById('logDetailModal');
+    if (modal) modal.classList.add('hidden');
 }
 </script>
 

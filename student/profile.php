@@ -12,11 +12,19 @@ $role     = $_SESSION['role'] ?? 'student';
 $db = $mysqli ?? $conn;
 
 // Fetch or create profile row
-$profile_stmt = $db->prepare("SELECT sp.*, u.username, u.email, u.phone, u.profile_pic, u.last_login_at,
-    COALESCE(c.company_name, '') AS company_name
+$profile_stmt = $db->prepare("SELECT sp.*, u.username, u.username AS full_name, u.email, u.phone, u.profile_pic, u.last_login_at,
+    u.position AS job_role,
+    COALESCE(c.company_name, '') AS company_name,
+    COALESCE(sup_u.username, '') AS supervisor_name,
+    COALESCE(sup_u.email, '') AS supervisor_email,
+    COALESCE(sup_u.phone, '') AS supervisor_phone,
+    COALESCE(sup_u.username, '') AS instructor_name,
+    COALESCE(sup_u.email, '') AS instructor_email,
+    COALESCE(sup_u.phone, '') AS instructor_phone
     FROM student_profiles sp
     JOIN users u ON u.id = sp.user_id
     LEFT JOIN companies c ON c.id = sp.company_id
+    LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     WHERE sp.user_id = ?");
 $profile_stmt->bind_param("i", $user_id);
 $profile_stmt->execute();
@@ -100,10 +108,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     } else {
         $phone = normalize_phone($phone);
 
-        // Update user's username & phone
-        $upd_u = $db->prepare("UPDATE users SET username = ?, phone = ? WHERE id = ?");
+        // Update user's username, phone & position (job role)
+        $upd_u = $db->prepare("UPDATE users SET username = ?, phone = ?, position = ? WHERE id = ?");
         $disp_name = $full_name ?: $username;
-        $upd_u->bind_param("ssi", $disp_name, $phone, $user_id);
+        $upd_u->bind_param("sssi", $disp_name, $phone, $job_role, $user_id);
         $upd_u->execute();
         $_SESSION['username'] = $disp_name;
 
@@ -125,11 +133,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         $upd_prof = $db->prepare("UPDATE student_profiles SET
-            student_roll = ?, major = ?, company_id = ?, job_role = ?, internship_start_date = ?
+            student_roll = ?, major = ?, company_id = ?, internship_start_date = ?
             WHERE user_id = ?");
         $istart = $internship_start ?: null;
-        $upd_prof->bind_param("ssissi",
-            $student_roll, $major, $company_id, $job_role, $istart,
+        $upd_prof->bind_param("ssisi",
+            $student_roll, $major, $company_id, $istart,
             $user_id
         );
         $upd_prof->execute();
@@ -448,23 +456,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Full Name</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['username'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['username'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Student Roll No</dt>
-                                <dd class="text-xs text-slate-700 font-semibold font-mono"><?= htmlspecialchars($profile['student_roll'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold font-mono"><?= htmlspecialchars(($profile['student_roll'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Major / Department</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['major'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['major'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Phone</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['phone'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['phone'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Email</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($user_email) ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($user_email ?: '—') ?></dd>
                             </div>
                         </dl>
                     </div>
@@ -476,25 +484,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Full Name</label>
-                                    <input type="text" name="full_name" value="<?= htmlspecialchars($profile['username']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="full_name" value="<?= htmlspecialchars($profile['username'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Student Roll No</label>
-                                    <input type="text" name="student_roll" value="<?= htmlspecialchars($profile['student_roll']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="student_roll" value="<?= htmlspecialchars($profile['student_roll'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Major / Department</label>
-                                    <input type="text" name="major" value="<?= htmlspecialchars($profile['major']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="major" value="<?= htmlspecialchars($profile['major'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Phone</label>
-                                    <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone'] ?? '') ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                             </div>
                             <!-- Hidden fields to preserve internship data on save -->
-                            <input type="hidden" name="company_name" value="<?= htmlspecialchars($profile['company_name']) ?>">
-                            <input type="hidden" name="job_role" value="<?= htmlspecialchars($profile['job_role']) ?>">
-                            <input type="hidden" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>">
+                            <input type="hidden" name="company_name" value="<?= htmlspecialchars($profile['company_name'] ?? '') ?>">
+                            <input type="hidden" name="job_role" value="<?= htmlspecialchars($profile['job_role'] ?? '') ?>">
+                            <input type="hidden" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date'] ?? '') ?>">
                             <div class="flex justify-end pt-2">
                                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Changes</button>
                             </div>
@@ -516,28 +524,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Company Name</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['company_name'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['company_name'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Job Role</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['job_role'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['job_role'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Name</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['instructor_name'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['instructor_name'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Email</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['instructor_email'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['instructor_email'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Instructor Phone</dt>
-                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars($profile['instructor_phone'] ?: '—') ?></dd>
+                                <dd class="text-xs text-slate-700 font-semibold"><?= htmlspecialchars(($profile['instructor_phone'] ?? '') ?: '—') ?></dd>
                             </div>
                             <div>
                                 <dt class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-0.5">Internship Start Date</dt>
                                 <dd class="text-xs text-slate-700 font-semibold font-mono">
-                                    <?php if ($profile['internship_start_date']): ?>
+                                    <?php if (!empty($profile['internship_start_date'])): ?>
                                         <?= (new DateTime($profile['internship_start_date']))->format('d M Y') ?>
                                     <?php else: ?>
                                         —
@@ -554,34 +562,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Company Name</label>
-                                    <input type="text" name="company_name" value="<?= htmlspecialchars($profile['company_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="company_name" value="<?= htmlspecialchars($profile['company_name'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Job Role</label>
-                                    <input type="text" name="job_role" value="<?= htmlspecialchars($profile['job_role']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="job_role" value="<?= htmlspecialchars($profile['job_role'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Name</label>
-                                    <input type="text" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Email</label>
-                                    <input type="email" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="email" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Phone</label>
-                                    <input type="text" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="text" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone'] ?? '') ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                                 <div>
                                     <label class="block text-sm font-bold text-slate-500 mb-1">Internship Start Date</label>
-                                    <input type="date" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="date" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                 </div>
                             </div>
                             <!-- Hidden fields to preserve personal data on save -->
-                            <input type="hidden" name="full_name" value="<?= htmlspecialchars($profile['full_name']) ?>">
-                            <input type="hidden" name="student_roll" value="<?= htmlspecialchars($profile['student_roll']) ?>">
-                            <input type="hidden" name="major" value="<?= htmlspecialchars($profile['major']) ?>">
-                            <input type="hidden" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>">
+                            <input type="hidden" name="full_name" value="<?= htmlspecialchars(($profile['full_name'] ?? $profile['username']) ?? '') ?>">
+                            <input type="hidden" name="student_roll" value="<?= htmlspecialchars($profile['student_roll'] ?? '') ?>">
+                            <input type="hidden" name="major" value="<?= htmlspecialchars($profile['major'] ?? '') ?>">
+                            <input type="hidden" name="phone" value="<?= htmlspecialchars($profile['phone'] ?? '') ?>">
                             <div class="flex justify-end pt-2">
                                 <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">Save Changes</button>
                             </div>

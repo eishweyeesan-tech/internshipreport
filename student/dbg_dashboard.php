@@ -18,17 +18,18 @@ if (!in_array($tab, ['overview', 'daily-log', 'weekly-report'], true)) {
     $tab = 'overview';
 }
 ?>
-<!--DEBUG-TAB:<?= $tab ?>-->
-<?php 
+<?php
 
 // ══════════════════════════════════════════════════════════════════════
 // FETCH INTERNSHIP DATE RANGE + PROFILE INFO
 // ══════════════════════════════════════════════════════════════════════
-$profile_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, sp.internship_start_date, sp.internship_end_date, sup_u.username AS supervisor_name, sp.supervisor_id, u.profile_pic,
-           sp.instructor_name, sp.instructor_email, sp.instructor_id
+$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.major, u.position AS job_role, sp.internship_start_date, sp.internship_end_date,
+       sup_u.username AS supervisor_name, sp.supervisor_id, u.username, u.profile_pic,
+       COALESCE(c.company_name, '') AS company_name
     FROM student_profiles sp
     LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
     LEFT JOIN users u ON u.id = sp.user_id
+    LEFT JOIN companies c ON c.id = sp.company_id
     WHERE sp.user_id = ?");
 $profile_stmt->bind_param("i", $user_id);
 $profile_stmt->execute();
@@ -37,12 +38,11 @@ $profile_row = $profile_res ? $profile_res->fetch_assoc() : null;
 
 $intern_start = $profile_row['internship_start_date'] ?? null;
 $intern_end   = $profile_row['internship_end_date'] ?? null;
-$student_name = ($profile_row['full_name'] ?? '') ?: $username;
+$student_name = ($profile_row['username'] ?? '') ?: $username;
 $student_roll = $profile_row['student_roll'] ?? '';
 $supervisor_name = $profile_row['supervisor_name'] ?? '—';
 $profile_pic = $profile_row['profile_pic'] ?? '';
-$instructor_name = ($profile_row['instructor_name'] ?? '') ?: '—';
-$instructor_email = $profile_row['instructor_email'] ?? '';
+$instructor_name = '—';
 
 // ══════════════════════════════════════════════════════════════════════
 // FETCH WARNING STATUS
@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
                     $hours_worked   = '00:00';
                 }
                 $ins_log = $db->prepare("INSERT INTO daily_logs
-                    (internship_id, log_date, attendance_status, reason_for_absence, task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
+                    (student_id, log_date, attendance_status, reason_for_absence, task_title, task_detail, tasks_performed, tools_used, learnt_skills, calculated_duration)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                     attendance_status = VALUES(attendance_status),
@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
 $editing_log = null;
 if (isset($_GET['edit'])) {
     $edit_id = (int) $_GET['edit'];
-    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND internship_id = ?");
+    $edit_stmt = $db->prepare("SELECT * FROM daily_logs WHERE id = ? AND student_id = ?");
     $edit_stmt->bind_param("ii", $edit_id, $internship_id);
     $edit_stmt->execute();
     $edit_res = $edit_stmt->get_result();
@@ -239,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
                     log_date = ?, attendance_status = ?, reason_for_absence = ?,
                     task_title = ?, task_detail = ?, tasks_performed = ?,
                     tools_used = ?, learnt_skills = ?, calculated_duration = ?
-                    WHERE id = ? AND internship_id = ?");
+                    WHERE id = ? AND student_id = ?");
                 $upd_stmt->bind_param("sssssssssii",
                     $log_date, $attendance_status, $reason_for_absence,
                     $intended_task, $task_detail, $actual_task,
@@ -257,7 +257,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_log'])) {
     $del_id = (int) ($_POST['log_id'] ?? 0);
     if ($del_id) {
-        $del_check_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE id = ? AND internship_id = ?");
+        $del_check_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE id = ? AND student_id = ?");
         $del_check_stmt->bind_param("ii", $del_id, $internship_id);
         $del_check_stmt->execute();
         $del_res = $del_check_stmt->get_result();
@@ -274,7 +274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_log'])) {
             }
         }
         if (!$message) {
-            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND internship_id = ?");
+            $del_stmt = $db->prepare("DELETE FROM daily_logs WHERE id = ? AND student_id = ?");
             $del_stmt->bind_param("ii", $del_id, $internship_id);
             $del_stmt->execute();
             $message = 'log_deleted';
@@ -326,7 +326,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_reflection'])) {
 $magic_link = '';
 
 // ── FETCH EXISTING DATA ──
-$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC");
+$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date DESC");
 $all_logs_stmt->bind_param("i", $internship_id);
 $all_logs_stmt->execute();
 $all_res = $all_logs_stmt->get_result();
@@ -334,11 +334,11 @@ $all_logs = $all_res ? $all_res->fetch_all(MYSQLI_ASSOC) : [];
 
 // Existing log dates for duplicate prevention
 if ($editing_log) {
-    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND id != ?");
+    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE student_id = ? AND id != ?");
     $editing_log_id = (int)$editing_log['id'];
     $dates_stmt->bind_param("ii", $internship_id, $editing_log_id);
 } else {
-    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ?");
+    $dates_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE student_id = ?");
     $dates_stmt->bind_param("i", $internship_id);
 }
 $dates_stmt->execute();
@@ -362,7 +362,7 @@ if (!empty($weeks[$selected_week])) {
 if (!empty($weeks)) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
-    $logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
+    $logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ? ORDER BY log_date DESC");
     $logs_stmt->bind_param("iss", $internship_id, $ws, $we);
     $logs_stmt->execute();
     $logs_res = $logs_stmt->get_result();
@@ -372,14 +372,14 @@ if (!empty($weeks)) {
 }
 
 // Attendance counts
-$p_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present'");
+$p_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status = 'present'");
 $p_count_stmt->bind_param("i", $internship_id);
 $p_count_stmt->execute();
 $p_res = $p_count_stmt->get_result();
 $p_row = $p_res ? $p_res->fetch_row() : null;
 $present_count = (int) ($p_row[0] ?? 0);
 
-$a_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave')");
+$a_count_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave')");
 $a_count_stmt->bind_param("i", $internship_id);
 $a_count_stmt->execute();
 $a_res = $a_count_stmt->get_result();
@@ -387,7 +387,7 @@ $a_row = $a_res ? $a_res->fetch_row() : null;
 $absent_count = (int) ($a_row[0] ?? 0);
 
 // Overall internship attendance details for tooltips
-$pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
+$pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE student_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
 $pd_stmt->bind_param("i", $internship_id);
 $pd_stmt->execute();
 $pd_res = $pd_stmt->get_result();
@@ -398,7 +398,7 @@ if ($pd_res) {
     }
 }
 
-$ad_stmt = $db->prepare("SELECT log_date, reason_for_absence FROM daily_logs WHERE internship_id = ? AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
+$ad_stmt = $db->prepare("SELECT log_date, reason_for_absence FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave') ORDER BY log_date ASC");
 $ad_stmt->bind_param("i", $internship_id);
 $ad_stmt->execute();
 $ad_res = $ad_stmt->get_result();
@@ -410,7 +410,7 @@ $total_weekdays = 0;
 if (!empty($weeks)) {
     $ws = $weeks[$selected_week]['start'];
     $we = $weeks[$selected_week]['end'];
-    $wls_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wls_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     $wls_stmt->bind_param("iss", $internship_id, $ws, $we);
     $wls_stmt->execute();
     $wls_res = $wls_stmt->get_result();
@@ -491,13 +491,22 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
         }
     }
 
-    $token = bin2hex(random_bytes(32));
-    $sig_stmt = $db->prepare("UPDATE weekly_reports SET instructor_review_code = COALESCE(instructor_review_code, ?), status = 'pending' WHERE student_id = ? AND week_number = ?");
-    $sig_stmt->bind_param("sii", $token, $internship_id, $selected_week);
-    $sig_stmt->execute();
-    $message = 'signature_saved';
+    if ($sig_val === null) {
+        $message = 'student_sig_required';
+    } else {
+        $token = bin2hex(random_bytes(32));
+        $now = date('Y-m-d H:i:s');
+        $sig_stmt = $db->prepare("UPDATE weekly_reports SET
+            instructor_review_code = COALESCE(instructor_review_code, ?),
+            student_signature_type = ?, student_signature_value = ?, student_signed_at = ?,
+            status = 'pending'
+            WHERE student_id = ? AND week_number = ?");
+        $sig_stmt->bind_param("ssssii", $token, $sig_type, $sig_val, $now, $internship_id, $selected_week);
+        $sig_stmt->execute();
+        $message = 'signature_saved';
+    }
 
-    if (!empty($profile_row['supervisor_id'])) {
+    if ($message === 'signature_saved' && !empty($profile_row['supervisor_id'])) {
         require_once __DIR__ . '/../config/notify.php';
         notify_user_once(
             $db,
@@ -557,7 +566,7 @@ if ($weekly_report) {
 $wf_step5_done = !empty($weekly_report['supervisor_grade']);
 
 // ── ANALYTICS DATA ──
-$hours_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ?");
+$hours_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE student_id = ?");
 $hours_stmt->bind_param("i", $internship_id);
 $hours_stmt->execute();
 $hrs_res = $hours_stmt->get_result();
@@ -589,7 +598,7 @@ $total_reflections_count = (int) ($tr_row[0] ?? 0);
 
 $weeks_completed = 0;
 if (!empty($weeks)) {
-    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wc_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($weeks as $wn => $wr) {
         $wc_stmt->bind_param("iss", $internship_id, $wr['start'], $wr['end']);
         $wc_stmt->execute();
@@ -608,7 +617,7 @@ $weekly_hours_data = [];
 $weekly_hours_labels = [];
 if (!empty($weeks)) {
     $chart_weeks = array_slice($weeks, -8, 8, true);
-    $wh_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE internship_id = ? AND log_date BETWEEN ? AND ?");
+    $wh_stmt = $db->prepare("SELECT calculated_duration FROM daily_logs WHERE student_id = ? AND log_date BETWEEN ? AND ?");
     foreach ($chart_weeks as $cw_num => $cw_range) {
         $wh_stmt->bind_param("iss", $internship_id, $cw_range['start'], $cw_range['end']);
         $wh_stmt->execute();
@@ -625,7 +634,7 @@ if (!empty($weeks)) {
     }
 }
 
-$att_all_stmt = $db->prepare("SELECT attendance_status, COUNT(*) as cnt FROM daily_logs WHERE internship_id = ? GROUP BY attendance_status");
+$att_all_stmt = $db->prepare("SELECT attendance_status, COUNT(*) as cnt FROM daily_logs WHERE student_id = ? GROUP BY attendance_status");
 $att_all_stmt->bind_param("i", $internship_id);
 $att_all_stmt->execute();
 $att_res = $att_all_stmt->get_result();
@@ -636,7 +645,7 @@ if ($att_res) {
     }
 }
 
-$recent_act_stmt = $db->prepare("SELECT log_date, attendance_status, task_title, calculated_duration FROM daily_logs WHERE internship_id = ? ORDER BY log_date DESC LIMIT 5");
+$recent_act_stmt = $db->prepare("SELECT log_date, attendance_status, task_title, calculated_duration FROM daily_logs WHERE student_id = ? ORDER BY log_date DESC LIMIT 5");
 $recent_act_stmt->bind_param("i", $internship_id);
 $recent_act_stmt->execute();
 $act_res = $recent_act_stmt->get_result();

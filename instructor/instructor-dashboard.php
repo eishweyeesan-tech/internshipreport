@@ -62,7 +62,7 @@ $sql_stu = "
     SELECT u.id AS uid, u.username, u.email, ay.year_label AS academic_year,
            u.username AS full_name, sp.student_roll, sp.major,
            COALESCE(c.company_name, '') AS company_name,
-           sp.job_role, sp.supervisor_id,
+           u.position AS job_role, sp.supervisor_id,
            sup_u.username AS supervisor_name,
            sp.internship_start_date, sp.internship_end_date
     FROM users u

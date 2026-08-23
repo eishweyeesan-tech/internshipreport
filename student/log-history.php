@@ -12,7 +12,7 @@ $internship_id = $user_id;
 $db = $mysqli ?? $conn;
 
 // ── Fetch Student Profile ────────────────────────────────────────
-$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, sp.job_role,
+$profile_stmt = $db->prepare("SELECT sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, u.position AS job_role,
     sp.internship_start_date, sp.internship_end_date, sp.company_id,
     sup_u.username AS supervisor_name, u.username, u.profile_pic
     FROM student_profiles sp
@@ -50,8 +50,13 @@ if ($intern_start) {
 }
 
 // ── Fetch all data ───────────────────────────────────────────────
-$all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date ASC");
-$all_logs_stmt->bind_param("i", $internship_id);
+if ($intern_start && $intern_end) {
+    $all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? AND log_date >= ? AND log_date <= ? ORDER BY log_date ASC");
+    $all_logs_stmt->bind_param("iss", $internship_id, $intern_start, $intern_end);
+} else {
+    $all_logs_stmt = $db->prepare("SELECT * FROM daily_logs WHERE student_id = ? ORDER BY log_date ASC");
+    $all_logs_stmt->bind_param("i", $internship_id);
+}
 $all_logs_stmt->execute();
 $res = $all_logs_stmt->get_result();
 $all_logs = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
@@ -81,12 +86,15 @@ foreach ($all_reports as $r) {
         $refs_by_week[$wn] = $ref_item;
     }
     $eval_by_week[$wn] = [
-        'week_number'         => $wn,
-        'grade'               => $r['instructor_grade'],
-        'comment'             => $r['instructor_comments'],
-        'instructor_comments' => $r['instructor_comments'],
-        'report_status'       => $r['status'],
-        'evaluated_at'        => $r['submitted_at'],
+        'week_number'             => $wn,
+        'grade'                   => $r['instructor_grade'],
+        'comment'                 => $r['instructor_comments'],
+        'instructor_comments'     => $r['instructor_comments'],
+        'report_status'           => $r['status'],
+        'evaluated_at'            => $r['submitted_at'],
+        'student_signature_type'  => $r['student_signature_type'] ?? null,
+        'student_signature_value' => $r['student_signature_value'] ?? null,
+        'student_signed_at'       => $r['student_signed_at'] ?? null,
     ];
     if (!empty($r['supervisor_grade'])) {
         $sup_eval_by_week[$wn] = [
@@ -94,6 +102,7 @@ foreach ($all_reports as $r) {
             'weekly_grade'        => $r['supervisor_grade'],
             'supervisor_comments' => $r['supervisor_comments'],
             'supervisor_name'     => $r['supervisor_name'],
+            'evaluated_at'        => $r['submitted_at'],
         ];
     }
 }
@@ -120,19 +129,35 @@ foreach ($all_refs as $ref) {
 // ── Stats ────────────────────────────────────────────────────────
 $total_logs_count = count($all_logs);
 
-$present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status = 'present'");
-$present_stmt->bind_param("i", $internship_id);
-$present_stmt->execute();
-$res = $present_stmt->get_result();
-$p_row = $res ? $res->fetch_row() : null;
-$total_present = (int) ($p_row[0] ?? 0);
+if ($intern_start && $intern_end) {
+    $present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date >= ? AND log_date <= ? AND attendance_status = 'present'");
+    $present_stmt->bind_param("iss", $internship_id, $intern_start, $intern_end);
+    $present_stmt->execute();
+    $res = $present_stmt->get_result();
+    $p_row = $res ? $res->fetch_row() : null;
+    $total_present = (int) ($p_row[0] ?? 0);
 
-$absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave')");
-$absent_stmt->bind_param("i", $internship_id);
-$absent_stmt->execute();
-$res = $absent_stmt->get_result();
-$a_row = $res ? $res->fetch_row() : null;
-$total_absent = (int) ($a_row[0] ?? 0);
+    $absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND log_date >= ? AND log_date <= ? AND attendance_status IN ('absent','leave')");
+    $absent_stmt->bind_param("iss", $internship_id, $intern_start, $intern_end);
+    $absent_stmt->execute();
+    $res = $absent_stmt->get_result();
+    $a_row = $res ? $res->fetch_row() : null;
+    $total_absent = (int) ($a_row[0] ?? 0);
+} else {
+    $present_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status = 'present'");
+    $present_stmt->bind_param("i", $internship_id);
+    $present_stmt->execute();
+    $res = $present_stmt->get_result();
+    $p_row = $res ? $res->fetch_row() : null;
+    $total_present = (int) ($p_row[0] ?? 0);
+
+    $absent_stmt = $db->prepare("SELECT COUNT(*) FROM daily_logs WHERE student_id = ? AND attendance_status IN ('absent','leave')");
+    $absent_stmt->bind_param("i", $internship_id);
+    $absent_stmt->execute();
+    $res = $absent_stmt->get_result();
+    $a_row = $res ? $res->fetch_row() : null;
+    $total_absent = (int) ($a_row[0] ?? 0);
+}
 
 $total_weeks = count($weeks);
 $total_reflections = count($all_refs);
@@ -186,45 +211,34 @@ foreach ($weeks as $wn => $wr) {
 }
 
 // ── Filtered week/month (default to first available) ─────────────
-$filter_week = isset($_GET['week']) ? (int) $_GET['week'] : (!empty($weeks) ? array_key_first($weeks) : 0);
-$filter_month = $_GET['month'] ?? (!empty($months) ? array_key_first($months) : '');
+$default_week = !empty($weeks) ? (isset($weeks[1]) ? 1 : (int) array_key_first($weeks)) : 0;
+$default_month = !empty($months) ? (string) array_key_first($months) : '';
 
-// ── Scoped stats for selected period ─────────────────────────────
-if ($view_mode === 'weekly' && $filter_week > 0 && isset($weeks[$filter_week])) {
-    $wl = $logs_by_week[$filter_week] ?? [];
-    $display_logs_count = count($wl);
-    $display_present = 0;
-    $display_absent = 0;
-    $display_minutes = 0;
-    foreach ($wl as $log) {
-        if ($log['attendance_status'] === 'present') $display_present++;
-        else $display_absent++;
-        $p = explode(':', $log['calculated_duration']);
-        if (count($p) === 2) $display_minutes += ((int)$p[0] * 60) + (int)$p[1];
+if ($view_mode === 'weekly') {
+    if (isset($_GET['week'])) {
+        $filter_week = ($_GET['week'] === 'all' || $_GET['week'] === '0') ? 0 : (int) $_GET['week'];
+    } else {
+        $filter_week = $default_week;
     }
-    $display_reflections = isset($refs_by_week[$filter_week]) ? 1 : 0;
-    $display_hours = floor($display_minutes / 60);
-    $display_mins  = $display_minutes % 60;
-} elseif ($view_mode === 'monthly' && $filter_month && isset($months[$filter_month])) {
-    $display_logs_count = 0;
-    $display_present = 0;
-    $display_absent = 0;
-    $display_minutes = 0;
-    $display_reflections = 0;
-    foreach ($months[$filter_month]['weeks'] as $wn) {
-        $wl = $logs_by_week[$wn] ?? [];
-        $display_logs_count += count($wl);
-        foreach ($wl as $log) {
-            if ($log['attendance_status'] === 'present') $display_present++;
-            else $display_absent++;
-            $p = explode(':', $log['calculated_duration']);
-            if (count($p) === 2) $display_minutes += ((int)$p[0] * 60) + (int)$p[1];
-        }
-        if (isset($refs_by_week[$wn])) $display_reflections++;
+    $filter_month = '';
+} else {
+    if (isset($_GET['month'])) {
+        $filter_month = ($_GET['month'] === 'all' || $_GET['month'] === '0') ? '' : trim($_GET['month']);
+    } else {
+        $filter_month = $default_month;
     }
-    $display_hours = floor($display_minutes / 60);
-    $display_mins  = $display_minutes % 60;
+    $filter_week = 0;
 }
+
+// ── Stats for full internship period ─────────────────────────────
+$display_logs_count  = $total_logs_count;
+$display_present     = $total_present;
+$display_absent      = $total_absent;
+$display_reflections = $total_reflections;
+$display_hours       = $total_hours;
+$display_mins        = $total_mins;
+$all_recorded_days   = $display_present + $display_absent;
+$all_att_rate        = $all_recorded_days > 0 ? (int)round(($display_present / $all_recorded_days) * 100) : 0;
 
 // Back link
 $back_url = 'student-dashboard.php';
@@ -365,28 +379,28 @@ $back_url = 'student-dashboard.php';
                     <!-- View Mode Toggle -->
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">View:</span>
-                        <a href="?mode=weekly<?= $filter_week ? "&week={$filter_week}" : '' ?>" class="px-3 py-1.5 text-xs font-medium rounded-lg transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Weekly</a>
-                        <a href="?mode=monthly<?= $filter_month ? "&month={$filter_month}" : '' ?>" class="px-3 py-1.5 text-xs font-medium rounded-lg transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Monthly</a>
+                        <a href="?mode=weekly" class="px-3 py-1.5 text-xs font-medium rounded-lg transition <?= $view_mode === 'weekly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Weekly</a>
+                        <a href="?mode=monthly" class="px-3 py-1.5 text-xs font-medium rounded-lg transition <?= $view_mode === 'monthly' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?>">Monthly</a>
                     </div>
 
                     <!-- Week/Month Filter -->
                     <?php if ($view_mode === 'weekly' && !empty($weeks)): ?>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Jump to:</span>
-                        <select onchange="if(this.value) window.location.href='?mode=weekly&week='+this.value; else window.location.href='?mode=weekly';" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
-                            <option value="">All Weeks</option>
+                        <select onchange="window.location.href='?mode=weekly&week=' + this.value;" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                            <option value="all" <?= ($filter_week === 0) ? 'selected' : '' ?>>All Weeks</option>
                             <?php foreach ($weeks as $wn => $wr): ?>
-                            <option value="<?= $wn ?>" <?= $filter_week === $wn ? 'selected' : '' ?>>Week <?= $wn ?> (<?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?>)</option>
+                            <option value="<?= $wn ?>" <?= ($filter_week === $wn) ? 'selected' : '' ?>>Week <?= $wn ?> (<?= (new DateTime($wr['start']))->format('d M') ?> – <?= (new DateTime($wr['end']))->format('d M') ?>)</option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <?php elseif ($view_mode === 'monthly' && !empty($months)): ?>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Jump to:</span>
-                        <select onchange="if(this.value) window.location.href='?mode=monthly&month='+this.value; else window.location.href='?mode=monthly';" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
-                            <option value="">All Months</option>
+                        <select onchange="window.location.href='?mode=monthly&month=' + encodeURIComponent(this.value);" class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                            <option value="all" <?= ($filter_month === '' || $filter_month === 'all') ? 'selected' : '' ?>>All Months</option>
                             <?php foreach ($months as $mk => $mv): ?>
-                            <option value="<?= htmlspecialchars($mk) ?>" <?= $filter_month === $mk ? 'selected' : '' ?>><?= htmlspecialchars($mv['label']) ?></option>
+                            <option value="<?= htmlspecialchars($mk) ?>" <?= ($filter_month === $mk) ? 'selected' : '' ?>><?= htmlspecialchars($mv['label']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -544,7 +558,13 @@ $back_url = 'student-dashboard.php';
                                 <?php if (!empty($week_eval['student_signature_type']) && $week_eval['student_signature_type'] === 'typed'): ?>
                                     <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval['student_signature_value']) ?></span>
                                 <?php else: ?>
-                                    <img src="<?= htmlspecialchars($week_eval['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
+                                    <?php
+                                    $sig_src_w = $week_eval['student_signature_value'];
+                                    if (!str_starts_with($sig_src_w, 'data:') && !str_starts_with($sig_src_w, 'http') && !str_starts_with($sig_src_w, '../uploads/') && !str_starts_with($sig_src_w, 'uploads/')) {
+                                        $sig_src_w = '../uploads/signatures/' . $sig_src_w;
+                                    }
+                                    ?>
+                                    <img src="<?= htmlspecialchars($sig_src_w) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
                                 <?php endif; ?>
                                 <span class="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-caption font-bold shrink-0">&#10003; Signed</span>
                             </div>
@@ -590,7 +610,7 @@ $back_url = 'student-dashboard.php';
                                         </p>
                                         <?php if (!empty($week_eval['signature_value'])): ?>
                                         <div class="flex items-center gap-1.5">
-                                            <?php if ($week_eval['signature_type'] === 'typed'): ?>
+                                            <?php if (($week_eval['signature_type'] ?? '') === 'typed'): ?>
                                                 <span class="inline-flex items-center px-2 py-0.5 bg-white border border-slate-200 rounded max-h-[26px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 0.8rem; line-height: 1;"><?= htmlspecialchars($week_eval['signature_value']) ?></span>
                                             <?php else: ?>
                                                 <img src="<?= htmlspecialchars($week_eval['signature_value']) ?>" alt="Instructor Signature" class="h-5 object-contain">
@@ -636,10 +656,12 @@ $back_url = 'student-dashboard.php';
                                         <p class="text-xs italic text-slate-400">No written comments provided.</p>
                                         <?php endif; ?>
                                     </div>
+                                    <?php if (!empty($week_sup_eval['evaluated_at'])): ?>
                                     <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                         <?= htmlspecialchars((new DateTime($week_sup_eval['evaluated_at']))->format('d M Y, h:i A')) ?>
                                     </p>
+                                    <?php endif; ?>
                                     <?php else: ?>
                                     <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
                                         <div>
@@ -847,7 +869,13 @@ $back_url = 'student-dashboard.php';
                                     <?php if (!empty($week_eval_m['student_signature_type']) && $week_eval_m['student_signature_type'] === 'typed'): ?>
                                         <span class="inline-flex items-center px-3 py-1 bg-white border border-slate-200 rounded-lg max-h-[40px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 1.1rem; line-height: 1;"><?= htmlspecialchars($week_eval_m['student_signature_value']) ?></span>
                                     <?php else: ?>
-                                        <img src="<?= htmlspecialchars($week_eval_m['student_signature_value']) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
+                                        <?php
+                                        $sig_src_m = $week_eval_m['student_signature_value'];
+                                        if (!str_starts_with($sig_src_m, 'data:') && !str_starts_with($sig_src_m, 'http') && !str_starts_with($sig_src_m, '../uploads/') && !str_starts_with($sig_src_m, 'uploads/')) {
+                                            $sig_src_m = '../uploads/signatures/' . $sig_src_m;
+                                        }
+                                        ?>
+                                        <img src="<?= htmlspecialchars($sig_src_m) ?>" alt="Student Signature" class="h-8 object-contain bg-white border border-slate-200 rounded-lg px-2 py-0.5">
                                     <?php endif; ?>
                                     <span class="inline-flex items-center gap-1 text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full text-caption font-bold shrink-0">&#10003; Signed</span>
                                 </div>
@@ -893,7 +921,7 @@ $back_url = 'student-dashboard.php';
                                             </p>
                                             <?php if (!empty($week_eval_m['signature_value'])): ?>
                                             <div class="flex items-center gap-1.5">
-                                                <?php if ($week_eval_m['signature_type'] === 'typed'): ?>
+                                                <?php if (($week_eval_m['signature_type'] ?? '') === 'typed'): ?>
                                                     <span class="inline-flex items-center px-2 py-0.5 bg-white border border-slate-200 rounded max-h-[26px] overflow-hidden" style="font-family: 'Great Vibes', cursive; font-size: 0.8rem; line-height: 1;"><?= htmlspecialchars($week_eval_m['signature_value']) ?></span>
                                                 <?php else: ?>
                                                     <img src="<?= htmlspecialchars($week_eval_m['signature_value']) ?>" alt="Instructor Signature" class="h-5 object-contain">
@@ -939,10 +967,12 @@ $back_url = 'student-dashboard.php';
                                             <p class="text-xs italic text-slate-400">No written comments provided.</p>
                                             <?php endif; ?>
                                         </div>
+                                        <?php if (!empty($week_sup_eval_m['evaluated_at'])): ?>
                                         <p class="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                                             <?= htmlspecialchars((new DateTime($week_sup_eval_m['evaluated_at']))->format('d M Y, h:i A')) ?>
                                         </p>
+                                        <?php endif; ?>
                                         <?php else: ?>
                                         <div class="flex-1 flex items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/60 py-4 text-center">
                                             <div>

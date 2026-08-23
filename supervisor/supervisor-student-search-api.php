@@ -46,7 +46,7 @@ $like        = '%' . $q . '%';
 $sql = "
     SELECT u.id AS uid, u.username, u.email,
            u.username AS full_name, sp.student_roll, sp.major,
-           COALESCE(c.company_name, '') AS company_name, sp.job_role
+           COALESCE(c.company_name, '') AS company_name, u.position AS job_role
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     LEFT JOIN companies c ON c.id = sp.company_id
@@ -57,7 +57,7 @@ $sql = "
           u.username LIKE ?
           OR sp.student_roll LIKE ?
           OR c.company_name LIKE ?
-          OR sp.job_role LIKE ?
+          OR u.position LIKE ?
           OR u.email LIKE ?
       )
     ORDER BY u.username ASC

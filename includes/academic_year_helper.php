@@ -1,14 +1,16 @@
 <?php
+
 /**
  * Academic Year Helper
  * Canonical helper functions to query, manage, and render Academic Years.
  */
 
 if (!function_exists('ensure_academic_years_table')) {
-    function ensure_academic_years_table($db) {
+    function ensure_academic_years_table($db)
+    {
         if (!$db) return;
         ensure_users_status_enum($db);
-        
+
         $create_sql = "
             CREATE TABLE IF NOT EXISTS academic_years (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -41,21 +43,27 @@ if (!function_exists('ensure_academic_years_table')) {
         // Check if empty
         $check_res = $db->query("SELECT COUNT(*) FROM academic_years");
         $count = $check_res ? (int) ($check_res->fetch_row()[0] ?? 0) : 0;
-        
+
         if ($count === 0) {
-            // Seed from users table distinct values or defaults
-            $users_ay_res = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
-            $existing_years = [];
-            if ($users_ay_res) {
-                while ($row = $users_ay_res->fetch_assoc()) {
-                    if (preg_match('/^\d{4}-\d{4}$/', $row['academic_year'])) {
-                        $existing_years[] = $row['academic_year'];
+            $existing_years = ['2023-2024', '2024-2025'];
+            try {
+                $has_col = $db->query("SHOW COLUMNS FROM users LIKE 'academic_year'");
+                if ($has_col && $has_col->num_rows > 0) {
+                    $users_ay_res = $db->query("SELECT DISTINCT academic_year FROM users WHERE academic_year IS NOT NULL AND academic_year <> '' ORDER BY academic_year DESC");
+                    if ($users_ay_res) {
+                        $found = [];
+                        while ($row = $users_ay_res->fetch_assoc()) {
+                            if (preg_match('/^\d{4}-\d{4}$/', (string)$row['academic_year'])) {
+                                $found[] = $row['academic_year'];
+                            }
+                        }
+                        if (!empty($found)) {
+                            $existing_years = $found;
+                        }
                     }
                 }
-            }
-
-            if (empty($existing_years)) {
-                $existing_years = ['2023-2024', '2024-2025'];
+            } catch (Throwable $e) {
+                // Fallback to default years
             }
 
             // Make the first one active if not specified
@@ -91,7 +99,8 @@ if (!function_exists('ensure_academic_years_table')) {
 }
 
 if (!function_exists('get_all_academic_years')) {
-    function get_all_academic_years($db) {
+    function get_all_academic_years($db)
+    {
         if (!$db) return [];
         ensure_academic_years_table($db);
         $res = $db->query("SELECT * FROM academic_years ORDER BY start_date DESC, year_label DESC");
@@ -100,7 +109,8 @@ if (!function_exists('get_all_academic_years')) {
 }
 
 if (!function_exists('get_active_academic_year')) {
-    function get_active_academic_year($db) {
+    function get_active_academic_year($db)
+    {
         if (!$db) return null;
         ensure_academic_years_table($db);
         $res = $db->query("SELECT * FROM academic_years WHERE is_current = 1 LIMIT 1");
@@ -117,14 +127,16 @@ if (!function_exists('get_active_academic_year')) {
 }
 
 if (!function_exists('get_active_academic_year_label')) {
-    function get_active_academic_year_label($db, $fallback = '2023-2024') {
+    function get_active_academic_year_label($db, $fallback = '2023-2024')
+    {
         $active = get_active_academic_year($db);
         return ($active && !empty($active['year_label'])) ? $active['year_label'] : $fallback;
     }
 }
 
 if (!function_exists('get_academic_years_list')) {
-    function get_academic_years_list($db) {
+    function get_academic_years_list($db)
+    {
         $all = get_all_academic_years($db);
         $labels = [];
         foreach ($all as $y) {
@@ -142,7 +154,8 @@ if (!function_exists('get_default_passwords')) {
      * Returns an associative array with both concise and verbose keys.
      * Safe fallback values prevent fatal errors or undefined keys.
      */
-    function get_default_passwords($db, $fallback_student = 'password1234', $fallback_supervisor = 'password1234') {
+    function get_default_passwords($db, $fallback_student = 'password1234', $fallback_supervisor = 'password1234')
+    {
         $active = get_active_academic_year($db);
         $student_pw = (!empty($active['default_student_password'])) ? $active['default_student_password'] : $fallback_student;
         $supervisor_pw = (!empty($active['default_supervisor_password'])) ? $active['default_supervisor_password'] : $fallback_supervisor;
@@ -157,14 +170,16 @@ if (!function_exists('get_default_passwords')) {
 }
 
 if (!function_exists('get_default_student_password')) {
-    function get_default_student_password($db, $fallback = 'password1234') {
+    function get_default_student_password($db, $fallback = 'password1234')
+    {
         $passwords = get_default_passwords($db, $fallback, $fallback);
         return $passwords['student'];
     }
 }
 
 if (!function_exists('get_default_supervisor_password')) {
-    function get_default_supervisor_password($db, $fallback = 'password1234') {
+    function get_default_supervisor_password($db, $fallback = 'password1234')
+    {
         $passwords = get_default_passwords($db, $fallback, $fallback);
         return $passwords['supervisor'];
     }
@@ -174,7 +189,8 @@ if (!function_exists('update_default_passwords')) {
     /**
      * Update default passwords in the academic_years table for the active year or a specified year ID.
      */
-    function update_default_passwords($db, $student_pw, $supervisor_pw, $academic_year_id = null) {
+    function update_default_passwords($db, $student_pw, $supervisor_pw, $academic_year_id = null)
+    {
         if (!$db) return false;
         ensure_academic_years_table($db);
 
@@ -215,7 +231,8 @@ if (!function_exists('update_default_passwords')) {
 // ════════════════════════════════════════════════════════════════
 
 if (!function_exists('ensure_supervisor_assignments_table')) {
-    function ensure_supervisor_assignments_table($db) {
+    function ensure_supervisor_assignments_table($db)
+    {
         if (!$db) return;
         $db->query("
             CREATE TABLE IF NOT EXISTS supervisor_academic_assignments (
@@ -235,7 +252,7 @@ if (!function_exists('ensure_supervisor_assignments_table')) {
         $res = $db->query("
             SELECT u.id AS sup_id, u.academic_year_id, ay.id AS ay_id
             FROM users u
-            LEFT JOIN academic_years ay ON ay.id = u.academic_year_id OR ay.year_label = u.academic_year
+            LEFT JOIN academic_years ay ON ay.id = u.academic_year_id
             WHERE u.role = 'supervisor'
               AND u.academic_year_id IS NOT NULL
               AND NOT EXISTS (
@@ -260,7 +277,7 @@ if (!function_exists('ensure_supervisor_assignments_table')) {
             SELECT DISTINCT sp.supervisor_id, ay.id AS ay_id
             FROM student_profiles sp
             JOIN users stu ON stu.id = sp.user_id
-            JOIN academic_years ay ON (ay.id = stu.academic_year_id OR ay.year_label = stu.academic_year)
+            JOIN academic_years ay ON ay.id = stu.academic_year_id
             WHERE sp.supervisor_id IS NOT NULL
               AND NOT EXISTS (
                   SELECT 1 FROM supervisor_academic_assignments saa
@@ -282,7 +299,8 @@ if (!function_exists('ensure_supervisor_assignments_table')) {
 }
 
 if (!function_exists('assign_supervisor_to_year')) {
-    function assign_supervisor_to_year($db, $supervisor_id, $academic_year_id, $assigned_by = null) {
+    function assign_supervisor_to_year($db, $supervisor_id, $academic_year_id, $assigned_by = null)
+    {
         $stmt = $db->prepare("INSERT IGNORE INTO supervisor_academic_assignments (supervisor_id, academic_year_id, assigned_by) VALUES (?, ?, ?)");
         $stmt->bind_param("iii", $supervisor_id, $academic_year_id, $assigned_by);
         $stmt->execute();
@@ -291,7 +309,8 @@ if (!function_exists('assign_supervisor_to_year')) {
 }
 
 if (!function_exists('unassign_supervisor_from_year')) {
-    function unassign_supervisor_from_year($db, $supervisor_id, $academic_year_id) {
+    function unassign_supervisor_from_year($db, $supervisor_id, $academic_year_id)
+    {
         $stmt = $db->prepare("DELETE FROM supervisor_academic_assignments WHERE supervisor_id = ? AND academic_year_id = ?");
         $stmt->bind_param("ii", $supervisor_id, $academic_year_id);
         $stmt->execute();
@@ -300,7 +319,8 @@ if (!function_exists('unassign_supervisor_from_year')) {
 }
 
 if (!function_exists('get_supervisor_assignments')) {
-    function get_supervisor_assignments($db, $supervisor_id) {
+    function get_supervisor_assignments($db, $supervisor_id)
+    {
         $stmt = $db->prepare("
             SELECT saa.*, ay.year_label, ay.start_date, ay.end_date, ay.status AS year_status
             FROM supervisor_academic_assignments saa
@@ -316,14 +336,15 @@ if (!function_exists('get_supervisor_assignments')) {
 }
 
 if (!function_exists('get_supervisors_for_year')) {
-    function get_supervisors_for_year($db, $academic_year_id) {
+    function get_supervisors_for_year($db, $academic_year_id)
+    {
         $stmt = $db->prepare("
             SELECT u.id, u.username, u.email, u.phone, u.department, u.position, u.status, u.is_first_login, u.created_at,
                    saa.assigned_at,
                    (SELECT COUNT(*) FROM student_profiles sp
                     JOIN users stu ON stu.id = sp.user_id
                     WHERE sp.supervisor_id = u.id
-                      AND (stu.academic_year_id = ? OR stu.academic_year = ay.year_label)
+                      AND stu.academic_year_id = ?
                    ) AS student_count
             FROM supervisor_academic_assignments saa
             JOIN users u ON u.id = saa.supervisor_id
@@ -339,13 +360,14 @@ if (!function_exists('get_supervisors_for_year')) {
 }
 
 if (!function_exists('get_supervisor_year_student_count')) {
-    function get_supervisor_year_student_count($db, $supervisor_id, $academic_year_id) {
+    function get_supervisor_year_student_count($db, $supervisor_id, $academic_year_id)
+    {
         $stmt = $db->prepare("
             SELECT COUNT(*) FROM student_profiles sp
             JOIN users stu ON stu.id = sp.user_id
             JOIN academic_years ay ON ay.id = ?
             WHERE sp.supervisor_id = ?
-              AND (stu.academic_year_id = ? OR stu.academic_year = ay.year_label)
+              AND stu.academic_year_id = ?
         ");
         $stmt->bind_param("iii", $academic_year_id, $supervisor_id, $academic_year_id);
         $stmt->execute();
@@ -356,7 +378,8 @@ if (!function_exists('get_supervisor_year_student_count')) {
 }
 
 if (!function_exists('get_total_supervisors_for_year')) {
-    function get_total_supervisors_for_year($db, $academic_year_id) {
+    function get_total_supervisors_for_year($db, $academic_year_id)
+    {
         $stmt = $db->prepare("SELECT COUNT(*) FROM supervisor_academic_assignments WHERE academic_year_id = ?");
         $stmt->bind_param("i", $academic_year_id);
         $stmt->execute();
@@ -367,7 +390,8 @@ if (!function_exists('get_total_supervisors_for_year')) {
 }
 
 if (!function_exists('is_supervisor_assigned_to_year')) {
-    function is_supervisor_assigned_to_year($db, $supervisor_id, $academic_year_id) {
+    function is_supervisor_assigned_to_year($db, $supervisor_id, $academic_year_id)
+    {
         $stmt = $db->prepare("SELECT COUNT(*) FROM supervisor_academic_assignments WHERE supervisor_id = ? AND academic_year_id = ?");
         $stmt->bind_param("ii", $supervisor_id, $academic_year_id);
         $stmt->execute();
@@ -378,7 +402,8 @@ if (!function_exists('is_supervisor_assigned_to_year')) {
 }
 
 if (!function_exists('ensure_users_status_enum')) {
-    function ensure_users_status_enum($db) {
+    function ensure_users_status_enum($db)
+    {
         if (!$db) return;
         try {
             // Check if status column supports 'Inactive'
@@ -396,7 +421,8 @@ if (!function_exists('ensure_users_status_enum')) {
 }
 
 if (!function_exists('get_supervisor_detailed_history')) {
-    function get_supervisor_detailed_history($db, $supervisor_id) {
+    function get_supervisor_detailed_history($db, $supervisor_id)
+    {
         ensure_academic_years_table($db);
         ensure_supervisor_assignments_table($db);
         ensure_users_status_enum($db);
@@ -418,10 +444,9 @@ if (!function_exists('get_supervisor_detailed_history')) {
             FROM academic_years ay
             WHERE ay.id IN (SELECT academic_year_id FROM supervisor_academic_assignments WHERE supervisor_id = ?)
                OR ay.id IN (SELECT stu.academic_year_id FROM student_profiles sp JOIN users stu ON stu.id = sp.user_id WHERE sp.supervisor_id = ? AND stu.academic_year_id IS NOT NULL)
-               OR ay.year_label IN (SELECT stu.academic_year FROM student_profiles sp JOIN users stu ON stu.id = sp.user_id WHERE sp.supervisor_id = ? AND stu.academic_year IS NOT NULL AND stu.academic_year <> '')
             ORDER BY ay.start_date DESC, ay.year_label DESC
         ");
-        $years_stmt->bind_param("iii", $supervisor_id, $supervisor_id, $supervisor_id);
+        $years_stmt->bind_param("ii", $supervisor_id, $supervisor_id);
         $years_stmt->execute();
         $years_res = $years_stmt->get_result();
         $years_list = $years_res ? $years_res->fetch_all(MYSQLI_ASSOC) : [];
@@ -446,7 +471,7 @@ if (!function_exists('get_supervisor_detailed_history')) {
             // Fetch students supervised in this year
             $stu_stmt = $db->prepare("
                 SELECT u.id, u.username, u.email, u.phone, u.status AS student_status,
-                       u.username AS full_name, sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, sp.job_role,
+                       u.username AS full_name, sp.student_roll, sp.major, COALESCE(c.company_name, '') AS company_name, u.position AS job_role,
                        sp.internship_start_date, sp.internship_end_date,
                        (SELECT COUNT(*) FROM weekly_reports wr WHERE wr.student_id = u.id AND wr.supervisor_grade IS NOT NULL) AS weekly_eval_count,
                        (SELECT wr2.supervisor_grade FROM weekly_reports wr2 WHERE wr2.student_id = u.id AND wr2.supervisor_grade IS NOT NULL ORDER BY wr2.week_number DESC, wr2.id DESC LIMIT 1) AS latest_weekly_grade,
@@ -489,7 +514,7 @@ if (!function_exists('get_supervisor_detailed_history')) {
                 'is_current' => (bool)$yr['is_current'],
                 'is_assigned' => $is_assigned,
                 'assigned_at' => $assigned_at,
-                'assigned_at_display' => $assigned_at ? date('d M Y, H:i', strtotime($assigned_at)) : null,
+                'assigned_at_display' => $assigned_at ? date('d M Y', strtotime($assigned_at)) : null,
                 'student_count' => count($students),
                 'students' => $students,
                 'evaluation_count' => $year_eval_count,
@@ -524,7 +549,8 @@ if (!function_exists('get_supervisor_detailed_history')) {
 }
 
 if (!function_exists('render_academic_year_options')) {
-    function render_academic_year_options($db, $selected_value = '', $include_all_option = false, $all_label = 'All Academic Years') {
+    function render_academic_year_options($db, $selected_value = '', $include_all_option = false, $all_label = 'All Academic Years')
+    {
         $years = get_all_academic_years($db);
         $output = '';
         if ($include_all_option) {
@@ -547,7 +573,8 @@ if (!function_exists('render_academic_year_options')) {
 }
 
 if (!function_exists('ensure_weekly_reports_table')) {
-    function ensure_weekly_reports_table($db) {
+    function ensure_weekly_reports_table($db)
+    {
         if (!$db) return;
         $db->query("
             CREATE TABLE IF NOT EXISTS weekly_reports (
@@ -570,4 +597,3 @@ if (!function_exists('ensure_weekly_reports_table')) {
         ");
     }
 }
-

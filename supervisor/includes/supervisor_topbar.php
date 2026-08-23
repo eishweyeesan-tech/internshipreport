@@ -101,16 +101,16 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
             <button onclick="toggleNotifDropdown()" class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-full transition cursor-pointer" aria-label="Notifications">
                 <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                 <?php if (($unread_notif_count ?? 0) > 0): ?>
-                <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-micro font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
+                <span id="notif-badge" class="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border border-white animate-pulse"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
                 <?php endif; ?>
             </button>
 
             <!-- Notification Dropdown -->
             <div id="notif-dropdown" class="absolute right-0 top-full mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden transition-all duration-200 ease-out" style="opacity:0;visibility:hidden;transform:translateY(-8px) scale(0.95);">
                 <div class="p-3 border-b border-slate-100 flex items-center justify-between bg-teal-50/60">
-                    <h4 class="text-xs font-black text-slate-700 uppercase tracking-wider">Notifications</h4>
+                    <h4 class="text-[11px] font-semibold tracking-wider text-slate-500 uppercase">Notifications</h4>
                     <?php if (($unread_notif_count ?? 0) > 0): ?>
-                    <button onclick="markAllNotifsRead()" id="notif-mark-all-btn" class="text-label font-bold text-teal-700 hover:text-teal-900 hover:bg-teal-100/60 px-2 py-1 rounded transition cursor-pointer">Mark all read</button>
+                    <button onclick="markAllNotifsRead()" id="notif-mark-all-btn" class="text-[11px] font-semibold tracking-wider text-slate-500 hover:text-teal-900 hover:bg-teal-100/60 px-2 py-1 rounded transition cursor-pointer">Mark all read</button>
                     <?php endif; ?>
                 </div>
                 <div class="max-h-80 overflow-y-auto">
@@ -118,25 +118,21 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
                     <?php foreach ($recent_notifications as $notif): ?>
                     <?php 
                         $notif_url = !empty($notif['link']) ? $notif['link'] : (function_exists('notif_action_url') ? notif_action_url($notif, 'supervisor') : (function_exists('notif_redirect_url') ? notif_redirect_url($notif['type'] ?? 'info', $notif['related_week'] ?? null, $notif['announcement_id'] ?? null, $notif['student_id'] ?? null) : 'supervisor-reports.php'));
+                        $meta = function_exists('get_supervisor_notif_meta')
+                            ? get_supervisor_notif_meta($notif['type'] ?? '', $notif['title'] ?? '')
+                            : [
+                                'icon_bg' => 'bg-teal-100 text-teal-600',
+                                'icon_svg' => '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
+                            ];
                     ?>
                     <a href="<?= htmlspecialchars($notif_url) ?>" data-notif-id="<?= (int)$notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($notif_url) ?>" onclick="onNotificationItemClick(event, this)" class="flex items-start gap-3 px-4 py-3 <?= !$notif['is_read'] ? 'bg-teal-50/50' : '' ?> hover:bg-teal-50 transition-all duration-150 border-b border-slate-100/80 last:border-0 group relative cursor-pointer block no-underline">
-                        <?php if ($notif['type'] === 'instructor_approved'): ?>
-                        <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm mt-0.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                        <div class="w-8 h-8 rounded-lg <?= $meta['icon_bg'] ?> flex items-center justify-center text-xs shrink-0 shadow-xs mt-0.5">
+                            <?= $meta['icon_svg'] ?>
                         </div>
-                        <?php elseif ($notif['type'] === 'instructor_rejected'): ?>
-                        <div class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm mt-0.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </div>
-                        <?php else: ?>
-                        <div class="w-8 h-8 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-xs shrink-0 ring-2 ring-white shadow-sm mt-0.5">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                        </div>
-                        <?php endif; ?>
                         <div class="min-w-0 flex-1">
-                            <p class="text-caption font-bold <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-600' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
-                            <p class="text-label text-slate-500 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
-                            <p class="text-caption text-slate-400 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
+                            <p class="text-xs font-medium <?= !$notif['is_read'] ? 'text-slate-800' : 'text-slate-600' ?> leading-tight"><?= htmlspecialchars($notif['title']) ?></p>
+                            <p class="text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($notif['message']) ?></p>
+                            <p class="text-[10px] text-slate-400 mt-1" data-notif-time="<?= htmlspecialchars($notif['created_at']) ?>"><?= (new DateTime($notif['created_at']))->format('d M Y, h:i A') ?></p>
                         </div>
                         <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
                             <?php if (!$notif['is_read']): ?>
@@ -180,7 +176,7 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
                             <svg class="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
                         </div>
                         <p class="text-xs font-semibold text-slate-400">No notifications yet</p>
-                        <p class="text-label text-slate-300 mt-1">You'll see updates here</p>
+                        <p class="text-[11px] text-slate-300 mt-1">You'll see updates here</p>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -278,4 +274,28 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
     </div>
 </header>
 <script src="../assets/js/notifications.js"></script>
+<script>
+if (typeof toggleProfileDropdown !== 'function') {
+    window.toggleProfileDropdown = function(e) {
+        if (e) e.stopPropagation();
+        var dd = document.getElementById('profile-dropdown-menu') || document.getElementById('profileDropdownMenu');
+        if (dd) {
+            dd.classList.toggle('hidden');
+        }
+        var nd = document.getElementById('notif-dropdown');
+        if (nd) {
+            nd.style.opacity = '0';
+            nd.style.visibility = 'hidden';
+            nd.style.transform = 'translateY(-8px) scale(0.95)';
+        }
+    };
+    document.addEventListener('click', function(e) {
+        var dd = document.getElementById('profile-dropdown-menu') || document.getElementById('profileDropdownMenu');
+        var btn = document.getElementById('profile-avatar-btn');
+        if (dd && !dd.classList.contains('hidden') && btn && !btn.contains(e.target) && !dd.contains(e.target)) {
+            dd.classList.add('hidden');
+        }
+    });
+}
+</script>
 

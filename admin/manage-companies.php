@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_company'])) {
 }
 
 // ── Edit Company ─────────────────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_company'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['edit_company']) || !empty($_POST['company_id']))) {
     $cid           = (int) ($_POST['company_id'] ?? 0);
     $company_name  = trim($_POST['company_name'] ?? '');
     $address       = trim($_POST['address'] ?? '');
@@ -67,7 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_company'])) {
             $stmt = $db->prepare("UPDATE companies SET company_name=?, address=?, contact_person=?, contact_email=?, contact_phone=?, website=? WHERE id=?");
             $stmt->bind_param("ssssssi", $company_name, $address, $contact_person, $contact_email, $contact_phone, $website, $cid);
             $stmt->execute();
-            $msg = "Company updated successfully.";
+            $msg = "Company \"{$company_name}\" updated successfully.";
+            if (isset($_GET['edit'])) {
+                unset($_GET['edit']);
+            }
         }
     }
 }
@@ -91,11 +94,13 @@ $companies = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 $edit_company = null;
 if (isset($_GET['edit'])) {
     $eid = (int) $_GET['edit'];
-    foreach ($companies as $c) {
-        if ($c['id'] === $eid) {
-            $edit_company = $c;
-            break;
-        }
+    if ($eid > 0) {
+        $edit_stmt = $db->prepare("SELECT * FROM companies WHERE id = ? LIMIT 1");
+        $edit_stmt->bind_param("i", $eid);
+        $edit_stmt->execute();
+        $edit_res = $edit_stmt->get_result();
+        $edit_company = $edit_res ? $edit_res->fetch_assoc() : null;
+        $edit_stmt->close();
     }
 }
 ?>
@@ -106,13 +111,19 @@ if (isset($_GET['edit'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Companies – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/notifications.js"></script>
     <script>
     tailwind.config = {
         darkMode: 'class',
         theme: {
             extend: {
                 fontFamily: {
+                    'sans': ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
                     'inter': ['Inter', 'sans-serif'],
                 },
                 fontSize: {
@@ -127,7 +138,7 @@ if (isset($_GET['edit'])) {
     }
     </script>
 </head>
-<body class="bg-slate-50 font-sans antialiased">
+<body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-sans antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
@@ -163,13 +174,13 @@ if (isset($_GET['edit'])) {
                             <?= $edit_company ? 'Edit Company' : 'Register New Partner Company' ?>
                         </h2>
                         <?php if ($edit_company): ?>
-                        <a href="manage-companies.php" class="text-sm font-bold text-slate-400 hover:text-slate-600 transition">✕ Cancel</a>
+                        <a href="manage-companies.php" class="text-sm font-bold text-slate-400 hover:text-slate-600 transition cursor-pointer">✕ Cancel</a>
                         <?php endif; ?>
                     </div>
                     <form method="POST" class="p-6">
                         <?php if ($edit_company): ?>
                         <input type="hidden" name="edit_company" value="1">
-                        <input type="hidden" name="company_id" value="<?= $edit_company['id'] ?>">
+                        <input type="hidden" name="company_id" value="<?= htmlspecialchars((string)($edit_company['id'] ?? '')) ?>">
                         <?php else: ?>
                         <input type="hidden" name="add_company" value="1">
                         <?php endif; ?>
@@ -177,7 +188,7 @@ if (isset($_GET['edit'])) {
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Company Name <span class="text-red-400">*</span></label>
-                                <input type="text" name="company_name" required value="<?= htmlspecialchars($edit_company['company_name'] ?? '') ?>" placeholder="e.g. Tech Corp Myanmar" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
+                                <input type="text" name="company_name" required value="<?= htmlspecialchars($edit_company['company_name'] ?? $edit_company['name'] ?? '') ?>" placeholder="e.g. Tech Corp Myanmar" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Website</label>
@@ -189,11 +200,11 @@ if (isset($_GET['edit'])) {
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Contact Email</label>
-                                <input type="email" name="contact_email" value="<?= htmlspecialchars($edit_company['contact_email'] ?? '') ?>" placeholder="contact@company.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
+                                <input type="email" name="contact_email" value="<?= htmlspecialchars($edit_company['contact_email'] ?? $edit_company['email'] ?? '') ?>" placeholder="contact@company.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Contact Phone</label>
-                                <input type="text" name="contact_phone" value="<?= htmlspecialchars($edit_company['contact_phone'] ?? '') ?>" placeholder="+959 123 456 789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
+                                <input type="text" name="contact_phone" value="<?= htmlspecialchars($edit_company['contact_phone'] ?? $edit_company['phone'] ?? '') ?>" placeholder="+959 123 456 789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 focus:outline-none focus:border-teal-600 transition">
                             </div>
                             <div class="md:col-span-2 lg:col-span-3">
                                 <label class="block text-sm font-bold text-slate-500 mb-1.5">Address</label>
@@ -203,10 +214,10 @@ if (isset($_GET['edit'])) {
 
                         <div class="mt-5 flex items-center gap-3">
                             <button type="submit" class="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 text-white font-bold text-sm rounded-xl shadow-lg shadow-teal-600/30 transition-all duration-200 cursor-pointer">
-                                <?= $edit_company ? '💾 Update Company' : '➕ Add Partner Company' ?>
+                                <?= $edit_company ? 'Update Company' : '+ Add Partner Company' ?>
                             </button>
                             <?php if ($edit_company): ?>
-                            <a href="manage-companies.php" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm rounded-xl transition">Cancel</a>
+                            <a href="manage-companies.php" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm rounded-xl transition cursor-pointer">Cancel</a>
                             <?php endif; ?>
                         </div>
                     </form>
