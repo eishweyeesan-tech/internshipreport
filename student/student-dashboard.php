@@ -699,32 +699,42 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
     }
 }
 
-// Fetch active magic link or generate
-$active_token_stmt = $db->prepare("SELECT token, expires_at FROM magic_links WHERE internship_id = ? AND week_number = ? AND expires_at > NOW() LIMIT 1");
-$active_token_stmt->bind_param("ii", $internship_id, $selected_week);
-$active_token_stmt->execute();
-$act_res = $active_token_stmt->get_result();
-$existing_link = $act_res ? $act_res->fetch_assoc() : null;
+$is_week_approved = $rejection && in_array($rejection['report_status'], ['approved_by_instructor', 'approved_by_supervisor']);
 
-if ($existing_link) {
-    $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-        . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
-        . '/instructor/view-report.php?token=' . $existing_link['token'];
-}
+// Fetch active magic link or generate (only if NOT already approved)
+$existing_link = null;
+$magic_link = '';
 
-if ($magic_link_unlocked && isset($_POST['generate_magic_link'])) {
-    $token = bin2hex(random_bytes(16));
-    $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
+if ($is_week_approved) {
+    // If approved, expire/delete any remaining magic link
+    $db->query("DELETE FROM magic_links WHERE internship_id = {$internship_id} AND week_number = {$selected_week}");
+} else {
+    $active_token_stmt = $db->prepare("SELECT token, expires_at FROM magic_links WHERE internship_id = ? AND week_number = ? AND expires_at > NOW() LIMIT 1");
+    $active_token_stmt->bind_param("ii", $internship_id, $selected_week);
+    $active_token_stmt->execute();
+    $act_res = $active_token_stmt->get_result();
+    $existing_link = $act_res ? $act_res->fetch_assoc() : null;
 
-    $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
-        VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
-    $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
-    $link_stmt->execute();
+    if ($existing_link) {
+        $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
+            . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
+            . '/instructor/view-report.php?token=' . $existing_link['token'];
+    }
 
-    $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-        . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
-        . '/instructor/view-report.php?token=' . $token;
+    if ($magic_link_unlocked && isset($_POST['generate_magic_link'])) {
+        $token = bin2hex(random_bytes(16));
+        $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
+
+        $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
+        $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
+        $link_stmt->execute();
+
+        $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
+            . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
+            . '/instructor/view-report.php?token=' . $token;
+    }
 }
 
 $reflections_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ? ORDER BY week_number DESC");
@@ -2760,7 +2770,22 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                 <?php endif; ?>
                                             </h3>
 
-                                            <?php if ($magic_link_unlocked): ?>
+                                            <?php if ($is_week_approved): ?>
+                                                <!-- ── Approved & Review Locked State ── -->
+                                                <div class="flex-1 flex flex-col justify-center items-center text-center p-6 bg-emerald-50/60 border border-emerald-200 rounded-2xl">
+                                                    <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3 text-xl font-bold">
+                                                        ✓
+                                                    </div>
+                                                    <h4 class="text-xs font-black text-emerald-900 uppercase tracking-wider">Instructor Sign-off Completed</h4>
+                                                    <p class="text-xs text-emerald-700 mt-1.5 leading-relaxed max-w-sm">
+                                                        Company Instructor has signed and approved this report. Magic link has expired and review submissions are permanently locked.
+                                                    </p>
+                                                    <div class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 text-white rounded-full text-xs font-bold shadow-xs">
+                                                        <span>🔒</span> Forwarded to University Supervisor
+                                                    </div>
+                                                </div>
+
+                                            <?php elseif ($magic_link_unlocked): ?>
 
                                                 <?php if ($is_rejected): ?>
                                                     <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-3">

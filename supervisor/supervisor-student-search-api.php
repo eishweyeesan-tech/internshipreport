@@ -49,7 +49,6 @@ $sql = "
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student'
-      AND u.status = 'Active'
       AND sp.supervisor_id = ?
       AND (
           sp.full_name LIKE ?

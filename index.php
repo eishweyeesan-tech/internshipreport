@@ -13,11 +13,8 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
         case 'supervisor':
             header('Location: supervisor/supervisor-dashboard.php');
             break;
-        case 'instructor':
-            header('Location: instructor/instructor-dashboard.php');
-            break;
         default:
-            header('Location: dashboard.php');
+            header('Location: login.php');
     }
     exit;
 }
@@ -196,7 +193,6 @@ $stat_companies  = (int)($mysqli->query("SELECT COUNT(*) AS c FROM companies")->
                     </div>
                     <div>
                         <span class="text-xl font-black text-slate-900 tracking-tight block group-hover:text-teal-700 transition-colors duration-200">InternReport</span>
-                        <span class="text-[0.625rem] font-extrabold uppercase tracking-widest text-teal-700 block">University SaaS Platform</span>
                     </div>
                 </a>
                 <div class="flex items-center gap-8">
@@ -638,9 +634,9 @@ $stat_companies  = (int)($mysqli->query("SELECT COUNT(*) AS c FROM companies")->
                         </div>
                     </div>
                     <div class="p-8 pt-0">
-                        <a href="login.php" class="block w-full text-center px-6 py-3.5 bg-gradient-to-r from-teal-600 to-emerald-700 hover:from-teal-700 hover:to-emerald-800 text-white font-bold rounded-xl shadow-lg shadow-teal-600/25 hover:shadow-teal-600/40 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer">
-                            Access via Magic Link →
-                        </a>
+                        <div class="w-full text-center px-4 py-3 bg-teal-50 border border-teal-200/80 rounded-xl text-xs font-bold text-teal-800 select-none">
+                            🔗 Magic Link Access (No Login Required)
+                        </div>
                     </div>
                 </div>
 
@@ -719,34 +715,93 @@ $stat_companies  = (int)($mysqli->query("SELECT COUNT(*) AS c FROM companies")->
                     </div>
                 </div>
 
-                <div class="relative reveal-init">
-                    <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 rounded-3xl p-8 text-white shadow-2xl shadow-slate-900/20 border border-slate-700/60">
-                        <div class="flex items-center justify-between mb-8 pb-6 border-b border-slate-700">
-                            <div>
-                                <h3 class="text-xl font-bold">Platform Architecture</h3>
-                                <p class="text-xs text-slate-400">4-Role Integrated Workflow</p>
+                <div class="relative reveal-init select-none">
+                    <div class="bg-gradient-to-br from-slate-900 via-slate-800 to-teal-950 rounded-3xl p-7 text-white shadow-2xl shadow-slate-900/20 border border-slate-700/60">
+                        <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/70">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 text-base">
+                                    🏛️
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-bold text-white tracking-tight">Platform Architecture</h3>
+                                    <p class="text-[0.6875rem] text-slate-400">Integrated Internship Lifecycle Flow</p>
+                                </div>
                             </div>
-                            <span class="px-3 py-1 bg-teal-500/20 text-teal-300 text-xs font-bold rounded-full border border-teal-400/30">Active</span>
+                            <span class="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 text-[0.625rem] font-black uppercase tracking-wider rounded-full border border-emerald-400/30 flex items-center gap-1.5">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Live System
+                            </span>
                         </div>
-                        <div class="space-y-4">
-                            <div class="flex items-center justify-between p-3.5 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
-                                <span class="text-sm font-semibold">Student Logs & Reflections</span>
-                                <span class="text-xs font-bold text-teal-400">Daily / Weekly</span>
+
+                        <!-- Architecture Diagram Pipeline -->
+                        <div class="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-gradient-to-b before:from-teal-500 before:via-blue-500 before:to-purple-500">
+                            <!-- Node 1 -->
+                            <div class="relative">
+                                <div class="absolute -left-6 top-1 w-3 h-3 rounded-full bg-teal-400 border-2 border-slate-900"></div>
+                                <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm">📝</span>
+                                            <span class="text-xs font-bold text-slate-200">1. Student Log Entry</span>
+                                        </div>
+                                        <span class="text-[0.625rem] font-bold text-teal-400 bg-teal-950/60 border border-teal-800/60 px-2 py-0.5 rounded-md">Daily &amp; Weekly</span>
+                                    </div>
+                                    <p class="text-[0.6875rem] text-slate-400 mt-1 pl-6">Students record work tasks, hours, and competencies.</p>
+                                </div>
                             </div>
-                            <div class="flex items-center justify-between p-3.5 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
-                                <span class="text-sm font-semibold">Instructor Review & Feedback</span>
-                                <span class="text-xs font-bold text-emerald-400">Token-secured Link</span>
+
+                            <!-- Node 2 -->
+                            <div class="relative">
+                                <div class="absolute -left-6 top-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-slate-900"></div>
+                                <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm">🔗</span>
+                                            <span class="text-xs font-bold text-slate-200">2. Company Instructor Review</span>
+                                        </div>
+                                        <span class="text-[0.625rem] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded-md">Token-Secured Link</span>
+                                    </div>
+                                    <p class="text-[0.6875rem] text-slate-400 mt-1 pl-6">Company instructors grade &amp; sign with zero login required.</p>
+                                </div>
                             </div>
-                            <div class="flex items-center justify-between p-3.5 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
-                                <span class="text-sm font-semibold">CU Supervisor Grading</span>
-                                <span class="text-xs font-bold text-blue-400">A-F Standardized</span>
+
+                            <!-- Node 3 -->
+                            <div class="relative">
+                                <div class="absolute -left-6 top-1 w-3 h-3 rounded-full bg-blue-400 border-2 border-slate-900"></div>
+                                <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm">🎓</span>
+                                            <span class="text-xs font-bold text-slate-200">3. CU Supervisor Evaluation</span>
+                                        </div>
+                                        <span class="text-[0.625rem] font-bold text-blue-400 bg-blue-950/60 border border-blue-800/60 px-2 py-0.5 rounded-md">A-F Standardized</span>
+                                    </div>
+                                    <p class="text-[0.6875rem] text-slate-400 mt-1 pl-6">University supervisors review and assign academic credit.</p>
+                                </div>
                             </div>
-                            <div class="flex items-center justify-between p-3.5 bg-white/5 rounded-xl border border-white/10 hover:bg-white/10 transition-colors">
-                                <span class="text-sm font-semibold">Admin Oversight & Companies</span>
-                                <span class="text-xs font-bold text-purple-400">Full System Control</span>
+
+                            <!-- Node 4 -->
+                            <div class="relative">
+                                <div class="absolute -left-6 top-1 w-3 h-3 rounded-full bg-purple-400 border-2 border-slate-900"></div>
+                                <div class="p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm">⚙️</span>
+                                            <span class="text-xs font-bold text-slate-200">4. Admin Governance</span>
+                                        </div>
+                                        <span class="text-[0.625rem] font-bold text-purple-400 bg-purple-950/60 border border-purple-800/60 px-2 py-0.5 rounded-md">Full Governance</span>
+                                    </div>
+                                    <p class="text-[0.6875rem] text-slate-400 mt-1 pl-6">Department admins manage academic years, users, and audit logs.</p>
+                                </div>
                             </div>
                         </div>
-                        
+
+                        <!-- Diagram Footer Specs -->
+                        <div class="mt-5 pt-3.5 border-t border-slate-700/70 flex items-center justify-between text-[0.6875rem] text-slate-400">
+                            <span class="flex items-center gap-1.5 text-slate-300">
+                                <span>🔒</span> Single-Use Magic Links
+                            </span>
+                            <span class="text-teal-400 font-bold">100% Paperless</span>
+                        </div>
                     </div>
                 </div>
             </div>

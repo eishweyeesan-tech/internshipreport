@@ -54,7 +54,7 @@ $pending_reviews = (int) ($row[0] ?? 0);
 $company_count_q = $db->prepare("
     SELECT COUNT(DISTINCT sp.company_name) FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
+    WHERE u.role = 'student' AND sp.supervisor_id = ?
       AND sp.company_name IS NOT NULL AND sp.company_name != ''
 ");
 $company_count_q->bind_param("i", $sup_id);

@@ -14,7 +14,7 @@ if ($target_student_id <= 0 || $auth_role === 'student') {
     $target_student_id = $auth_user_id;
 }
 
-// Access authorization for supervisors and instructors
+// Access authorization for supervisors
 if ($auth_role === 'supervisor' && $target_student_id !== $auth_user_id) {
     $chk = $db->prepare("SELECT 1 FROM student_profiles WHERE user_id = ? AND supervisor_id = ?");
     $chk->bind_param("ii", $target_student_id, $auth_user_id);
@@ -22,15 +22,6 @@ if ($auth_role === 'supervisor' && $target_student_id !== $auth_user_id) {
     $chk_res = $chk->get_result();
     if (!$chk_res || !$chk_res->fetch_row()) {
         header('Location: ../supervisor/supervisor-dashboard.php');
-        exit;
-    }
-} elseif ($auth_role === 'instructor' && $target_student_id !== $auth_user_id) {
-    $chk = $db->prepare("SELECT 1 FROM student_profiles WHERE user_id = ? AND instructor_id = ?");
-    $chk->bind_param("ii", $target_student_id, $auth_user_id);
-    $chk->execute();
-    $chk_res = $chk->get_result();
-    if (!$chk_res || !$chk_res->fetch_row()) {
-        header('Location: ../instructor/instructor-dashboard.php');
         exit;
     }
 }

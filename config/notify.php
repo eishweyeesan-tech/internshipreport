@@ -133,26 +133,8 @@ function notif_action_url($notif, $role = null)
                 if ($report_id) {
                     return $base . 'view-report.php?id=' . $report_id . '#evaluation-panel';
                 }
-                return $base . 'instructor-dashboard.php';
-
-            case 'daily_log_added':
-            case 'daily_log_updated':
-            case 'student_behind_schedule':
-                if ($student_id) {
-                    return $base . 'instructor-dashboard.php?student_id=' . $student_id;
-                }
-                return $base . 'instructor-dashboard.php';
-
-            case 'user_registered':
-            case 'student_created':
-            case 'profile_updated':
-                if ($student_id) {
-                    return $base . 'instructor-dashboard.php?student_id=' . $student_id;
-                }
-                return $base . 'instructor-dashboard.php';
-
             default:
-                return $base . 'instructor-dashboard.php';
+                return '#';
         }
     }
 

@@ -86,7 +86,7 @@ $stu_detail_sql = "
            sp.instructor_name, sp.instructor_email, sp.instructor_id
     FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
-    WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?
+    WHERE u.role = 'student' AND sp.supervisor_id = ?
     ORDER BY sp.full_name ASC
 ";
 $stu_detail_stmt = $db->prepare($stu_detail_sql);

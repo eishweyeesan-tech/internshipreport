@@ -964,16 +964,18 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Company <span class="text-slate-300 font-normal">(ကုမ္ပဏီ)</span></label>
-                                        <select name="s_company_id" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                        <select name="s_company_id" id="s_company_select" onchange="autoFillCompanyInstructor(this)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition cursor-pointer">
                                             <option value="">— Select Company —</option>
                                             <?php foreach ($companies as $c): ?>
-                                                <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['company_name']) ?></option>
+                                                <option value="<?= $c['id'] ?>" data-instructor="<?= htmlspecialchars($c['contact_person'] ?? '') ?>">
+                                                    <?= htmlspecialchars($c['company_name']) ?><?= !empty($c['contact_person']) ? ' (' . htmlspecialchars($c['contact_person']) . ')' : '' ?>
+                                                </option>
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
                                     <div>
-                                        <label class="block text-sm font-bold text-slate-500 mb-1">Company Instructor</label>
-                                        <input type="text" name="s_instructor" placeholder="e.g. U Tin Aung" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                        <label class="block text-sm font-bold text-slate-500 mb-1">Company Instructor <span class="text-xs font-normal text-teal-600">(Auto-filled on company select)</span></label>
+                                        <input type="text" name="s_instructor" id="s_instructor_input" placeholder="e.g. U Tin Aung" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Supervisor <span class="text-slate-300 font-normal">(ကျောင်းကဆရာ/မ)</span></label>
@@ -2429,6 +2431,24 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
         }
 
         /**
+         * Auto-fill Company Instructor input when Company is selected
+         */
+        function autoFillCompanyInstructor(selectEl) {
+            if (!selectEl) return;
+            var selectedOpt = selectEl.options[selectEl.selectedIndex];
+            var instructorInput = document.getElementById('s_instructor_input');
+            if (!selectedOpt || !instructorInput) return;
+            var instName = selectedOpt.getAttribute('data-instructor') || '';
+            if (instName) {
+                instructorInput.value = instName;
+                instructorInput.classList.add('bg-teal-50', 'border-teal-400');
+                setTimeout(function() {
+                    instructorInput.classList.remove('bg-teal-50', 'border-teal-400');
+                }, 1200);
+            }
+        }
+
+        /**
          * Close User Details Modal
          */
         function closeUserDetailsModal() {
@@ -2540,7 +2560,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                         </div>
                     </div>
 
-                    <!-- Section 3: Mentors & Supervision -->
+                    <!-- Section 3: Company Instructors & Supervision -->
                     <div class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4">
                         <h4 class="text-xs font-black text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <i class="fa-solid fa-chalkboard-user text-emerald-600"></i> Supervision & Instructor

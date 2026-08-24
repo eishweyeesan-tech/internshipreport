@@ -14,11 +14,8 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
         case 'supervisor':
             header('Location: supervisor/supervisor-dashboard.php');
             break;
-        case 'instructor':
-            header('Location: instructor/instructor-dashboard.php');
-            break;
         default:
-            header('Location: dashboard.php');
+            header('Location: login.php');
     }
     exit;
 }
@@ -29,45 +26,18 @@ if (isset($_GET['error']) && $_GET['error'] === 'inactive') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username'] ?? '');
+    $email    = trim($_POST['email'] ?? $_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if (empty($username) || empty($password)) {
-        $error = 'Please enter username and password.';
+    if (empty($email) || empty($password)) {
+        $error = 'Please enter email and password.';
     } else {
-        // First, check if this is an email address
-        $is_email = filter_var($username, FILTER_VALIDATE_EMAIL);
-
         $db = $mysqli ?? $conn;
-        if ($is_email) {
-            $stmt = $db->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");
-            $stmt->bind_param("s", $username);
-            $stmt->execute();
-            $res = $stmt->get_result();
-            $user = $res ? $res->fetch_assoc() : null;
-        } else {
-            // Check how many users share this username (roll number)
-            $cnt_stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
-            $cnt_stmt->bind_param("s", $username);
-            $cnt_stmt->execute();
-            $res_cnt = $cnt_stmt->get_result();
-            $cnt_row = $res_cnt ? $res_cnt->fetch_row() : [0];
-            $cnt = (int) ($cnt_row[0] ?? 0);
-
-            if ($cnt > 1) {
-                // Same roll number exists across multiple academic years
-                $error = 'Multiple accounts found for this roll number. Please log in with your email address instead.';
-                $user = null;
-            } elseif ($cnt === 1) {
-                $stmt = $db->prepare("SELECT * FROM users WHERE username = ? LIMIT 1");
-                $stmt->bind_param("s", $username);
-                $stmt->execute();
-                $res = $stmt->get_result();
-                $user = $res ? $res->fetch_assoc() : null;
-            } else {
-                $user = null;
-            }
-        }
+        $stmt = $db->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");
+        $stmt->bind_param("s", $email);
+        $stmt->execute();
+        $res = $stmt->get_result();
+        $user = $res ? $res->fetch_assoc() : null;
 
         // Active Academic Year Standard
         require_once __DIR__ . '/includes/academic_year_helper.php';
@@ -127,16 +97,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     case 'supervisor':
                         header('Location: supervisor/supervisor-dashboard.php');
                         break;
-                    case 'instructor':
-                        header('Location: instructor/instructor-dashboard.php');
-                        break;
                     default:
-                        header('Location: dashboard.php');
+                        header('Location: login.php');
                 }
                 exit;
             }
         } else {
-            $error = 'Invalid username or password.';
+            $error = 'Invalid email or password.';
         }
     }
 }
@@ -286,17 +253,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <!-- Login Form -->
                         <form method="POST" class="space-y-5" autocomplete="off">
                             <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Email or Username</label>
+                                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Email</label>
                                 <div class="relative">
                                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                                         <i class="fa-regular fa-envelope text-slate-400"></i>
                                     </div>
-                                    <input type="text" name="username" required placeholder="Enter your email or roll number" autocomplete="off"
+                                    <input type="email" name="email" required placeholder="Enter Your Email" autocomplete="email"
                                         class="w-full pl-11 pr-4 py-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 focus:bg-white transition-all duration-200 shadow-sm placeholder:text-slate-400">
                                 </div>
-                                <p class="text-xs text-slate-400 mt-1.5 flex items-center gap-1">
-                                    <span>💡</span> Use your email to log in (roll numbers may repeat across years).
-                                </p>
                             </div>
 
                             <div>

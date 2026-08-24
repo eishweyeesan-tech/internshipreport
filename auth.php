@@ -32,7 +32,6 @@ if (!function_exists('get_user_dashboard_url')) {
         switch ($role) {
             case 'admin':      return 'admin/admin-dashboard.php';
             case 'supervisor': return 'supervisor/supervisor-dashboard.php';
-            case 'instructor': return 'instructor/instructor-dashboard.php';
             case 'student':    return 'student/student-dashboard.php';
             default:           return 'login.php';
         }
@@ -47,7 +46,7 @@ if (!function_exists('require_role')) {
         $user_role = $_SESSION['role'] ?? '';
         if (!in_array($user_role, $allowed_roles, true)) {
             $script = $_SERVER['SCRIPT_NAME'] ?? '';
-            $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/instructor/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
+            $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
             $prefix = $in_sub ? '../' : '';
             $target = $prefix . get_user_dashboard_url($user_role);
             header('Location: ' . $target);
@@ -60,15 +59,11 @@ if (!function_exists('require_role')) {
 $script_name = $_SERVER['SCRIPT_NAME'] ?? '';
 if (strpos($script_name, '/admin/') !== false) {
     require_role('admin');
-} elseif (strpos($script_name, '/instructor/') !== false) {
-    if (strpos($script_name, 'view-report.php') === false || !isset($_GET['token'])) {
-        require_role('instructor');
-    }
 } elseif (strpos($script_name, '/supervisor/') !== false) {
     require_role('supervisor');
 } elseif (strpos($script_name, '/student/') !== false) {
     if (strpos($script_name, 'print_report.php') !== false) {
-        require_role(['student', 'supervisor', 'instructor', 'admin']);
+        require_role(['student', 'supervisor', 'admin']);
     } else {
         require_role('student');
     }

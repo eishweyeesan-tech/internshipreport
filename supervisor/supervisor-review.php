@@ -42,7 +42,7 @@ if (!$student) {
 $student_name = $student['full_name'] ?: $student['username'];
 
 // ── Active Year Badge Data ─────────────────────────────────────────
-$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND u.status = 'Active' AND sp.supervisor_id = ?");
+$total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ?");
 $total_assigned_q->bind_param("i", $sup_id);
 $total_assigned_q->execute();
 $res = $total_assigned_q->get_result();
