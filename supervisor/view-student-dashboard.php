@@ -261,7 +261,6 @@ if ($intern_start) {
             }
         }
     </script>
-    <script>
     <script src="../assets/js/main.js"></script>
     <script src="../assets/js/notifications.js"></script>
     <script>
@@ -296,7 +295,7 @@ if ($intern_start) {
     <div class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Bar -->
-        <?php $pageTitle = 'Student Details'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
+        <?php $pageTitle = '🎓 Student Dashboard Details'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">

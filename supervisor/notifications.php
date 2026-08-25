@@ -137,17 +137,14 @@ function build_query_url($overrides = []) {
     <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Header -->
-        <?php $pageTitle = 'Notifications'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
+        <?php $pageTitle = '🔔 Notifications'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- ════ NOTIFICATIONS CONTENT ════ -->
         <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
             <div class="max-w-7xl w-full mx-auto space-y-6">
 
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <h2 class="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">Notifications</h2>
-                        <p class="text-xs sm:text-sm text-slate-500 mt-1">All updates about your students' reports, schedules and internships.</p>
-                    </div>
+                    <p class="text-xs sm:text-sm text-slate-500">All updates about your students' reports, schedules and internships.</p>
 
                 <?php if ($unread_notif_count > 0): ?>
                 <button onclick="markAllNotifsRead()" class="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 cursor-pointer">

@@ -123,7 +123,7 @@ $ref_chk_res = $ref_chk_stmt->get_result();
 $ref_chk_row = $ref_chk_res ? $ref_chk_res->fetch_row() : null;
 $reflection_submitted = ((int) ($ref_chk_row[0] ?? 0) > 0);
 
-if (($reflection_submitted || $log_locked) && !($lock_row && $lock_row['report_status'] === 'rejected')) {
+if ($reflection_submitted && $log_locked && !($lock_row && $lock_row['report_status'] === 'rejected')) {
     $weekly_report_submitted = true;
 }
 

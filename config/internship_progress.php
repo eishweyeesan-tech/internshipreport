@@ -145,14 +145,50 @@ if (!function_exists('internship_total_weeks')) {
     }
 
     /**
+     * Calculate total expected working days (Mon-Fri) in the internship period.
+     *
+     * @param string|null $start Y-m-d start date
+     * @param string|null $end   Y-m-d end date
+     * @param int         $fallback_weeks Default weeks if end date is missing (default 12)
+     * @return int
+     */
+    function internship_expected_working_days(?string $start, ?string $end, int $fallback_weeks = 12): int
+    {
+        if (!$start) {
+            return max(1, $fallback_weeks * 5);
+        }
+        try {
+            $startDate = new DateTime($start);
+            $endDate = !empty($end) ? new DateTime($end) : (clone $startDate)->modify('+' . ($fallback_weeks * 7) . ' days');
+            if ($endDate < $startDate) {
+                return max(1, $fallback_weeks * 5);
+            }
+            $expected = 0;
+            $cursor = clone $startDate;
+            while ($cursor <= $endDate) {
+                if ((int) $cursor->format('N') <= 5) {
+                    $expected++;
+                }
+                $cursor->modify('+1 day');
+            }
+            return max(1, $expected);
+        } catch (Exception $e) {
+            return max(1, $fallback_weeks * 5);
+        }
+    }
+
+    /**
      * Attendance summary for a student's internship (or a single week).
      *
      * Shared by every supervisor-facing page that reports attendance so the
      * calculation is identical everywhere. Attendance is recorded per day in
      * daily_logs (one row per date — unique index on (internship_id, log_date))
-     * with attendance_status present/leave/absent. Expected days are the days
-     * that have an attendance record; days with no record are not counted and
-     * 'leave' counts as absent.
+     * with attendance_status present/leave/absent.
+     *
+     * When calculating for a single week ($start and $end provided), expected
+     * days are the working days in that date range.
+     * When calculating overall internship, expected days are the total weekdays
+     * in the internship duration from student_profiles.
      *
      * @param mysqli       $db
      * @param int          $internship_id daily_logs.internship_id (= student's users.id)
@@ -172,17 +208,35 @@ if (!function_exists('internship_total_weeks')) {
                 WHERE internship_id = ? AND log_date BETWEEN ? AND ?"
             );
             $stmt->bind_param("iss", $internship_id, $start, $end);
-        } else {
-            $stmt = $db->prepare(
-                "SELECT
-                    SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_cnt,
-                    SUM(CASE WHEN attendance_status IN ('leave','absent') THEN 1 ELSE 0 END) AS absent_cnt
-                FROM daily_logs
-                WHERE internship_id = ?"
-            );
-            $stmt->bind_param("i", $internship_id);
+            $stmt->execute();
+            $res = $stmt->get_result();
+            $row = $res ? $res->fetch_assoc() : [];
+            $stmt->close();
+
+            $present  = (int) ($row['present_cnt'] ?? 0);
+            $absent   = (int) ($row['absent_cnt'] ?? 0);
+            $expected = internship_expected_working_days($start, $end, 1);
+            if ($expected < 1) {
+                $expected = max(1, $present + $absent);
+            }
+
+            return [
+                'present'  => $present,
+                'absent'   => $absent,
+                'expected' => $expected,
+                'rate'     => $expected > 0 ? min(100, (int) round(($present / $expected) * 100)) : 0,
+            ];
         }
 
+        // Overall internship attendance
+        $stmt = $db->prepare(
+            "SELECT
+                SUM(CASE WHEN attendance_status = 'present' THEN 1 ELSE 0 END) AS present_cnt,
+                SUM(CASE WHEN attendance_status IN ('leave','absent') THEN 1 ELSE 0 END) AS absent_cnt
+            FROM daily_logs
+            WHERE internship_id = ?"
+        );
+        $stmt->bind_param("i", $internship_id);
         $stmt->execute();
         $res = $stmt->get_result();
         $row = $res ? $res->fetch_assoc() : [];
@@ -190,13 +244,28 @@ if (!function_exists('internship_total_weeks')) {
 
         $present  = (int) ($row['present_cnt'] ?? 0);
         $absent   = (int) ($row['absent_cnt'] ?? 0);
-        $expected = $present + $absent;
+
+        // Fetch student profile dates
+        $sp_stmt = $db->prepare("SELECT internship_start_date, internship_end_date FROM student_profiles WHERE user_id = ?");
+        $sp_stmt->bind_param("i", $internship_id);
+        $sp_stmt->execute();
+        $sp_res = $sp_stmt->get_result();
+        $sp_row = $sp_res ? $sp_res->fetch_assoc() : null;
+        $sp_stmt->close();
+
+        $expected = 0;
+        if ($sp_row && !empty($sp_row['internship_start_date'])) {
+            $expected = internship_expected_working_days($sp_row['internship_start_date'], $sp_row['internship_end_date'] ?? null);
+        }
+        if ($expected < 1) {
+            $expected = max(1, $present + $absent);
+        }
 
         return [
             'present'  => $present,
             'absent'   => $absent,
             'expected' => $expected,
-            'rate'     => $expected > 0 ? (int) round(($present / $expected) * 100) : 0,
+            'rate'     => min(100, (int) round(($present / $expected) * 100)),
         ];
     }
 }

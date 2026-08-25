@@ -799,7 +799,7 @@ $supervisor_grade_map = [
 ];
 
 // Report status badge
-$weekly_report_submitted = $reflection_submitted && !$is_rejected;
+$weekly_report_submitted = $reflection_submitted && $student_signed && !$is_rejected;
 $report_status_label = ($weekly_report_submitted || $student_signed) ? 'Under Review' : 'Pending Review';
 $report_status_color = 'text-amber-700 bg-amber-50 border-amber-200';
 $report_status_dot   = 'bg-amber-500';
@@ -1064,9 +1064,10 @@ if ($magic_link_unlocked && empty($magic_link)) {
         }
 
         function previewLeftSig() {
-            var name = document.getElementById('left_typed_name').value;
+            var input = document.getElementById('left_typed_name');
+            var name = input ? input.value : '';
             var el = document.getElementById('left_sig_preview');
-            if (el) el.textContent = name || '—';
+            if (el) el.textContent = name.trim() ? name : '—';
         }
 
         function showInstructions() {
@@ -1074,8 +1075,17 @@ if ($magic_link_unlocked && empty($magic_link)) {
         }
 
         function toggleWeekDropdown() {
-            document.getElementById('week-menu').classList.toggle('hidden');
+            var menu = document.getElementById('week-menu');
+            if (menu) menu.classList.toggle('hidden');
         }
+
+        document.addEventListener('click', function(e) {
+            var dd = document.getElementById('week-dropdown');
+            var menu = document.getElementById('week-menu');
+            if (dd && menu && !dd.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
 
         var internStart = <?= $intern_start ? "'" . htmlspecialchars($intern_start) . "'" : 'null' ?>;
         var internEnd = <?= $intern_end ? "'" . htmlspecialchars($intern_end) . "'" : 'null' ?>;
@@ -2308,31 +2318,48 @@ if ($magic_link_unlocked && empty($magic_link)) {
                             <!-- ══════ FILTER ROW ══════ -->
                             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
                                 <div class="flex items-center justify-between flex-wrap gap-4">
-                                    <!-- Left: Week Dropdown + Clear -->
+                                    <!-- Left: Week Dropdown -->
                                     <div class="flex items-center gap-3">
                                         <div class="relative" id="week-dropdown">
-                                            <button onclick="toggleWeekDropdown()" class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer whitespace-nowrap">
-                                                <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <button onclick="toggleWeekDropdown()" class="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 font-bold text-xs sm:text-sm text-slate-700 hover:bg-slate-100 transition cursor-pointer whitespace-nowrap shadow-2xs">
+                                                <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                 </svg>
                                                 Week <?= $selected_week ?>
                                                 <span class="text-slate-400 text-xs">▾</span>
                                             </button>
-                                            <div id="week-menu" class="absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden overflow-hidden">
+                                            <div id="week-menu" class="absolute left-0 top-full mt-1.5 w-60 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden overflow-hidden py-1 max-h-72 overflow-y-auto">
                                                 <?php if (!empty($weeks)): ?>
                                                     <?php foreach ($weeks as $wn => $wr): ?>
-                                                        <a href="?tab=daily-log&week=<?= $wn ?>" class="flex items-center justify-between px-3 py-2 font-semibold <?= $selected_week === $wn ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?> transition">
-                                                            Week <?= $wn ?>
-                                                            <span class="text-xs text-slate-400"><?= $wr['start'] ?></span>
+                                                        <?php 
+                                                            $w_start = (new DateTime($wr['start']))->format('d M');
+                                                            $w_end = (new DateTime($wr['end']))->format('d M Y');
+                                                        ?>
+                                                        <a href="?tab=<?= urlencode($tab) ?>&week=<?= $wn ?>" class="flex items-center justify-between px-3.5 py-2.5 text-xs font-bold <?= $selected_week === $wn ? 'bg-indigo-50 text-indigo-600' : 'text-slate-700 hover:bg-slate-50' ?> transition">
+                                                            <span>Week <?= $wn ?></span>
+                                                            <span class="text-[11px] font-medium text-slate-400"><?= $w_start ?> – <?= $w_end ?></span>
                                                         </a>
                                                     <?php endforeach; ?>
                                                 <?php else: ?>
-                                                    <p class="px-3 py-2 text-slate-400">No logs yet</p>
+                                                    <p class="px-3.5 py-2 text-xs text-slate-400">No weeks available</p>
                                                 <?php endif; ?>
                                             </div>
                                         </div>
-                                        <a href="student-dashboard.php?tab=daily-log" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg transition cursor-pointer">✕ Clear</a>
                                     </div>
+
+                                    <!-- Right: Selected Week Date Range -->
+                                    <?php if (!empty($weeks[$selected_week])): ?>
+                                        <?php 
+                                            $cur_start = (new DateTime($weeks[$selected_week]['start']))->format('d M Y');
+                                            $cur_end = (new DateTime($weeks[$selected_week]['end']))->format('d M Y');
+                                        ?>
+                                        <div class="flex items-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50/80 border border-indigo-100 px-3.5 py-2 rounded-xl shadow-2xs">
+                                            <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                            <span>Week <?= $selected_week ?>: <span class="font-semibold text-indigo-600"><?= $cur_start ?> – <?= $cur_end ?></span></span>
+                                        </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
 
@@ -2344,27 +2371,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                     <?php if ($tab === 'daily-log'): ?>
 
                                         <?php if ($weekly_report_submitted): ?>
-
-                                            <!-- ════ SUBMITTED WEEKLY REPORT — READ-ONLY LOCKED NOTICE ════ -->
-                                            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 mb-6 flex items-center justify-between flex-wrap gap-3">
-                                                <div class="flex items-center gap-3">
-                                                    <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-200 shadow-2xs">
-                                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m0 0v2m0-2h.01M5 21h14a2 2 0 001.71-3L13.71 4.86a2 2 0 00-3.42 0L3.29 18a2 2 0 001.71 3z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div>
-                                                        <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
-                                                            Week <?= $selected_week ?> Daily Logs — Read-Only Mode
-                                                        </h3>
-                                                        <p class="text-xs text-slate-500 font-semibold">Weekly Report for Week <?= $selected_week ?> has been submitted. Daily log entries for this week are locked and read-only.</p>
-                                                    </div>
-                                                </div>
-                                                <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-full border bg-amber-50 text-amber-700 border-amber-200 shadow-2xs">
-                                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                                                    Locked - Weekly Report Submitted
-                                                </span>
-                                            </div>
 
                                             <!-- Read-Only Daily Log History Table -->
                                             <?php include 'daily_logs_table.php'; ?>
@@ -2380,10 +2386,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                     </span>
                                                     <?php if ($editing_log): ?>
                                                         <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>" class="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-full hover:bg-rose-100 transition">Cancel Edit</a>
-                                                    <?php elseif ($week_date_range): ?>
-                                                        <span class="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
-                                                            <?= $week_date_range ?>
-                                                        </span>
                                                     <?php endif; ?>
                                                 </h2>
                                                 <form method="POST" class="space-y-4" onsubmit="return validateLogDate(event)">
@@ -2501,6 +2503,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                     Weekly Reflection
                                                     <?php if (!$reflection_unlocked): ?>
                                                         <span class="ml-auto flex items-center gap-1 text-[11px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">Locked (<?= $weekly_log_count ?>/<?= $total_weekdays ?>)</span>
+                                                    <?php elseif ($reflection_submitted): ?>
+                                                        <span class="ml-auto flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Saved (Pending Student Signature)</span>
                                                     <?php else: ?>
                                                         <span class="ml-auto flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">Unlocked (<?= $weekly_log_count ?>/<?= $total_weekdays ?>)</span>
                                                     <?php endif; ?>
@@ -2508,6 +2512,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                 <?php if (!$reflection_unlocked): ?>
                                                     <p class="text-slate-400 text-center py-6 text-xs">Please complete all <strong><?= $total_weekdays ?> daily logs</strong> for <strong>Week <?= $selected_week ?></strong> to unlock this form. You currently have <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong>.</p>
                                                 <?php endif; ?>
+                                                <?php $curr_ref = $weekly_refs[0] ?? null; ?>
                                                 <form method="POST" class="space-y-4 <?= !$reflection_unlocked ? 'hidden' : '' ?>">
                                                     <div>
                                                         <label class="block text-xs font-bold text-slate-700 mb-1.5">Week Number</label>
@@ -2515,18 +2520,18 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                     </div>
                                                     <div>
                                                         <label class="block text-xs font-bold text-slate-700 mb-1.5">What was done? <span class="text-slate-400 font-normal text-[11px]">/ ဘာလုပ်သလဲ</span></label>
-                                                        <textarea name="what_done" rows="3" required placeholder="What did you accomplish this week?" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"></textarea>
+                                                        <textarea name="what_done" rows="3" required placeholder="What did you accomplish this week?" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($curr_ref['what_done'] ?? '') ?></textarea>
                                                     </div>
                                                     <div>
                                                         <label class="block text-xs font-bold text-slate-700 mb-1.5">How was it done? <span class="text-slate-400 font-normal text-[11px]">/ ဘယ်လိုလုပ်ပါသလဲ</span></label>
-                                                        <textarea name="how_done" rows="3" required placeholder="Describe the methods, tools, and approach you used." class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"></textarea>
+                                                        <textarea name="how_done" rows="3" required placeholder="Describe the methods, tools, and approach you used." class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($curr_ref['how_done'] ?? '') ?></textarea>
                                                     </div>
                                                     <div>
                                                         <label class="block text-xs font-bold text-slate-700 mb-1.5">Why was it done? <span class="text-slate-400 font-normal text-[11px]">/ ဘာကြောင့်လုပ်ပါသလဲ</span></label>
-                                                        <textarea name="why_done" rows="3" required placeholder="Explain the purpose, goals, and expected outcomes." class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"></textarea>
+                                                        <textarea name="why_done" rows="3" required placeholder="Explain the purpose, goals, and expected outcomes." class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($curr_ref['why_done'] ?? '') ?></textarea>
                                                     </div>
                                                     <div class="flex justify-end pt-2">
-                                                        <button type="submit" name="add_reflection" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer">Save Reflection</button>
+                                                        <button type="submit" name="add_reflection" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition active:scale-95 cursor-pointer"><?= $reflection_submitted ? 'Update Reflection' : 'Save Reflection' ?></button>
                                                     </div>
                                                 </form>
                                             </div>
@@ -2545,7 +2550,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                             <svg class="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                             </svg>
-                                                            Week <?= $selected_week ?> Weekly Report — Submitted
+                                                            Week <?= $selected_week ?> Weekly Reflection — Submitted
                                                         </span>
                                                     </h2>
                                                     <div class="flex items-center gap-3 flex-wrap">
@@ -2557,10 +2562,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                                 Submitted <?= htmlspecialchars((new DateTime($submitted_ref['created_at']))->format('d M Y, h:i A')) ?>
                                                             </span>
                                                         <?php endif; ?>
-                                                        <span class="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full border <?= $report_status_color ?>">
-                                                            <span class="w-1.5 h-1.5 rounded-full <?= $report_status_dot ?>"></span>
-                                                            <?= $report_status_label ?>
-                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div class="p-6">
@@ -2619,14 +2620,16 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                 <!-- Clean Document Signature Block -->
                                                 <div class="bg-slate-50/60 border border-slate-200/80 rounded-xl p-4 flex items-center justify-between flex-wrap gap-4">
                                                     <div class="inline-block min-w-[200px]">
-                                                        <div class="h-12 flex items-end pb-1 border-b border-slate-400">
+                                                        <div class="min-h-[44px] flex items-end pb-1">
                                                             <?php if ($rejection && $rejection['student_signature_type'] === 'typed'): ?>
                                                                 <p class="text-3xl text-slate-900 leading-none select-text cursor-default" style="font-family:'Great Vibes',cursive;"><?= htmlspecialchars($rejection['student_signature_value']) ?></p>
                                                             <?php elseif ($rejection && $rejection['student_signature_type'] === 'uploaded'): ?>
                                                                 <img src="../uploads/signatures/<?= htmlspecialchars($rejection['student_signature_value']) ?>" alt="Signature" class="max-h-10 object-contain select-none">
                                                             <?php endif; ?>
                                                         </div>
-                                                        <p class="pt-1 text-xs font-bold text-slate-700"><?= htmlspecialchars($student_name) ?></p>
+                                                        <p class="pt-1 text-xs font-bold text-slate-700">
+                                                            <?= htmlspecialchars($student_name) ?>
+                                                        </p>
                                                     </div>
                                                     <div class="text-right text-xs text-slate-400">
                                                         <p class="font-medium">Week <?= $selected_week ?></p>
@@ -2635,6 +2638,17 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                 </div>
 
                                             <?php else: ?>
+                                                <!-- Pre-Sign Review Reminder Notice -->
+                                                <div class="bg-amber-50/80 border border-amber-200/90 rounded-xl p-3.5 mb-5 flex items-start gap-3 text-xs text-amber-900 shadow-2xs">
+                                                    <svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                    </svg>
+                                                    <div class="leading-relaxed">
+                                                        <span class="font-bold text-amber-950 block mb-0.5">⚠️ လက်မှတ်မထိုးမီ သေချာစွာ ပြန်လည်စစ်ဆေးပါရန် / Please review before signing:</span>
+                                                        <span>Student Signature ထိုးပြီး "Save Signature" နှိပ်ပြီးပါက ဤအပတ်အတွက် Daily Logs နှင့် Weekly Reflection များကို ပြင်ဆင်၍ မရတော့ဘဲ Read-Only အဖြစ် အတည်ပြုသွားမည် ဖြစ်ပါသည်။</span>
+                                                    </div>
+                                                </div>
+
                                                 <!-- Clean Signature Input Form -->
                                                 <form method="POST" enctype="multipart/form-data" class="space-y-4">
                                                     <!-- Toggle Mode -->
@@ -2681,7 +2695,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                             <div>
                                                                 <label class="block text-xs font-bold text-slate-500 mb-1">Signature</label>
                                                                 <div class="inline-block min-w-[200px] w-full max-w-[260px]">
-                                                                    <div class="h-12 flex items-end pb-1 border-b border-slate-400">
+                                                                    <div class="min-h-[44px] flex items-end pb-1">
                                                                         <p id="left_sig_preview" class="text-3xl text-slate-900 leading-none select-none cursor-default" style="font-family:'Great Vibes',cursive; min-height: 32px;">
                                                                             <?= htmlspecialchars($student_name) ?>
                                                                         </p>

@@ -18,16 +18,42 @@ $row = $res ? $res->fetch_row() : null;
 $sup_email = $row[0] ?? '';
 
 // ══════════════════════════════════════════════════════════════════════
-// WARNING NOTIFICATION HANDLER
-// When supervisor clicks "Send Warning", set is_warned = 1 for that student
+// WARNING NOTIFICATION HANDLER (Supports AJAX + Standard POST)
 // ══════════════════════════════════════════════════════════════════════
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
     $warn_student_id = (int) ($_POST['student_id'] ?? 0);
+    $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
     if ($warn_student_id > 0) {
         $warn_q = $db->prepare("UPDATE users SET is_warned = 1 WHERE id = ? AND role = 'student'");
         $warn_q->bind_param("i", $warn_student_id);
         $warn_q->execute();
+
+        require_once __DIR__ . '/../config/notify.php';
+        $sup_display = function_exists('format_supervisor_name') ? format_supervisor_name($sup_name) : $sup_name;
+        notify_user_once(
+            $db,
+            $warn_student_id,
+            'Supervisor Warning: Behind Schedule',
+            'Your supervisor (' . $sup_display . ') noticed you are behind schedule with your daily logs/reports. Please update and submit your logs promptly.',
+            'student_behind_schedule',
+            null,
+            $warn_student_id,
+            null,
+            true
+        );
+
+        if ($is_ajax) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['success' => true, 'message' => 'Warning sent successfully.', 'student_id' => $warn_student_id]);
+            exit;
+        }
         header('Location: supervisor-dashboard.php?warned=1');
+        exit;
+    }
+    if ($is_ajax) {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['success' => false, 'message' => 'Invalid student ID.']);
         exit;
     }
 }
@@ -390,6 +416,28 @@ usort($tasks, function ($a, $b) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'inter': ['Inter', 'sans-serif'],
+                    },
+                    fontSize: {
+                        'micro': '0.5rem',
+                        'caption': '0.6875rem',
+                        'label': '0.8125rem',
+                        'subtitle': '0.9375rem',
+                        'body': '1rem',
+                    },
+                }
+            }
+        }
+    </script>
+    <script src="../assets/js/main.js"></script>
+    <script src="../assets/js/notifications.js"></script>
     <script>
     function showToast(message, type) {
         var toast = document.createElement('div');
@@ -410,6 +458,41 @@ usort($tasks, function ($a, $b) {
             setTimeout(function() { toast.remove(); }, 300);
         }, 3000);
     }
+
+    async function sendWarningAjax(studentId, btn) {
+        if (!confirm('Send an urgent warning reminder to this student?')) return;
+        
+        var origHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="inline-block animate-spin">⌛</span> Sending…';
+        
+        try {
+            var formData = new FormData();
+            formData.append('send_warning', '1');
+            formData.append('student_id', studentId);
+            
+            var resp = await fetch('supervisor-dashboard.php', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            
+            var data = await resp.json();
+            if (data.success) {
+                btn.className = 'px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-lg cursor-default shadow-2xs';
+                btn.innerHTML = '✓ Warned';
+                showToast('Warning reminder notification sent successfully to student.', 'success');
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+                showToast(data.message || 'Failed to send warning.', 'error');
+            }
+        } catch (err) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            showToast('Network error while sending warning.', 'error');
+        }
+    }
     </script>
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
@@ -423,24 +506,23 @@ usort($tasks, function ($a, $b) {
     <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- ─── TOP BAR ─── -->
-        <?php $pageTitle = 'University Supervisor Dashboard'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
+        <?php $pageTitle = '📊 Supervisor Dashboard'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- ─── MAIN DASHBOARD BODY ─── -->
         <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <div class="max-w-7xl w-full mx-auto space-y-6">
-
 
                 <!-- ═══ 1. COMPACT WELCOME BANNER ═══ -->
                 <section class="bg-gradient-to-r from-[#005f73] via-[#0a9396] to-[#005f73] rounded-2xl p-5 sm:p-6 text-white shadow-md shadow-teal-900/10 relative overflow-hidden">
                     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_60%)]"></div>
                     <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div class="flex items-center gap-3.5">
-                            <div class="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-md flex items-center justify-center text-xl border border-white/20 shadow-xs shrink-0">
+                            <div class="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-2xl border border-white/20 shadow-xs shrink-0">
                                 👨‍🏫
                             </div>
                             <div>
                                 <div class="flex items-center gap-2 flex-wrap">
-                                    <h2 class="text-lg sm:text-lg font-black tracking-tight text-white">Welcome back, <?= htmlspecialchars(format_supervisor_name($sup_name)) ?>!</h2>
+                                    <h2 class="text-lg sm:text-xl font-black tracking-tight text-white">Welcome back, <?= htmlspecialchars(format_supervisor_name($sup_name)) ?>!</h2>
                                 </div>
                                 <p class="text-xs text-teal-100/90 font-medium mt-0.5">
                                     <?= date('l, d F Y') ?> · Overview of assigned interns and pending supervisory tasks
@@ -450,11 +532,11 @@ usort($tasks, function ($a, $b) {
 
                         <!-- Quick Badges -->
                         <div class="flex items-center gap-2.5 flex-wrap">
-                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-1.5 text-xs font-semibold">
+                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-2xs">
                                 <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                                 <span><?= $total_assigned ?> Assigned Students</span>
                             </div>
-                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-1.5 text-xs font-semibold">
+                            <div class="flex items-center gap-2 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3.5 py-1.5 text-xs font-semibold shadow-2xs">
                                 <span class="w-2 h-2 rounded-full <?= $pending_reviews > 0 ? 'bg-amber-400' : 'bg-teal-300' ?>"></span>
                                 <span><?= $pending_reviews ?> Pending Review<?= $pending_reviews !== 1 ? 's' : '' ?></span>
                             </div>
@@ -462,93 +544,63 @@ usort($tasks, function ($a, $b) {
                     </div>
                 </section>
 
-                <!-- ═══ 2. KEY SUMMARY CARDS (ROW OF 4) ═══ -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <!-- ═══ 2. KEY SUMMARY CARDS (ROW OF 4 - UNIFIED WITH MY STUDENTS) ═══ -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <!-- Card 1: Assigned Students -->
-                    <a href="my-students.php" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-teal-300 transition-all duration-200 flex flex-col justify-between">
-                        <div class="flex items-start justify-between">
-                            <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Assigned Students</p>
-                                <p class="text-2xl font-black text-slate-800 mt-1.5"><?= $total_assigned ?></p>
-                            </div>
-                            <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
-                                🎓
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-slate-400 font-medium">Active intern placements</span>
-                            <span class="font-bold text-teal-700 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">View All →</span>
+                    <a href="my-students.php" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md hover:border-teal-300 transition-all duration-200 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 text-white flex items-center justify-center text-xl shadow-md shadow-teal-700/20 shrink-0 group-hover:scale-105 transition-transform">👥</div>
+                        <div class="min-w-0">
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Interns</p>
+                            <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $total_assigned ?></p>
+                            <p class="text-[11px] text-teal-700 font-bold mt-0.5 group-hover:underline">Active placements →</p>
                         </div>
                     </a>
 
                     <!-- Card 2: Pending Reports -->
-                    <a href="supervisor-reports.php?status=approved_by_instructor" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-amber-300 transition-all duration-200 flex flex-col justify-between">
-                        <div class="flex items-start justify-between">
-                            <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Pending Reports</p>
-                                <p class="text-2xl font-black text-slate-800 mt-1.5"><?= $pending_reviews ?></p>
-                            </div>
-                            <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 border border-amber-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
-                                📩
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="<?= $pending_reviews > 0 ? 'text-amber-600 font-semibold' : 'text-slate-400 font-medium' ?>">Awaiting supervisor grade</span>
-                            <span class="font-bold text-amber-700 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">Review →</span>
+                    <a href="supervisor-reports.php?status=ready" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md hover:border-amber-300 transition-all duration-200 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl shadow-md shadow-amber-600/20 shrink-0 group-hover:scale-105 transition-transform">⌛</div>
+                        <div class="min-w-0">
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Pending Reports</p>
+                            <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $pending_reviews ?></p>
+                            <p class="text-[11px] text-amber-700 font-bold mt-0.5 group-hover:underline"><?= $pending_reviews > 0 ? 'Ready for grading →' : 'All caught up' ?></p>
                         </div>
                     </a>
 
                     <!-- Card 3: Behind Schedule -->
-                    <a href="my-students.php?status=red" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-red-300 transition-all duration-200 flex flex-col justify-between">
-                        <div class="flex items-start justify-between">
-                            <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Behind Schedule</p>
-                                <p class="text-2xl font-black <?= $behind_schedule > 0 ? 'text-red-600' : 'text-slate-800' ?> mt-1.5"><?= $behind_schedule ?></p>
-                            </div>
-                            <div class="w-11 h-11 rounded-xl bg-red-50 text-red-600 border border-red-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
-                                ⚠️
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="<?= $behind_schedule > 0 ? 'text-red-600 font-semibold' : 'text-slate-400 font-medium' ?>"><?= $behind_schedule > 0 ? 'No logs submitted' : 'None behind' ?></span>
-                            <span class="font-bold text-red-600 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">Check →</span>
+                    <a href="my-students.php?status=red" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md hover:border-rose-300 transition-all duration-200 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center text-xl shadow-md shadow-red-600/20 shrink-0 group-hover:scale-105 transition-transform">⚠️</div>
+                        <div class="min-w-0">
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Behind Schedule</p>
+                            <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $behind_schedule ?></p>
+                            <p class="text-[11px] text-rose-700 font-bold mt-0.5 group-hover:underline"><?= $behind_schedule > 0 ? 'Requires attention →' : 'None behind' ?></p>
                         </div>
                     </a>
 
                     <!-- Card 4: Completed -->
-                    <a href="my-students.php?status=green" class="group bg-white rounded-2xl border border-slate-200/70 p-4 sm:p-5 shadow-xs hover:shadow-md hover:border-emerald-300 transition-all duration-200 flex flex-col justify-between">
-                        <div class="flex items-start justify-between">
-                            <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Completed</p>
-                                <p class="text-2xl font-black text-slate-800 mt-1.5"><?= $complete ?></p>
-                            </div>
-                            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center text-lg shadow-xs group-hover:scale-105 transition-transform">
-                                ✅
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span class="text-emerald-600 font-medium">On track / graded</span>
-                            <span class="font-bold text-emerald-700 group-hover:translate-x-0.5 transition-transform inline-flex items-center gap-0.5">Details →</span>
+                    <a href="my-students.php?status=green" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl shadow-md shadow-emerald-600/20 shrink-0 group-hover:scale-105 transition-transform">✅</div>
+                        <div class="min-w-0">
+                            <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Completed</p>
+                            <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $complete ?></p>
+                            <p class="text-[11px] text-emerald-700 font-bold mt-0.5 group-hover:underline">On track / graded →</p>
                         </div>
                     </a>
                 </div>
-
-
 
                 <!-- ═══ 3. 2-COLUMN SECTION: RECENT REPORTS + NEEDS ATTENTION ═══ -->
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
                     <!-- LEFT COLUMN (7 COLS): RECENT REPORTS -->
-                    <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden flex flex-col justify-between">
+                    <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col justify-between">
                         <div>
                             <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-white flex items-center justify-between">
                                 <div class="flex items-center gap-2.5">
-                                    <div class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center text-sm font-bold">
+                                    <div class="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-sm font-bold border border-purple-100">
                                         📄
                                     </div>
-                                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Recent Reports</h3>
+                                    <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Recent Reports</h3>
                                 </div>
-                                <a href="supervisor-reports.php" class="text-xs font-bold text-purple-600 hover:text-purple-800 hover:underline">
+                                <a href="supervisor-reports.php" class="text-xs font-bold text-teal-700 hover:text-teal-900 hover:underline">
                                     View All Reports →
                                 </a>
                             </div>
@@ -565,7 +617,7 @@ usort($tasks, function ($a, $b) {
                                         <?php if (!empty($rep['profile_pic'])): ?>
                                         <img src="../uploads/avatars/<?= htmlspecialchars($rep['profile_pic']) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0">
                                         <?php else: ?>
-                                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
+                                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
                                             <?= strtoupper(substr($rep_student, 0, 1)) ?>
                                         </div>
                                         <?php endif; ?>
@@ -622,16 +674,16 @@ usort($tasks, function ($a, $b) {
                     </div>
 
                     <!-- RIGHT COLUMN (5 COLS): NEEDS ATTENTION / ACTION REQUIRED -->
-                    <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/70 shadow-xs overflow-hidden flex flex-col justify-between">
+                    <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col justify-between">
                         <div>
                             <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-white flex items-center justify-between">
                                 <div class="flex items-center gap-2.5">
-                                    <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center text-sm font-bold">
+                                    <div class="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-sm font-bold border border-amber-100">
                                         ⚡
                                     </div>
-                                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Needs Attention</h3>
+                                    <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Needs Attention</h3>
                                 </div>
-                                <span class="text-xs font-bold <?= count($tasks) > 0 ? 'text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full' : 'text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full' ?>">
+                                <span class="text-xs font-bold <?= count($tasks) > 0 ? 'text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full' : 'text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full' ?>">
                                     <?= count($tasks) ?> <?= count($tasks) === 1 ? 'Task' : 'Tasks' ?>
                                 </span>
                             </div>
@@ -652,14 +704,11 @@ usort($tasks, function ($a, $b) {
 
                                     <div class="flex items-center gap-1.5 shrink-0">
                                         <?php if (!empty($task['can_warn'])): ?>
-                                        <form method="POST" class="inline" onsubmit="return confirm('Send a reminder warning notification to <?= htmlspecialchars($task['title']) ?>?');">
-                                            <input type="hidden" name="student_id" value="<?= (int)$task['student_id'] ?>">
-                                            <button type="submit" name="send_warning" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-bold rounded-lg transition cursor-pointer" title="Send Warning Notification">
-                                                ⚠️ Warn
-                                            </button>
-                                        </form>
+                                        <button type="button" onclick="sendWarningAjax(<?= (int)$task['student_id'] ?>, this)" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 text-xs font-bold rounded-lg transition cursor-pointer shadow-2xs" title="Send Warning Notification">
+                                            ⚠️ Warn
+                                        </button>
                                         <?php endif; ?>
-                                        <a href="<?= htmlspecialchars($task['url']) ?>" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg transition">
+                                        <a href="<?= htmlspecialchars($task['url']) ?>" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-lg transition shadow-2xs">
                                             <?= $task['action_label'] ?> →
                                         </a>
                                     </div>

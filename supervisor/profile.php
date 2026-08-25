@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
         <!-- Top Bar -->
-        <?php $pageTitle = 'Supervisor Profile'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
+        <?php $pageTitle = '👤 My Profile'; include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
         <!-- Content -->
         <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
@@ -259,9 +259,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         </div>
                     </div>
                     <div>
-                        <h2 class="text-sm font-black text-slate-800"><?= htmlspecialchars($sup['username']) ?></h2>
-                        <p class="text-sm text-slate-400 mt-0.5"><?= htmlspecialchars($sup['email']) ?></p>
-                        <span class="text-sm font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded mt-1.5 inline-block">👨‍🏫 University Supervisor</span>
+                        <h2 class="text-base font-black text-slate-800"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></h2>
+                        <p class="text-xs text-slate-400 mt-0.5"><?= htmlspecialchars($sup['email']) ?></p>
+                        <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200/60 mt-1.5 inline-block">👨‍🏫 University Supervisor</span>
                     </div>
                 </div>
 
@@ -289,9 +289,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                 </div>
                             <?php endif; ?>
                             <div class="flex-1">
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Upload New Picture</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">Upload New Picture</label>
                                 <input type="file" name="avatar" accept="image/jpeg,image/png" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 file:cursor-pointer">
-                                <p class="text-sm text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
+                                <p class="text-[11px] text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
                             </div>
                         </div>
                         <div class="flex justify-start pt-3">
@@ -308,31 +308,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         </h3>
                     </div>
                     <div class="p-5">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Full Name</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></p>
-                            </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Username</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['username']) ?></p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Supervisor Name</p>
+                                <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></p>
                             </div>
 
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Email</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5 break-all"><?= htmlspecialchars($sup['email']) ?></p>
+                            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Email Address</p>
+                                <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5 break-all"><?= htmlspecialchars($sup['email']) ?></p>
                             </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Phone</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['phone'] ?? '') ?: '—' ?></p>
+                            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Phone Number</p>
+                                <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['phone'] ?? '') ?: '—' ?></p>
                             </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Department</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['department'] ?? '') ?: '—' ?></p>
+                            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Department</p>
+                                <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['department'] ?? '') ?: '—' ?></p>
                             </div>
-                            <div class="p-3 bg-slate-50 rounded-xl">
-                                <p class="text-sm font-bold text-slate-500 uppercase">Position / Job Title</p>
-                                <p class="text-xs font-semibold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['position'] ?? '') ?: '—' ?></p>
+                            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Position / Job Title</p>
+                                <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['position'] ?? '') ?: '—' ?></p>
+                            </div>
+                            <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">System Role</p>
+                                <p class="text-xs sm:text-sm font-bold text-emerald-700 mt-0.5">👨‍🏫 University Supervisor</p>
                             </div>
                         </div>
                     </div>
@@ -340,28 +340,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
 
                 <!-- ════ SECURITY & LAST LOGIN ════ -->
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div class="px-5 py-3 border-b border-slate-100">
+                    <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🛡️</span> Security & Last Login
+                            <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🛡️</span> Security &amp; Password Status
                         </h3>
+                        <a href="#security-section" class="text-xs font-bold text-amber-600 hover:text-amber-700 transition">Change Password →</a>
                     </div>
                     <div class="p-5">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
                                 <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-sm font-bold text-slate-500 uppercase">Account Status</p>
-                                    <p class="text-xs font-semibold text-emerald-600">Active</p>
+                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Account Status</p>
+                                    <p class="text-xs sm:text-sm font-bold text-emerald-600">Active</p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                            <div class="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                                <span class="text-base shrink-0">🔑</span>
+                                <div>
+                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Password</p>
+                                    <p class="text-xs sm:text-sm font-bold text-slate-700 tracking-widest">••••••••••</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
                                 <span class="w-2.5 h-2.5 bg-blue-500 rounded-full shrink-0"></span>
                                 <div>
-                                    <p class="text-sm font-bold text-slate-500 uppercase">Last Login Detected</p>
+                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Last Login</p>
                                     <?php if ($last_login_at): ?>
-                                        <p class="text-xs font-semibold text-slate-700"><?= date('d M Y, h:i A', strtotime($last_login_at)) ?></p>
+                                        <p class="text-xs sm:text-sm font-bold text-slate-700"><?= date('d M Y, h:i A', strtotime($last_login_at)) ?></p>
                                     <?php else: ?>
-                                        <p class="text-xs font-semibold text-slate-400">No login recorded yet</p>
+                                        <p class="text-xs font-semibold text-slate-400">No login recorded</p>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -373,34 +381,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-blue-50 text-blue-600 rounded">👤</span> Account Information
+                            <span class="p-1 bg-blue-50 text-blue-600 rounded">👤</span> Edit Account Information
                         </h3>
                     </div>
                     <form method="POST" class="p-5 space-y-4">
                         <input type="hidden" name="update_profile" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Full Name</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">Supervisor Name</label>
                                 <input type="text" name="new_name" value="<?= htmlspecialchars($sup['username']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Email Address</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">Email Address</label>
                                 <input type="email" name="new_email" value="<?= htmlspecialchars($sup['email']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Phone</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">Phone Number</label>
                                 <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09-123456789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Department</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">Department</label>
                                 <input type="text" name="department" value="<?= htmlspecialchars($sup['department'] ?? '') ?>" placeholder="e.g. Computer Science" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Position / Job Title</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">Position / Job Title</label>
                                 <input type="text" name="position" value="<?= htmlspecialchars($sup['position'] ?? '') ?>" placeholder="e.g. Senior Lecturer" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Role</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">System Role</label>
                                 <div class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 font-semibold cursor-default select-none">
                                     👨‍🏫 University Supervisor
                                 </div>
@@ -416,16 +424,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                 <div id="security-section" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-amber-50 text-amber-600 rounded">🔑</span> Security & Password
+                            <span class="p-1 bg-amber-50 text-amber-600 rounded">🔑</span> Security &amp; Password
                         </h3>
                     </div>
                     <form method="POST" class="p-5 space-y-4">
                         <input type="hidden" name="change_password" value="1">
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div>
-                                 <label class="block text-sm font-bold text-slate-500 mb-1">Current Password</label>
+                                 <label class="block text-xs font-bold text-slate-500 mb-1">Current Password</label>
                                  <div class="relative">
-                                     <input type="password" id="sup_current_password" name="current_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                     <input type="password" id="sup_current_password" name="current_password" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition placeholder:tracking-widest">
                                      <button type="button" onclick="togglePasswordVisibility('sup_current_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
                                          <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                              <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
@@ -438,9 +446,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                  </div>
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">New Password</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">New Password</label>
                                 <div class="relative">
-                                    <input type="password" id="sup_new_password" name="new_password" required minlength="6" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="password" id="sup_new_password" name="new_password" required minlength="6" placeholder="••••••••" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition placeholder:tracking-widest">
                                     <button type="button" onclick="togglePasswordVisibility('sup_new_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
                                         <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
@@ -451,12 +459,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                          </svg>
                                      </button>
                                  </div>
-                                <p class="text-sm text-slate-400 mt-0.5">Min 6 characters</p>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Min 6 characters</p>
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Confirm New Password</label>
+                                <label class="block text-xs font-bold text-slate-500 mb-1">Confirm New Password</label>
                                 <div class="relative">
-                                    <input type="password" id="sup_confirm_password" name="confirm_password" required class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <input type="password" id="sup_confirm_password" name="confirm_password" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition placeholder:tracking-widest">
                                     <button type="button" onclick="togglePasswordVisibility('sup_confirm_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
                                         <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />

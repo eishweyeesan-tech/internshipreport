@@ -170,31 +170,129 @@ if (!function_exists('student_notif_url')) {
         </div>
 
         <!-- Profile Dropdown -->
+        <?php
+        $topbar_student_name = !empty($student_name) ? trim($student_name) : ($_SESSION['username'] ?? 'Student');
+        $topbar_student_initial = mb_strtoupper(mb_substr($topbar_student_name, 0, 1, 'UTF-8'), 'UTF-8');
+        if ($topbar_student_initial === '') {
+            $topbar_student_initial = 'S';
+        }
+
+        $avatar_pic_path = !empty($profile_pic) ? (__DIR__ . '/../uploads/avatars/' . $profile_pic) : '';
+        $has_profile_img = !empty($profile_pic) && file_exists($avatar_pic_path);
+
+        $avatar_gradients = [
+            'from-teal-600 to-emerald-700',
+            'from-blue-600 to-indigo-700',
+            'from-indigo-600 to-purple-700',
+            'from-violet-600 to-fuchsia-700',
+            'from-amber-600 to-orange-700',
+            'from-cyan-600 to-teal-700',
+            'from-emerald-600 to-teal-800',
+        ];
+        $avatar_grad = $avatar_gradients[abs(crc32($topbar_student_name)) % count($avatar_gradients)];
+        $student_subtext = !empty($student_roll) ? $student_roll : ($_SESSION['email'] ?? 'Student Portal');
+        ?>
         <div class="relative shrink-0" id="profile-dropdown-wrapper">
-            <button id="profile-avatar-btn" onclick="toggleProfileDropdown(event)" class="flex items-center gap-2.5 p-1.5 hover:bg-teal-50 border border-transparent hover:border-teal-100 rounded-xl transition-all cursor-pointer group">
-                <?php if (!empty($profile_pic)): ?>
-                <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-teal-200 shadow-sm shrink-0">
-                <?php else: ?>
-                <div class="w-9 h-9 rounded-xl bg-teal-700 flex items-center justify-center font-bold text-sm text-white shadow-sm shrink-0">
-                    <?= strtoupper(substr($_SESSION['username'] ?? 'S', 0, 1)) ?>
+            <button
+                type="button"
+                onclick="toggleProfileDropdown(event)"
+                id="profile-avatar-btn"
+                class="flex items-center gap-2.5 p-1.5 pr-2.5 hover:bg-teal-50/80 border border-transparent hover:border-teal-200/60 rounded-2xl transition-all duration-200 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                aria-label="Student profile menu"
+            >
+                <div class="relative shrink-0">
+                    <?php if ($has_profile_img): ?>
+                    <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover ring-2 ring-teal-500/20 shadow-xs" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                    <div class="hidden w-9 h-9 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
+                        <?= htmlspecialchars($topbar_student_initial) ?>
+                    </div>
+                    <?php else: ?>
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
+                        <?= htmlspecialchars($topbar_student_initial) ?>
+                    </div>
+                    <?php endif; ?>
+                    <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
                 </div>
-                <?php endif; ?>
                 <div class="text-left hidden sm:block">
-                    <p class="font-semibold text-sm text-slate-800 leading-tight"><?= htmlspecialchars($student_name ?? '') ?></p>
-                    <p class="text-xs font-medium text-teal-700 capitalize">Student</p>
+                    <p class="font-bold text-xs text-slate-800 leading-tight group-hover:text-teal-700 transition-colors"><?= htmlspecialchars($topbar_student_name) ?></p>
+                    <p class="text-[11px] font-medium text-teal-700 capitalize"><?= !empty($student_roll) ? htmlspecialchars($student_roll) : 'Student' ?></p>
                 </div>
-                <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+                </svg>
             </button>
-            <div id="profile-dropdown-menu" class="hidden absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-teal-100 py-1.5 z-50 divide-y divide-slate-100">
-                <a href="profile.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
-                    <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> My Profile
-                </a>
-                <a href="profile.php#security-section" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-teal-50 hover:text-teal-900 transition">
-                    <svg class="w-4 h-4 text-teal-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg> Change Password
-                </a>
-                <a href="../logout.php" class="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 transition">
-                    <svg class="w-4 h-4 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg> Logout
-                </a>
+
+            <!-- Profile Dropdown Menu -->
+            <div
+                id="profile-dropdown-menu"
+                class="hidden absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl shadow-slate-900/10 border border-teal-100 p-2 z-50 transition-all duration-200 ease-out divide-y divide-slate-100"
+            >
+                <!-- User Info Header Card -->
+                <div class="p-3 bg-gradient-to-br from-slate-50 to-teal-50/50 rounded-xl border border-teal-100/60 mb-1.5 flex items-center gap-3">
+                    <div class="relative shrink-0">
+                        <?php if ($has_profile_img): ?>
+                        <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-teal-200 shadow-xs" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                        <div class="hidden w-10 h-10 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
+                            <?= htmlspecialchars($topbar_student_initial) ?>
+                        </div>
+                        <?php else: ?>
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
+                            <?= htmlspecialchars($topbar_student_initial) ?>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-1.5">
+                            <p class="font-bold text-xs text-slate-900 truncate"><?= htmlspecialchars($topbar_student_name) ?></p>
+                            <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-teal-100 text-teal-800">Student</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 truncate mt-0.5"><?= htmlspecialchars($student_subtext) ?></p>
+                    </div>
+                </div>
+
+                <!-- Menu Items -->
+                <div class="space-y-1 py-1">
+                    <a href="profile.php" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-teal-50/80 hover:text-teal-900 transition-all duration-150 group">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-colors duration-150 shrink-0">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                            </span>
+                            <div>
+                                <p class="font-semibold text-slate-800 group-hover:text-teal-900 leading-tight">My Profile</p>
+                                <p class="text-[10px] text-slate-400 font-normal mt-0.5">Personal details & internship</p>
+                            </div>
+                        </div>
+                        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                    <a href="profile.php#security-section" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-teal-50/80 hover:text-teal-900 transition-all duration-150 group">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-colors duration-150 shrink-0">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                            </span>
+                            <div>
+                                <p class="font-semibold text-slate-800 group-hover:text-teal-900 leading-tight">Change Password</p>
+                                <p class="text-[10px] text-slate-400 font-normal mt-0.5">Security & credentials</p>
+                            </div>
+                        </div>
+                        <svg class="w-3.5 h-3.5 text-slate-300 group-hover:text-teal-600 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </a>
+                </div>
+
+                <!-- Sign Out -->
+                <div class="pt-1">
+                    <a href="../logout.php" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:text-rose-700 transition-all duration-150 group">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-colors duration-150 shrink-0">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                            </span>
+                            <span class="font-semibold text-rose-600 group-hover:text-rose-700">Logout</span>
+                        </div>
+                    </a>
+                </div>
             </div>
         </div>
 

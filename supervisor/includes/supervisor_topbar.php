@@ -70,7 +70,7 @@ if ($topbar_sup_id > 0 && isset($db) && $db) {
         <button type="button" onclick="toggleSupervisorSidebar()" class="lg:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer" aria-label="Toggle Navigation">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <span class="text-lg font-bold text-slate-800 hidden sm:block"><?= htmlspecialchars($pageTitle ?? 'Supervisor Dashboard') ?></span>
+        <span class="text-base sm:text-lg font-black text-slate-800 tracking-tight truncate"><?= htmlspecialchars($pageTitle ?? 'Supervisor Dashboard') ?></span>
 
         <?php if (!empty($show_topbar_search) && isset($search)): ?>
         <!-- Search Form -->

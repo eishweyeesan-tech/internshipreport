@@ -110,9 +110,34 @@ if ($student['internship_start_date']) {
     $not_started = true;
 }
 
-// Use the auto-detected week as default if no week specified
+// Smart week auto-resolution if no valid week is specified in URL
 if ($week_num <= 0 || !isset($weeks[$week_num])) {
-    $week_num = $auto_week;
+    // 1. Check for earliest ready week waiting for supervisor review
+    $ready_w_q = $db->prepare("SELECT MIN(week_number) FROM report_evaluations WHERE student_id = ? AND report_status = 'approved_by_instructor'");
+    $ready_w_q->bind_param("i", $student_id);
+    $ready_w_q->execute();
+    $rw_res = $ready_w_q->get_result();
+    $rw_row = $rw_res ? $rw_res->fetch_row() : null;
+    $earliest_ready_w = (int)($rw_row[0] ?? 0);
+
+    if ($earliest_ready_w > 0 && isset($weeks[$earliest_ready_w])) {
+        $week_num = $earliest_ready_w;
+    } else {
+        // 2. Check latest submitted/evaluated week
+        $sub_w_q = $db->prepare("SELECT MAX(week_number) FROM report_evaluations WHERE student_id = ?");
+        $sub_w_q->bind_param("i", $student_id);
+        $sub_w_q->execute();
+        $sw_res = $sub_w_q->get_result();
+        $sw_row = $sw_res ? $sw_res->fetch_row() : null;
+        $latest_sub_w = (int)($sw_row[0] ?? 0);
+
+        if ($latest_sub_w > 0 && isset($weeks[$latest_sub_w])) {
+            $week_num = $latest_sub_w;
+        } else {
+            // 3. Fallback to dynamic calendar current week
+            $week_num = ($auto_week > 0 && isset($weeks[$auto_week])) ? $auto_week : 1;
+        }
+    }
 }
 
 $week_start = $weeks[$week_num]['start'] ?? '';
@@ -434,7 +459,7 @@ foreach ($all_weeks_grades as $wg) {
         <div id="top" class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 
             <!-- Top Bar -->
-            <?php $pageTitle = 'Student Review';
+            <?php $pageTitle = '📝 Weekly Report Evaluation';
             include __DIR__ . '/includes/supervisor_topbar.php'; ?>
 
             <!-- Content -->
@@ -804,15 +829,20 @@ foreach ($all_weeks_grades as $wg) {
                                 <form method="POST" class="pt-3 space-y-3.5">
                                     <!-- Compact Weekly Grade Selector -->
                                     <div>
-                                        <label class="block text-xs font-bold text-slate-500 mb-1.5">Weekly Grade</label>
+                                        <div class="flex items-center justify-between mb-1.5">
+                                            <label class="block text-xs font-bold text-slate-700">Weekly Grade <span class="text-rose-500">*</span></label>
+                                            <?php if (empty($supervisor_eval['weekly_grade'])): ?>
+                                                <span class="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">Please select a grade</span>
+                                            <?php endif; ?>
+                                        </div>
                                         <div class="grid grid-cols-5 gap-2">
                                             <?php
-                                            $existing_grade = $supervisor_eval['weekly_grade'] ?? 'C';
+                                            $existing_grade = $supervisor_eval['weekly_grade'] ?? '';
                                             $labels = ['A' => 'Excellent', 'B' => 'Good', 'C' => 'Satisfactory', 'D' => 'Pass', 'F' => 'Fail'];
                                             foreach (['A', 'B', 'C', 'D', 'F'] as $g):
                                             ?>
-                                                <label class="flex items-center justify-center gap-1.5 py-2 px-2 bg-slate-50 hover:bg-teal-50/50 border border-slate-200 hover:border-teal-300 rounded-xl cursor-pointer transition text-center">
-                                                    <input type="radio" name="weekly_grade" value="<?= $g ?>" <?= $g === $existing_grade ? 'checked' : '' ?> class="accent-teal-600 w-3.5 h-3.5">
+                                                <label class="flex items-center justify-center gap-1.5 py-2 px-2 bg-slate-50 hover:bg-teal-50/50 border border-slate-200 hover:border-teal-300 rounded-xl cursor-pointer transition text-center group">
+                                                    <input type="radio" name="weekly_grade" value="<?= $g ?>" <?= ($existing_grade !== '' && $g === $existing_grade) ? 'checked' : '' ?> required class="accent-teal-600 w-3.5 h-3.5 cursor-pointer">
                                                     <span class="text-sm font-black <?= $g === 'A' ? 'text-emerald-600' : ($g === 'F' ? 'text-rose-500' : 'text-slate-700') ?>"><?= $g ?></span>
                                                     <span class="text-[10px] text-slate-400 font-semibold hidden sm:inline">(<?= $labels[$g] ?>)</span>
                                                 </label>
