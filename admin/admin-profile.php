@@ -193,6 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
             theme: {
                 extend: {
                     fontFamily: {
+                        'sans': ['Inter', 'sans-serif'],
                         'inter': ['Inter', 'sans-serif'],
                         'mono': ['"JetBrains Mono"', 'monospace'],
                     },

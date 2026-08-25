@@ -63,6 +63,10 @@ $selected_year_history = [];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Manage Academic Years – Admin – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
     (function() {
         var theme = localStorage.getItem('theme');
@@ -72,7 +76,10 @@ $selected_year_history = [];
         darkMode: 'class',
         theme: {
             extend: {
-                fontFamily: { 'inter': ['Inter', 'sans-serif'] },
+                fontFamily: {
+                    'sans': ['Inter', 'sans-serif'],
+                    'inter': ['Inter', 'sans-serif'],
+                },
                 fontSize: {
                     'micro': '0.5rem',
                     'caption': '0.6875rem',
@@ -85,7 +92,7 @@ $selected_year_history = [];
     }
     </script>
 </head>
-<body class="bg-slate-50 font-sans antialiased">
+<body class="bg-slate-50 font-inter antialiased">
 
 <div class="flex h-screen overflow-hidden">
 
@@ -177,7 +184,7 @@ $selected_year_history = [];
                                     <th class="px-5 py-3 text-center">Current Session</th>
                                     <th class="px-5 py-3 text-center">Students</th>
                                     <th class="px-5 py-3 text-center">Supervisors</th>
-                                    <th class="px-5 py-3 text-right">Actions</th>
+                                    <th class="px-5 py-3 text-left">Actions</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100">
@@ -219,27 +226,33 @@ $selected_year_history = [];
                                     <td class="px-5 py-4 text-center">
                                         <span class="font-bold text-slate-700"><?= $y['supervisor_count'] ?></span>
                                     </td>
-                                    <td class="px-5 py-4 text-right">
-                                        <div class="flex items-center justify-end gap-2">
+                                    <td class="px-5 py-4">
+                                        <div class="flex items-center gap-2 flex-nowrap">
                                             <button type="button"
                                                     onclick="openYearDetailsModal(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label'], ENT_QUOTES) ?>')"
-                                                    class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1 border border-indigo-200/60">
-                                                📋 Details
+                                                    class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 w-[86px] h-7.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg border border-indigo-200/70 shadow-xs transition cursor-pointer shrink-0"
+                                                    title="View year details & statistics">
+                                                <i class="fa-regular fa-eye text-xs"></i>
+                                                <span>Details</span>
                                             </button>
 
                                             <?php if (!$is_current): ?>
                                             <button type="button"
                                                     onclick="setActiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>')"
-                                                    class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1">
-                                                ⭐ Set Active
+                                                    class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 w-[102px] h-7.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-xs transition cursor-pointer shrink-0"
+                                                    title="Set as current active academic year">
+                                                <i class="fa-solid fa-star text-[11px]"></i>
+                                                <span>Set Active</span>
                                             </button>
                                             <?php endif; ?>
 
                                             <?php if ($status_str !== 'ARCHIVED'): ?>
                                             <button type="button"
                                                     onclick="confirmArchiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>', <?= (int)$y['student_count'] ?>)"
-                                                    class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1">
-                                                📦 Archive
+                                                    class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 w-[102px] h-7.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg shadow-xs transition cursor-pointer shrink-0"
+                                                    title="Archive academic year">
+                                                <i class="fa-solid fa-box-archive text-xs"></i>
+                                                <span>Archive</span>
                                             </button>
                                             <?php endif; ?>
                                         </div>

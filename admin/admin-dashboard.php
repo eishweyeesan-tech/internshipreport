@@ -1347,7 +1347,7 @@ usort($supervisor_workloads, function($a, $b) {
                                                             <?php endif; ?>
                                                             <div class="text-slate-500 flex items-center gap-1.5">
                                                                 <i class="fa-solid fa-chalkboard-user text-[11px] text-slate-400"></i>
-                                                                <span class="text-slate-400">Supervisor:</span>
+                                                                <span class="text-slate-500">Supervisor:</span>
                                                                 <span class="font-medium text-slate-700"><?= htmlspecialchars($s['supervisor_name'] ?: 'Unassigned') ?></span>
                                                             </div>
                                                         </div>
@@ -1367,7 +1367,9 @@ usort($supervisor_workloads, function($a, $b) {
                                                                 <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>?\nDefault password: <?= htmlspecialchars($def_student_pw) ?>')" class="inline">
                                                                     <input type="hidden" name="reset_password" value="1">
                                                                     <input type="hidden" name="reset_uid" value="<?= $s['uid'] ?>">
-                                                                    <button type="submit" class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/60 shadow-xs transition cursor-pointer" title="Reset default password">🔑</button>
+                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset default password">
+                                                                        <i class="fa-solid fa-key text-[11px]"></i>
+                                                                    </button>
                                                                 </form>
                                                                 <form method="POST" onsubmit="return confirm('Delete student <?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>?')" class="inline">
                                                                     <input type="hidden" name="delete_user" value="1">
@@ -1603,24 +1605,28 @@ usort($supervisor_workloads, function($a, $b) {
                                                             <div class="flex items-center gap-1.5">
                                                                 <button type="button"
                                                                     onclick="openSupervisorHistoryModal(<?= (int)$sup['id'] ?>, '<?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>', '<?= htmlspecialchars($sup['email'], ENT_QUOTES) ?>')"
-                                                                    class="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/60 shadow-xs transition cursor-pointer flex items-center gap-1"
+                                                                    class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/70 shadow-xs transition cursor-pointer"
                                                                     title="View assignment history and supervised students">
-                                                                    📜 History
+                                                                    <i class="fa-solid fa-clock-rotate-left text-xs"></i>
+                                                                    <span>History</span>
                                                                 </button>
-                                                                <form method="POST" onsubmit="return confirm('<?= $is_inactive ? 'Activate' : 'Deactivate' ?> supervisor <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\n<?= $is_inactive ? 'They will be allowed to log in.' : 'They will NOT be allowed to log in.' ?>')" class="inline">
+                                                                <form method="POST" onsubmit="return confirm('<?= $is_inactive ? 'Activate' : 'Deactivate' ?> supervisor <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\n<?= $is_inactive ? 'They will be allowed to log in.' : 'They will NOT be allowed to log in.' ?>')" class="inline m-0 p-0">
                                                                     <input type="hidden" name="toggle_user_status" value="1">
                                                                     <input type="hidden" name="status_uid" value="<?= $sup['id'] ?>">
                                                                     <input type="hidden" name="new_status" value="<?= $is_inactive ? 'Active' : 'Inactive' ?>">
-                                                                    <button type="submit" class="px-2.5 py-1.5 <?= $is_inactive ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/60' : 'bg-slate-100 hover:bg-slate-200 text-slate-600 border-slate-200/60' ?> text-xs font-bold rounded-lg border shadow-xs transition cursor-pointer flex items-center gap-1" title="<?= $is_inactive ? 'Activate supervisor (Allow login)' : 'Deactivate supervisor (Block login)' ?>">
-                                                                        <?= $is_inactive ? '🟢 Activate' : '🔴 Deactivate' ?>
+                                                                    <button type="submit" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 <?= $is_inactive ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/70' : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200/70' ?> text-xs font-bold rounded-lg border shadow-xs transition cursor-pointer" title="<?= $is_inactive ? 'Activate supervisor (Allow login)' : 'Deactivate supervisor (Block login)' ?>">
+                                                                        <span class="w-1.5 h-1.5 rounded-full <?= $is_inactive ? 'bg-emerald-500' : 'bg-rose-500' ?>"></span>
+                                                                        <span><?= $is_inactive ? 'Activate' : 'Deactivate' ?></span>
                                                                     </button>
                                                                 </form>
-                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\nDefault password: <?= htmlspecialchars($def_supervisor_pw) ?>')" class="inline">
+                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\nDefault password: <?= htmlspecialchars($def_supervisor_pw) ?>')" class="inline m-0 p-0">
                                                                     <input type="hidden" name="reset_password" value="1">
                                                                     <input type="hidden" name="reset_uid" value="<?= $sup['id'] ?>">
-                                                                    <button type="submit" class="px-2 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/60 shadow-xs transition cursor-pointer" title="Reset default password">🔑</button>
+                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset default password">
+                                                                        <i class="fa-solid fa-key text-[11px]"></i>
+                                                                    </button>
                                                                 </form>
-                                                                <form method="POST" onsubmit="return confirm('Delete supervisor <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?')" class="inline">
+                                                                <form method="POST" onsubmit="return confirm('Delete supervisor <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?')" class="inline m-0 p-0">
                                                                     <input type="hidden" name="delete_user" value="1">
                                                                     <input type="hidden" name="delete_uid" value="<?= $sup['id'] ?>">
                                                                     <button type="submit" class="px-2 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg border border-rose-200/60 shadow-xs transition cursor-pointer" title="Delete supervisor">
@@ -1722,7 +1728,7 @@ usort($supervisor_workloads, function($a, $b) {
                                         <tr class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-sm">
                                             <th class="px-3 py-2.5 text-left">User</th>
                                             <th class="px-3 py-2.5 text-left">Role</th>
-                                            <th class="px-3 py-2.5 text-left">Year</th>
+                                            <th class="px-3 py-2.5 text-center">Year</th>
                                             <th class="px-3 py-2.5 text-left">Status</th>
                                             <th class="px-3 py-2.5 text-left">Created</th>
                                             <th class="px-3 py-2.5 text-left">Action</th>
@@ -1778,7 +1784,7 @@ usort($supervisor_workloads, function($a, $b) {
                                                     ?>
                                                     <a href="?tab=manage&role=<?= $u['role'] ?>" class="inline-block text-sm font-bold <?= $r[1] ?> <?= $r[2] ?> px-2 py-0.5 rounded capitalize hover:opacity-80 transition"><?= $r[0] ?></a>
                                                 </td>
-                                                <td class="px-3 py-2.5">
+                                                <td class="px-3 py-2.5 text-center">
                                                     <?php if (!empty($u['academic_year'])): ?>
                                                         <span class="text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($u['academic_year']) ?></span>
                                                     <?php else: ?>
@@ -1808,44 +1814,51 @@ usort($supervisor_workloads, function($a, $b) {
                                                 </td>
                                                 <td class="px-3 py-2.5 text-slate-400 whitespace-nowrap"><?= (new DateTime($u['created_at']))->format('d M Y') ?></td>
                                                 <td class="px-3 py-2.5">
-                                                    <div class="flex items-center gap-1.5">
+                                                    <div class="flex items-center gap-1.5 flex-nowrap">
                                                         <button type="button"
                                                             onclick="openUserDetailsModal(this)"
                                                             data-user='<?= $user_detail_json ?>'
-                                                            class="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/60 shadow-xs transition flex items-center gap-1 cursor-pointer"
+                                                            class="inline-flex items-center justify-center gap-1 w-[72px] h-7 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/70 shadow-xs transition cursor-pointer shrink-0"
                                                             title="View full user details">
-                                                            <i class="fa-regular fa-eye text-xs"></i> Details
+                                                            <i class="fa-regular fa-eye text-xs"></i>
+                                                            <span>Details</span>
                                                         </button>
                                                         <?php if ($u['role'] !== 'admin'): ?>
                                                             <?php if ($u['role'] === 'student'): ?>
-                                                                <form method="POST" onsubmit="return confirm('Toggle status for <?= htmlspecialchars($u['full_name'] ?: $u['username']) ?> to <?= ($u['status'] ?? 'Active') === 'Archived' ? 'Active' : 'Archived' ?>?')" class="inline">
+                                                                <form method="POST" onsubmit="return confirm('Toggle status for <?= htmlspecialchars($u['full_name'] ?: $u['username']) ?> to <?= ($u['status'] ?? 'Active') === 'Archived' ? 'Active' : 'Archived' ?>?')" class="inline m-0 p-0">
                                                                     <input type="hidden" name="toggle_user_status" value="1">
                                                                     <input type="hidden" name="status_uid" value="<?= $u['id'] ?>">
                                                                     <input type="hidden" name="new_status" value="<?= ($u['status'] ?? 'Active') === 'Archived' ? 'Active' : 'Archived' ?>">
-                                                                    <button type="submit" class="px-2 py-1 <?= ($u['status'] ?? 'Active') === 'Archived' ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?> text-xs font-bold rounded-lg transition cursor-pointer" title="<?= ($u['status'] ?? 'Active') === 'Archived' ? 'Restore to Active (Allow Login)' : 'Archive Student (Block Login)' ?>">
-                                                                        <?= ($u['status'] ?? 'Active') === 'Archived' ? '♻️ Activate' : '📦 Archive' ?>
+                                                                    <button type="submit" class="inline-flex items-center justify-center gap-1 w-24 h-7 <?= ($u['status'] ?? 'Active') === 'Archived' ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/70' : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200/70' ?> text-xs font-bold rounded-lg border shadow-xs transition cursor-pointer shrink-0" title="<?= ($u['status'] ?? 'Active') === 'Archived' ? 'Restore to Active (Allow Login)' : 'Archive Student (Block Login)' ?>">
+                                                                        <i class="fa-solid <?= ($u['status'] ?? 'Active') === 'Archived' ? 'fa-rotate-left text-emerald-600' : 'fa-box-archive text-slate-500' ?> text-xs"></i>
+                                                                        <span><?= ($u['status'] ?? 'Active') === 'Archived' ? 'Restore' : 'Archive' ?></span>
                                                                     </button>
                                                                 </form>
                                                             <?php elseif ($u['role'] === 'supervisor'): ?>
                                                                 <?php $is_sup_inact = strcasecmp($u_status, 'Inactive') === 0; ?>
-                                                                <form method="POST" onsubmit="return confirm('<?= $is_sup_inact ? 'Activate' : 'Deactivate' ?> supervisor <?= htmlspecialchars($u['full_name'] ?: $u['username'], ENT_QUOTES) ?>?\n<?= $is_sup_inact ? 'They will be allowed to log in.' : 'They will NOT be allowed to log in.' ?>')" class="inline">
+                                                                <form method="POST" onsubmit="return confirm('<?= $is_sup_inact ? 'Activate' : 'Deactivate' ?> supervisor <?= htmlspecialchars($u['full_name'] ?: $u['username'], ENT_QUOTES) ?>?\n<?= $is_sup_inact ? 'They will be allowed to log in.' : 'They will NOT be allowed to log in.' ?>')" class="inline m-0 p-0">
                                                                     <input type="hidden" name="toggle_user_status" value="1">
                                                                     <input type="hidden" name="status_uid" value="<?= $u['id'] ?>">
                                                                     <input type="hidden" name="new_status" value="<?= $is_sup_inact ? 'Active' : 'Inactive' ?>">
-                                                                    <button type="submit" class="px-2 py-1 <?= $is_sup_inact ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200' ?> text-xs font-bold rounded-lg transition cursor-pointer" title="<?= $is_sup_inact ? 'Activate supervisor (Allow login)' : 'Deactivate supervisor (Block login)' ?>">
-                                                                        <?= $is_sup_inact ? '🟢 Activate' : '🔴 Deactivate' ?>
+                                                                    <button type="submit" class="inline-flex items-center justify-center gap-1.5 w-24 h-7 <?= $is_sup_inact ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/70' : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200/70' ?> text-xs font-bold rounded-lg border shadow-xs transition cursor-pointer shrink-0" title="<?= $is_sup_inact ? 'Activate supervisor (Allow login)' : 'Deactivate supervisor (Block login)' ?>">
+                                                                        <span class="w-1.5 h-1.5 rounded-full <?= $is_sup_inact ? 'bg-emerald-500' : 'bg-rose-500' ?>"></span>
+                                                                        <span><?= $is_sup_inact ? 'Activate' : 'Deactivate' ?></span>
                                                                     </button>
                                                                 </form>
                                                             <?php endif; ?>
-                                                            <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($u['full_name'] ?: $u['username']) ?>?\nNew password will be: <?= $u['role'] === 'supervisor' ? htmlspecialchars($def_supervisor_pw) : htmlspecialchars($def_student_pw) ?>')" class="inline">
+                                                            <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($u['full_name'] ?: $u['username']) ?>?\nNew password will be: <?= $u['role'] === 'supervisor' ? htmlspecialchars($def_supervisor_pw) : htmlspecialchars($def_student_pw) ?>')" class="inline m-0 p-0">
                                                                 <input type="hidden" name="reset_password" value="1">
                                                                 <input type="hidden" name="reset_uid" value="<?= $u['id'] ?>">
-                                                                <button type="submit" class="px-2 py-1 bg-amber-50 text-amber-600 text-sm font-bold rounded-lg hover:bg-amber-100 transition cursor-pointer" title="Reset to default password">🔑</button>
+                                                                <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer shrink-0" title="Reset default password">
+                                                                    <i class="fa-solid fa-key text-[11px]"></i>
+                                                                </button>
                                                             </form>
-                                                            <form method="POST" onsubmit="return confirm('Delete this user?')" class="inline">
+                                                            <form method="POST" onsubmit="return confirm('Delete this user permanently?')" class="inline m-0 p-0">
                                                                 <input type="hidden" name="delete_user" value="1">
                                                                 <input type="hidden" name="delete_uid" value="<?= $u['id'] ?>">
-                                                                <button type="submit" class="px-2 py-1 bg-red-50 text-red-600 text-sm font-bold rounded-lg hover:bg-red-100 transition cursor-pointer">🗑️</button>
+                                                                <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-lg border border-rose-200/70 shadow-xs transition cursor-pointer shrink-0" title="Delete user">
+                                                                    <i class="fa-regular fa-trash-can text-xs"></i>
+                                                                </button>
                                                             </form>
                                                         <?php endif; ?>
                                                     </div>
@@ -2041,15 +2054,15 @@ usort($supervisor_workloads, function($a, $b) {
                             return strcasecmp($a['full_name'] ?: $a['username'], $b['full_name'] ?: $b['username']);
                         });
 
-                        // Fetch latest grade for each student
+                        // Fetch latest evaluation grade and week for each student
                         $hist_grades = [];
                         foreach ($hist_students as $hs) {
-                            $gq = $db->prepare("SELECT grade FROM report_evaluations WHERE student_id = ? ORDER BY evaluated_at DESC LIMIT 1");
+                            $gq = $db->prepare("SELECT grade, week_number FROM report_evaluations WHERE student_id = ? ORDER BY week_number DESC, evaluated_at DESC LIMIT 1");
                             $gq->bind_param("i", $hs['uid']);
                             $gq->execute();
                             $res = $gq->get_result();
-                            $row = $res ? $res->fetch_row() : null;
-                            $hist_grades[$hs['uid']] = $row[0] ?? null;
+                            $row = $res ? $res->fetch_assoc() : null;
+                            $hist_grades[$hs['uid']] = $row;
                             $gq->close();
                         }
                         ?>
@@ -2109,8 +2122,8 @@ usort($supervisor_workloads, function($a, $b) {
                                                 <th class="px-3 py-2.5 text-left">Student Name</th>
                                                 <th class="px-3 py-2.5 text-left">Company</th>
                                                 <th class="px-3 py-2.5 text-left">Supervisor</th>
-                                                <th class="px-3 py-2.5 text-left">Year</th>
-                                                <th class="px-3 py-2.5 text-left">Final Grade</th>
+                                                <th class="px-3 py-2.5 text-center">Year</th>
+                                                <th class="px-3 py-2.5 text-left">Latest Evaluation</th>
                                                 <th class="px-3 py-2.5 text-left">Action</th>
                                             </tr>
                                         </thead>
@@ -2132,27 +2145,42 @@ usort($supervisor_workloads, function($a, $b) {
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td class="px-3 py-2.5 text-slate-600 max-w-[130px] truncate" title="<?= htmlspecialchars($hs['company_name'] ?? '') ?>"><?= htmlspecialchars($hs['company_name'] ?: '—') ?></td>
-                                                    <td class="px-3 py-2.5 text-slate-500"><?= htmlspecialchars($hs['supervisor_name'] ?: 'Unassigned') ?></td>
-                                                    <td class="px-3 py-2.5">
+                                                    <td class="px-3 py-2.5 font-medium text-slate-700 whitespace-nowrap"><?= htmlspecialchars($hs['company_name'] ?: '—') ?></td>
+                                                    <td class="px-3 py-2.5 text-slate-600 whitespace-nowrap"><?= htmlspecialchars($hs['supervisor_name'] ?: 'Unassigned') ?></td>
+                                                    <td class="px-3 py-2.5 text-center">
                                                         <?php if ($hs['academic_year']): ?>
                                                             <span class="text-sm font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono"><?= htmlspecialchars($hs['academic_year']) ?></span>
                                                         <?php else: ?>
-                                                            <span class="text-sm text-slate-400">—</span>
+                                                            <span class="text-sm text-slate-400 font-medium">—</span>
                                                         <?php endif; ?>
                                                     </td>
                                                     <td class="px-3 py-2.5">
                                                         <?php
-                                                        $grade_map = [
-                                                            'excellent'         => ['Excellent',         'text-emerald-600', 'bg-emerald-50'],
-                                                            'good'              => ['Good',              'text-blue-600',    'bg-blue-50'],
-                                                            'average'           => ['Average',           'text-amber-600',   'bg-amber-50'],
-                                                            'needs_improvement' => ['Needs Improvement', 'text-red-600',     'bg-red-50'],
-                                                        ];
-                                                        $gv = $hist_grades[$hs['uid']] ?? null;
-                                                        $gs = $gv ? ($grade_map[$gv] ?? ['—', 'text-slate-400', 'bg-slate-50']) : ['—', 'text-slate-400', 'bg-slate-50'];
+                                                        $eval_data = $hist_grades[$hs['uid']] ?? null;
+                                                        if ($eval_data && !empty($eval_data['grade'])):
+                                                            $gv = $eval_data['grade'];
+                                                            $wk = (int) ($eval_data['week_number'] ?? 1);
+                                                            $grade_map = [
+                                                                'excellent'         => ['Excellent',  'text-emerald-700', 'bg-emerald-50', 'border-emerald-200/70'],
+                                                                'good'              => ['Good',       'text-blue-700',    'bg-blue-50',    'border-blue-200/70'],
+                                                                'average'           => ['Average',    'text-amber-700',   'bg-amber-50',   'border-amber-200/70'],
+                                                                'needs_improvement' => ['Needs Imp.', 'text-rose-700',    'bg-rose-50',    'border-rose-200/70'],
+                                                            ];
+                                                            $gs = $grade_map[$gv] ?? ['Graded', 'text-slate-700', 'bg-slate-50', 'border-slate-200/70'];
                                                         ?>
-                                                        <span class="text-sm font-bold <?= $gs[1] ?> <?= $gs[2] ?> px-2 py-0.5 rounded"><?= $gs[0] ?></span>
+                                                            <div class="flex items-center gap-1.5 flex-nowrap">
+                                                                <span class="inline-flex items-center justify-center w-[84px] h-7 text-xs font-bold <?= $gs[1] ?> <?= $gs[2] ?> border <?= $gs[3] ?> rounded-lg shadow-xs shrink-0" title="<?= htmlspecialchars(ucwords(str_replace('_', ' ', $gv))) ?>">
+                                                                    <?= $gs[0] ?>
+                                                                </span>
+                                                                <?php if ($wk >= 12): ?>
+                                                                    <span class="inline-flex items-center justify-center h-7 px-2 text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/70 rounded-lg shadow-xs font-mono shrink-0" title="Completed 12-week internship">Wk 12 (Final)</span>
+                                                                <?php else: ?>
+                                                                    <span class="inline-flex items-center justify-center w-14 h-7 text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200/70 rounded-lg shadow-xs font-mono shrink-0" title="Evaluated for Week <?= $wk ?>">Wk <?= $wk ?></span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <span class="inline-flex items-center justify-center w-[84px] h-7 text-xs text-slate-400 font-medium bg-slate-50 border border-slate-200/50 rounded-lg">—</span>
+                                                        <?php endif; ?>
                                                     </td>
                                                     <td class="px-3 py-2.5">
                                                         <a href="../view_student_history.php?uid=<?= $hs['uid'] ?>" class="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:text-indigo-800 border border-indigo-200/60 shadow-xs transition-colors duration-150 ease-in-out">
