@@ -69,3 +69,35 @@ function showToast(message, type) {
         setTimeout(function() { toast.remove(); }, 300);
     }, 3000);
 }
+
+/**
+ * Global Smooth Scroll to Top for Main Container
+ */
+(function() {
+    function initScrollToTop() {
+        var mainEl = document.querySelector('main');
+        var btn = document.getElementById('adminScrollToTopBtn');
+        if (!mainEl || !btn) return;
+
+        mainEl.addEventListener('scroll', function() {
+            if (mainEl.scrollTop > 150) {
+                btn.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-4');
+                btn.classList.add('opacity-100', 'pointer-events-auto', 'translate-y-0');
+            } else {
+                btn.classList.add('opacity-0', 'pointer-events-none', 'translate-y-4');
+                btn.classList.remove('opacity-100', 'pointer-events-auto', 'translate-y-0');
+            }
+        });
+
+        window.adminScrollToTop = function() {
+            mainEl.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initScrollToTop);
+    } else {
+        initScrollToTop();
+    }
+})();
+

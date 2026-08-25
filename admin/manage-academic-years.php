@@ -95,36 +95,21 @@ $selected_year_history = [];
     <!-- ─── MAIN ─── -->
     <div class="flex-1 flex flex-col overflow-hidden">
 
-        <?php $pageTitle = 'Academic Year Management'; require_once __DIR__ . '/../includes/topbar.php'; ?>
+        <?php $pageTitle = '📅 Academic Years Management'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
-        <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
+        <main class="flex-1 overflow-y-auto scroll-smooth p-4 lg:p-6" style="scrollbar-gutter: stable;">
 
             <!-- Success/Error Toast -->
             <div id="toast" class="hidden fixed top-6 right-6 z-[100] max-w-sm"></div>
 
-            <div class="w-full space-y-6">
-
-                <!-- Header Row -->
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h2 class="text-lg font-black text-slate-800">Academic Years</h2>
-                        <p class="text-sm text-slate-400 mt-0.5">Manage year sessions, transition active year, and archive completed sessions.</p>
-                    </div>
-                    <button
-                        onclick="document.getElementById('addYearModal').classList.remove('hidden')"
-                        class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center gap-2"
-                    >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-                        Add New Year
-                    </button>
-                </div>
+            <div class="w-full space-y-6 pb-16">
 
                 <!-- Active Year Banner -->
                 <?php if ($current_active): ?>
                 <div class="bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-5 text-white shadow-lg shadow-emerald-500/20">
-                    <div class="flex items-center justify-between">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div class="flex items-center gap-4">
-                            <div class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl border border-white/30">
+                            <div class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl border border-white/30 shrink-0">
                                 🟢
                             </div>
                             <div>
@@ -137,15 +122,33 @@ $selected_year_history = [];
                                 </p>
                             </div>
                         </div>
+                        <div class="shrink-0">
+                            <button
+                                onclick="document.getElementById('addYearModal').classList.remove('hidden')"
+                                class="px-4 py-2.5 bg-white text-teal-800 hover:bg-emerald-50 font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-2"
+                            >
+                                <svg class="w-4 h-4 text-teal-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                                Add New Year
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <?php else: ?>
-                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
-                    <span class="text-xl">⚠️</span>
-                    <div>
-                        <p class="text-sm font-bold text-amber-700">No active academic year</p>
-                        <p class="text-xs text-amber-500">Select "Set Active" on an academic year to set the active session.</p>
+                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xl">⚠️</span>
+                        <div>
+                            <p class="text-sm font-bold text-amber-700">No active academic year</p>
+                            <p class="text-xs text-amber-500">Select "Set Active" on an academic year to set the active session.</p>
+                        </div>
                     </div>
+                    <button
+                        onclick="document.getElementById('addYearModal').classList.remove('hidden')"
+                        class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center gap-2"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                        Add New Year
+                    </button>
                 </div>
                 <?php endif; ?>
 

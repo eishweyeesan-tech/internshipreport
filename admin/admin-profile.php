@@ -327,30 +327,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
         <div class="flex-1 flex flex-col overflow-hidden">
 
             <!-- Top Navigation Bar -->
-            <?php $pageTitle = 'Admin Profile Settings';
+            <?php $pageTitle = '👤 Admin Profile & Settings';
             require_once __DIR__ . '/../includes/topbar.php'; ?>
 
             <!-- Content Viewport -->
-            <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
-                <div class="w-full max-w-5xl mx-auto space-y-6 pb-12">
-
-                    <!-- ════ PAGE HEADER ════ -->
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-slate-200/80">
-                        <div>
-                            <h2 class="text-lg font-bold text-slate-800">Admin Profile Settings</h2>
-                            <p class="text-xs text-slate-400 mt-0.5">Manage administrator account credentials, profile picture, and system defaults.</p>
-                        </div>
-                        <div class="flex items-center gap-2 self-start sm:self-auto">
-                            <a href="#security-password-card" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:text-teal-700 shadow-xs transition-all duration-150">
-                                <i class="fa-solid fa-key text-amber-500"></i>
-                                <span>Security</span>
-                            </a>
-                            <a href="#global-defaults-card" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:text-teal-700 shadow-xs transition-all duration-150">
-                                <i class="fa-solid fa-sliders text-purple-500"></i>
-                                <span>Defaults</span>
-                            </a>
-                        </div>
-                    </div>
+            <main class="flex-1 overflow-y-auto scroll-smooth p-4 lg:p-6" style="scrollbar-gutter: stable;">
+                <div class="w-full max-w-5xl mx-auto space-y-6 pb-16">
 
                     <!-- ════ ALERT NOTIFICATIONS ════ -->
                     <?php if ($msg): ?>

@@ -138,11 +138,11 @@ if (isset($_GET['edit'])) {
     <div class="flex-1 flex flex-col overflow-hidden">
 
         <!-- Top Bar -->
-        <?php $pageTitle = 'Companies'; require_once __DIR__ . '/../includes/topbar.php'; ?>
+        <?php $pageTitle = '🏢 Placement Companies Directory'; require_once __DIR__ . '/../includes/topbar.php'; ?>
 
         <!-- Content -->
-        <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
-            <div class="w-full space-y-6">
+        <main class="flex-1 overflow-y-auto scroll-smooth p-4 lg:p-6" style="scrollbar-gutter: stable;">
+            <div class="w-full space-y-6 pb-16">
 
                 <?php if ($msg): ?>
                 <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center gap-2">

@@ -29,6 +29,7 @@ ensure_supervisor_assignments_table($db);
 // ── Academic Years (from academic_years table) ────────────────
 $active_ay_rec = get_active_academic_year($db);
 $current_active_year_label = $active_ay_rec ? $active_ay_rec['year_label'] : '2023-2024';
+$active_year_label = $current_active_year_label;
 
 $all_ay_records = get_all_academic_years($db);
 $academic_years = [];
@@ -306,7 +307,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_all_notification
     $up = $db->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0");
     $up->bind_param("i", $admin_id);
     $up->execute();
-    header('Location: admin-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
+    header('
+    ion: admin-dashboard.php' . (isset($_SERVER['QUERY_STRING']) && $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : ''));
     exit;
 }
 
@@ -700,13 +702,61 @@ foreach ($recent_company_activity as $item) {
     ];
 }
 
-
-
-
 usort($recent_activity_items, function ($a, $b) {
     return strtotime($b['created_at'] ?? 'now') <=> strtotime($a['created_at'] ?? 'now');
 });
 $recent_activity_items = array_slice($recent_activity_items, 0, 8);
+
+// Overview extra statistics & metrics
+$cs_students_count = 0;
+$ct_students_count = 0;
+$placed_students_count = 0;
+$unplaced_students_count = 0;
+$assigned_supervisor_count = 0;
+$unassigned_supervisor_count = 0;
+
+foreach ($students as $s) {
+    $m = strtolower($s['major'] ?? '');
+    if (strpos($m, 'science') !== false || $m === 'cs') {
+        $cs_students_count++;
+    } elseif (strpos($m, 'technology') !== false || $m === 'ct') {
+        $ct_students_count++;
+    }
+
+    if (!empty($s['company_name'])) {
+        $placed_students_count++;
+    } else {
+        $unplaced_students_count++;
+    }
+
+    if (!empty($s['supervisor_id'])) {
+        $assigned_supervisor_count++;
+    } else {
+        $unassigned_supervisor_count++;
+    }
+}
+
+// Supervisor workload mapping
+$supervisor_workloads = [];
+foreach ($supervisors as $sup) {
+    $sid = (int)$sup['id'];
+    $supervisor_workloads[$sid] = [
+        'id' => $sid,
+        'username' => $sup['username'],
+        'email' => $sup['email'],
+        'department' => $sup['department'] ?? 'Faculty',
+        'count' => 0
+    ];
+}
+foreach ($students as $s) {
+    $sid = (int)($s['supervisor_id'] ?? 0);
+    if ($sid > 0 && isset($supervisor_workloads[$sid])) {
+        $supervisor_workloads[$sid]['count']++;
+    }
+}
+usort($supervisor_workloads, function($a, $b) {
+    return $b['count'] <=> $a['count'];
+});
 
 // ══════════════════════════════════════════════════════════════════
 // ACTIVE TAB (Defined at top of file)
@@ -718,8 +768,11 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard – InternReport</title>
+    <title>Admin Executive Dashboard – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
         (function() {
@@ -731,6 +784,7 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
             theme: {
                 extend: {
                     fontFamily: {
+                        'sans': ['Inter', 'sans-serif'],
                         'inter': ['Inter', 'sans-serif'],
                     },
                     fontSize: {
@@ -743,11 +797,10 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
                 }
             }
         }
-        /* Old toggleProfileDropdown removed — handled by includes/topbar.php */
     </script>
 </head>
 
-<body class="bg-slate-50 font-sans antialiased">
+<body class="bg-slate-50 font-inter antialiased">
 
     <div class="flex h-screen overflow-hidden">
 
@@ -761,6 +814,16 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
             'history'      => 'history',
         ];
         $activePage = $activePageMap[$tab] ?? 'dashboard';
+
+        $pageTitlesMap = [
+            'overview'    => '📊 Executive Dashboard',
+            'students'    => '🎓 Student Management & Assignments',
+            'supervisors' => '👨‍🏫 Supervisor Overview & Distribution',
+            'manage'      => ($filter_pending ? '⏳ Pending Account Approvals' : ($filter_role === 'supervisor' ? '👨‍🏫 Manage Supervisors' : ($filter_role === 'student' ? '🎓 Manage Students' : '👥 User Account Management'))),
+            'archive'     => '📦 Academic Year Archive & History',
+            'history'     => '📜 Reports & Activity Audit Logs',
+        ];
+        $pageTitle = $pageTitlesMap[$tab] ?? '📊 Admin Executive Dashboard';
         ?>
         <?php require_once __DIR__ . '/../includes/admin-sidebar.php'; ?>
 
@@ -768,165 +831,302 @@ $recent_activity_items = array_slice($recent_activity_items, 0, 8);
         <div class="flex-1 flex flex-col overflow-hidden">
 
             <!-- Top Bar -->
-            <?php $pageTitle = 'Dashboard';
-            require_once __DIR__ . '/../includes/topbar.php'; ?>
+            <?php require_once __DIR__ . '/../includes/topbar.php'; ?>
 
             <!-- Content -->
-            <main class="flex-1 overflow-y-auto p-4 lg:p-6" style="scrollbar-gutter: stable;">
+            <main class="flex-1 overflow-y-auto scroll-smooth p-4 lg:p-6" style="scrollbar-gutter: stable;">
 
-                <?php if ($msg): ?>
-                    <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center gap-2 mb-6">
-                        <span>✅</span> <?= htmlspecialchars($msg) ?>
-                    </div>
-                <?php endif; ?>
-                <?php if ($err): ?>
-                    <div class="bg-red-50 border border-red-200 text-red-700 text-sm font-semibold px-4 py-3 rounded-xl flex items-center gap-2 mb-6">
-                        <span>❌</span> <?= htmlspecialchars($err) ?>
-                    </div>
-                <?php endif; ?>
+                <!-- Success/Error Toast -->
+                <div id="toast" class="hidden fixed top-6 right-6 z-[100] max-w-sm"></div>
 
-                <div class="w-full space-y-6">
+                <div class="w-full space-y-6 pb-16">
 
-                    <!-- Success/Error Toast -->
-                    <div id="toast" class="hidden fixed top-6 right-6 z-[100] max-w-sm"></div>
-
-                    <!-- ════ ANALYTICS SUMMARY CARDS (always visible) ════ -->
-                    <div class="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <!-- Students Card -->
-                        <a href="?tab=students#allRegisteredStudentsCard" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-teal-200 hover:bg-teal-50/60 cursor-pointer">
-                            <div class="flex items-center gap-3">
-                                <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl transition group-hover:bg-teal-100">🎓</div>
-                                <div>
-                                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Students</p>
-                                    <p class="text-2xl font-black text-slate-800"><?= $student_count ?></p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <!-- Supervisors Card -->
-                        <a href="?tab=manage&role=supervisor<?= ($selected_year && $selected_year !== 'all') ? '&year=' . urlencode($selected_year) : '' ?>" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-200 hover:bg-emerald-50/60 cursor-pointer">
-                            <div class="flex items-center gap-3">
-                                <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center text-xl transition group-hover:bg-emerald-100">👨‍🏫</div>
-                                <div>
-                                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Supervisors</p>
-                                    <p class="text-2xl font-black text-slate-800"><?= $supervisor_count ?></p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <!-- Companies Card -->
-                        <a href="manage-companies.php" class="group block bg-white rounded-2xl border border-slate-200 shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-teal-200 hover:bg-teal-50/60 cursor-pointer">
-                            <div class="flex items-center gap-3">
-                                <div class="w-11 h-11 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center text-xl transition group-hover:bg-teal-100">🏢</div>
-                                <div>
-                                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Companies</p>
-                                    <p class="text-2xl font-black text-slate-800"><?= $company_count ?></p>
-                                </div>
-                            </div>
-                        </a>
-
-                        <!-- Pending Requests Card — dynamic alert style -->
-                        <a href="?tab=manage&filter=pending<?= ($selected_year && $selected_year !== 'all') ? '&year=' . urlencode($selected_year) : '' ?>" class="group block rounded-2xl shadow-sm p-5 transition-all duration-200 hover:-translate-y-0.5 cursor-pointer <?= $pending_count > 0
-                                                                                                                                                                                                                                                                                ? 'bg-amber-50 border-2 border-amber-300 hover:shadow-md hover:border-amber-400 hover:bg-amber-100/60'
-                                                                                                                                                                                                                                                                                : 'bg-white border border-slate-200 hover:shadow-md hover:border-amber-200 hover:bg-amber-50/60'
-                                                                                                                                                                                                                                                                            ?>">
-                            <div class="flex items-center gap-3">
-                                <div class="relative w-11 h-11 rounded-xl flex items-center justify-center text-xl transition <?= $pending_count > 0
-                                                                                                                                    ? 'bg-amber-100 text-amber-600 group-hover:bg-amber-200'
-                                                                                                                                    : 'bg-amber-50 text-amber-600 group-hover:bg-amber-100'
-                                                                                                                                ?>">
-                                    ⏳
-                                    <?php if ($pending_count > 0): ?>
-                                        <span class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-amber-50 animate-pulse"></span>
-                                    <?php endif; ?>
-                                </div>
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-wider <?= $pending_count > 0 ? 'text-amber-600' : 'text-slate-400' ?>">Pending Requests</p>
-                                    <div class="flex items-center gap-2">
-                                        <p class="text-2xl font-black <?= $pending_count > 0 ? 'text-amber-700' : 'text-slate-800' ?>"><?= $pending_count ?></p>
-                                        <?php if ($pending_count > 0): ?>
-                                            <span class="text-xs font-bold text-amber-700 bg-amber-200 px-2 py-0.5 rounded-full animate-pulse">Action Needed</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </a>
-                    </div>
+                    <?php if ($msg): ?>
+                        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <span>✅</span> <?= htmlspecialchars($msg) ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if ($err): ?>
+                        <div class="bg-red-50 border border-red-200 text-red-700 text-sm font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <span>❌</span> <?= htmlspecialchars($err) ?>
+                        </div>
+                    <?php endif; ?>
 
                     <?php if ($tab === 'overview'): ?>
                         <!-- ════ TAB: OVERVIEW ════ -->
 
-                        <div class="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6 items-start">
-
-                            <!-- Recent Students -->
-                            <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm h-full">
-                                <div class="flex justify-between items-center mb-4">
-                                    <h2 class="text-xs font-bold text-slate-400 tracking-wider uppercase">Recent Students</h2>
-                                    <a href="?tab=students#allRegisteredStudentsCard" class="text-sm font-bold text-indigo-600 hover:underline">View All →</a>
-                                </div>
-                                <div class="divide-y divide-slate-100 max-h-64 overflow-y-auto">
-                                    <?php foreach (array_slice($students, 0, 5) as $s): ?>
-                                        <div class="py-3 flex items-center gap-3">
-                                            <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm font-bold shrink-0">
-                                                <?= strtoupper(($s['full_name'] ?: $s['username'])[0]) ?>
-                                            </div>
-                                            <div class="flex-1 min-w-0">
-                                                <p class="text-xs font-semibold text-slate-700 truncate"><?= htmlspecialchars($s['full_name'] ?: $s['username']) ?></p>
-                                                <p class="text-sm text-slate-400"><?= htmlspecialchars($s['company_name'] ?: 'No company') ?></p>
-                                            </div>
-                                            <span class="text-sm text-slate-400 shrink-0"><?= htmlspecialchars($s['student_roll'] ?: '') ?></span>
+                        <!-- ═══ 1. COMPACT EXECUTIVE WELCOME BANNER ═══ -->
+                        <section class="bg-gradient-to-r from-[#005f73] via-[#0a9396] to-[#005f73] rounded-2xl p-4 sm:p-5 text-white shadow-md shadow-teal-900/10 relative overflow-hidden">
+                            <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_60%)]"></div>
+                            <div class="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div class="flex items-center gap-3.5">
+                                    <div class="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center text-2xl border border-white/20 shadow-xs shrink-0">
+                                        🏛️
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <h2 class="text-lg sm:text-xl font-black tracking-tight text-white">Welcome back, <?= htmlspecialchars($admin_name ?: 'Administrator') ?>!</h2>
                                         </div>
-                                    <?php endforeach; ?>
-                                    <?php if (empty($students)): ?>
-                                        <div class="py-6 text-center text-xs text-slate-400">No students yet.</div>
-                                    <?php endif; ?>
+                                        <p class="text-xs text-teal-100/90 font-medium mt-0.5">
+                                            <?= date('l, d F Y') ?> · Executive overview of students, supervisor allocations, and partner companies
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <!-- Quick Badges & Actions -->
+                                <div class="flex items-center gap-2.5 flex-wrap">
+                                    <div class="flex items-center gap-1.5 bg-white/10 backdrop-blur-md border border-white/20 rounded-xl px-3 py-1.5 text-xs font-semibold shadow-2xs">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                                        <span>Academic Year: <?= htmlspecialchars($active_year_label ?: 'Current') ?></span>
+                                    </div>
+                                    <a href="?tab=students" class="px-3.5 py-1.5 bg-white text-teal-900 hover:bg-teal-50 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 hover:scale-[1.02] cursor-pointer">
+                                        <i class="fa-solid fa-user-plus text-teal-700"></i>
+                                        <span>Register Student</span>
+                                    </a>
                                 </div>
                             </div>
+                        </section>
 
-                            <!-- Recent Activities -->
-                            <div class="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm h-full">
-                                <div class="flex justify-between items-center mb-4">
-                                    <h2 class="text-xs font-bold text-slate-400 tracking-wider uppercase">Recent Activities</h2>
+                        <!-- ═══ 2. ANALYTICS SUMMARY CARDS (OVERVIEW ONLY) ═══ -->
+                        <div class="w-full grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- Students Card -->
+                            <a href="?tab=students#allRegisteredStudentsCard" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md hover:border-teal-300 transition-all duration-200 group cursor-pointer">
+                                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 text-white flex items-center justify-center text-xl shadow-md shadow-teal-700/20 shrink-0 group-hover:scale-105 transition-transform">
+                                    🎓
                                 </div>
-                                <?php if (!empty($recent_activity_items)): ?>
-                                    <div class="space-y-3 max-h-72 overflow-y-auto pr-1">
-                                        <?php foreach ($recent_activity_items as $activity): ?>
-                                            <?php
-                                            $activity_icon = [
-                                                'student' => '🎓',
-                                                'supervisor' => '👨‍🏫',
-                                                'company' => '🏢',
-                                                'holiday' => '🇲🇲',
-                                                'announcement' => '📢',
-                                            ][$activity['type']] ?? '📋';
-                                            $activity_bg = [
-                                                'student' => 'bg-indigo-50 text-indigo-600',
-                                                'supervisor' => 'bg-emerald-50 text-emerald-600',
-                                                'company' => 'bg-blue-50 text-blue-600',
-                                                'holiday' => 'bg-red-50 text-red-600',
-                                                'announcement' => 'bg-amber-50 text-amber-600',
-                                            ][$activity['type']] ?? 'bg-slate-100 text-slate-500';
-                                            $activity_time = $activity['created_at'] ? (new DateTime($activity['created_at']))->format('d M Y, H:i') : 'Recently added';
-                                            ?>
-                                            <div class="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-3">
-                                                <div class="w-9 h-9 rounded-xl flex items-center justify-center text-lg shrink-0 <?= $activity_bg ?>">
-                                                    <?= $activity_icon ?>
+                                <div class="min-w-0">
+                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Students</p>
+                                    <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $student_count ?></p>
+                                    <p class="text-[11px] text-teal-700 font-bold mt-0.5 truncate">
+                                        <?= $placed_students_count > 0 ? "✓ {$placed_students_count} Placed in Companies" : "View registered students →" ?>
+                                    </p>
+                                </div>
+                            </a>
+
+                            <!-- Supervisors Card -->
+                            <a href="?tab=supervisors" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md hover:border-emerald-300 transition-all duration-200 group cursor-pointer">
+                                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center text-xl shadow-md shadow-emerald-600/20 shrink-0 group-hover:scale-105 transition-transform">
+                                    👨‍🏫
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Supervisors</p>
+                                    <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $supervisor_count ?></p>
+                                    <p class="text-[11px] text-emerald-700 font-bold mt-0.5 truncate">
+                                        Faculty Mentors Active →
+                                    </p>
+                                </div>
+                            </a>
+
+                            <!-- Companies Card -->
+                            <a href="manage-companies.php" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md hover:border-blue-300 transition-all duration-200 group cursor-pointer">
+                                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center text-xl shadow-md shadow-blue-600/20 shrink-0 group-hover:scale-105 transition-transform">
+                                    🏢
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Host Companies</p>
+                                    <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $company_count ?></p>
+                                    <p class="text-[11px] text-blue-700 font-bold mt-0.5 truncate">
+                                        Placement Partners →
+                                    </p>
+                                </div>
+                            </a>
+
+                            <!-- Pending Requests Card — dynamic alert style -->
+                            <a href="?tab=manage&filter=pending<?= ($selected_year && $selected_year !== 'all') ? '&year=' . urlencode($selected_year) : '' ?>" class="rounded-2xl shadow-xs p-4 sm:p-5 flex items-center gap-3.5 transition-all duration-200 group cursor-pointer <?= $pending_count > 0 ? 'bg-amber-50/90 border-2 border-amber-300 ring-2 ring-amber-300/30 shadow-md hover:bg-amber-100/70' : 'bg-white border border-slate-200/80 hover:border-amber-300 hover:shadow-md' ?>">
+                                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center text-xl shadow-md shadow-amber-600/20 shrink-0 group-hover:scale-105 transition-transform relative">
+                                    ⏳
+                                    <?php if ($pending_count > 0): ?>
+                                        <span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-[11px] font-bold uppercase tracking-wider <?= $pending_count > 0 ? 'text-amber-800' : 'text-slate-400' ?>">Pending Requests</p>
+                                    <p class="text-xl sm:text-2xl font-black <?= $pending_count > 0 ? 'text-amber-900' : 'text-slate-800' ?> mt-0.5"><?= $pending_count ?></p>
+                                    <p class="text-[11px] font-bold <?= $pending_count > 0 ? 'text-amber-700' : 'text-slate-400' ?> mt-0.5 truncate">
+                                        <?= $pending_count > 0 ? '⚡ Action Needed →' : 'All Accounts Verified ✓' ?>
+                                    </p>
+                                </div>
+                            </a>
+                        </div>
+
+                        <!-- ═══ 3. TWO-COLUMN EXECUTIVE ANALYTICS GRID ═══ -->
+                        <div class="w-full grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+
+                            <!-- Left Column: Recent Students & Distribution Stats -->
+                            <div class="space-y-6">
+
+                                <!-- Recent Students Card -->
+                                <div class="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-xs">
+                                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-7 h-7 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center text-xs font-bold">🎓</span>
+                                            <h2 class="text-xs font-black text-slate-800 tracking-wider uppercase">Recently Enrolled Students</h2>
+                                        </div>
+                                        <a href="?tab=students#allRegisteredStudentsCard" class="text-xs font-bold text-teal-700 hover:text-teal-900 hover:underline">View All (<?= $student_count ?>) →</a>
+                                    </div>
+                                    <div class="divide-y divide-slate-100 max-h-72 overflow-y-auto pr-1">
+                                        <?php foreach (array_slice($students, 0, 6) as $s): ?>
+                                            <div class="py-2.5 flex items-center gap-3 hover:bg-slate-50/80 p-2 rounded-xl transition">
+                                                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-600 to-cyan-700 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
+                                                    <?= strtoupper(($s['full_name'] ?: $s['username'])[0]) ?>
                                                 </div>
-                                                <div class="min-w-0">
-                                                    <p class="text-sm font-semibold text-slate-700"><?= htmlspecialchars($activity['title']) ?></p>
-                                                    <p class="text-sm text-slate-500 truncate"><?= htmlspecialchars($activity['detail']) ?></p>
-                                                    <p class="text-xs text-slate-400 mt-1"><?= htmlspecialchars($activity_time) ?></p>
+                                                <div class="flex-1 min-w-0">
+                                                    <div class="flex items-center gap-2">
+                                                        <p class="text-xs font-bold text-slate-800 truncate"><?= htmlspecialchars($s['full_name'] ?: $s['username']) ?></p>
+                                                        <?php if (!empty($s['major'])): ?>
+                                                            <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 shrink-0"><?= htmlspecialchars($s['major']) ?></span>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <p class="text-[11px] text-slate-400 truncate mt-0.5">
+                                                        🏢 <?= htmlspecialchars($s['company_name'] ?: 'No Company Assigned') ?>
+                                                    </p>
                                                 </div>
+                                                <span class="text-[11px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg shrink-0">
+                                                    <?= htmlspecialchars($s['student_roll'] ?: '—') ?>
+                                                </span>
                                             </div>
                                         <?php endforeach; ?>
+                                        <?php if (empty($students)): ?>
+                                            <div class="py-8 text-center text-xs text-slate-400">No student records found.</div>
+                                        <?php endif; ?>
                                     </div>
-                                <?php else: ?>
-                                    <div class="flex flex-col items-center justify-center py-10 text-center">
-                                        <div class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mb-4">📋</div>
-                                        <p class="text-sm font-semibold text-slate-500">No recent activity yet</p>
-                                        <p class="text-xs text-slate-400 mt-1 max-w-[240px]">New students, supervisors, and companies will appear here.</p>
+                                </div>
+
+                                <!-- Internship & Department Distribution Card -->
+                                <div class="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+                                    <div class="flex items-center gap-2 pb-2 border-b border-slate-100">
+                                        <span class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">📊</span>
+                                        <h2 class="text-xs font-black text-slate-800 tracking-wider uppercase">Internship Program Health</h2>
                                     </div>
-                                <?php endif; ?>
+
+                                    <!-- Placement Progress Bar -->
+                                    <?php 
+                                    $placed_pct = $student_count > 0 ? round(($placed_students_count / $student_count) * 100) : 0;
+                                    $sup_assigned_pct = $student_count > 0 ? round(($assigned_supervisor_count / $student_count) * 100) : 0;
+                                    ?>
+                                    <div class="space-y-1.5">
+                                        <div class="flex justify-between text-xs font-bold">
+                                            <span class="text-slate-700">Company Placement Rate</span>
+                                            <span class="text-teal-700"><?= $placed_students_count ?> of <?= $student_count ?> (<?= $placed_pct ?>%)</span>
+                                        </div>
+                                        <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                            <div class="h-full bg-gradient-to-r from-teal-500 to-cyan-600 rounded-full transition-all duration-500" style="width: <?= $placed_pct ?>%"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Supervisor Allocation Progress Bar -->
+                                    <div class="space-y-1.5 pt-1">
+                                        <div class="flex justify-between text-xs font-bold">
+                                            <span class="text-slate-700">Supervisor Allocation Rate</span>
+                                            <span class="text-emerald-700"><?= $assigned_supervisor_count ?> of <?= $student_count ?> (<?= $sup_assigned_pct ?>%)</span>
+                                        </div>
+                                        <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                            <div class="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" style="width: <?= $sup_assigned_pct ?>%"></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Majors Distribution Chips -->
+                                    <div class="grid grid-cols-2 gap-3 pt-2">
+                                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                                            <p class="text-[10px] font-bold text-slate-400 uppercase">Computer Science</p>
+                                            <p class="text-lg font-black text-slate-800 mt-0.5"><?= $cs_students_count ?> <span class="text-xs font-normal text-slate-400">students</span></p>
+                                        </div>
+                                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                                            <p class="text-[10px] font-bold text-slate-400 uppercase">Computer Technology</p>
+                                            <p class="text-lg font-black text-slate-800 mt-0.5"><?= $ct_students_count ?> <span class="text-xs font-normal text-slate-400">students</span></p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <!-- Right Column: Recent Activities & Supervisor Workload -->
+                            <div class="space-y-6">
+
+                                <!-- Live Activity Feed Card -->
+                                <div class="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-xs">
+                                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-xs font-bold">⚡</span>
+                                            <h2 class="text-xs font-black text-slate-800 tracking-wider uppercase">Live System Audit & Activity</h2>
+                                        </div>
+                                        <a href="?tab=history" class="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline">Full Log →</a>
+                                    </div>
+                                    <?php if (!empty($recent_activity_items)): ?>
+                                        <div class="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                                            <?php foreach ($recent_activity_items as $activity): ?>
+                                                <?php
+                                                $activity_icon = [
+                                                    'student' => '🎓',
+                                                    'supervisor' => '👨‍🏫',
+                                                    'company' => '🏢',
+                                                    'holiday' => '🇲🇲',
+                                                    'announcement' => '📢',
+                                                ][$activity['type']] ?? '📋';
+                                                $activity_bg = [
+                                                    'student' => 'bg-teal-50 text-teal-700',
+                                                    'supervisor' => 'bg-emerald-50 text-emerald-700',
+                                                    'company' => 'bg-blue-50 text-blue-700',
+                                                    'holiday' => 'bg-red-50 text-red-700',
+                                                    'announcement' => 'bg-amber-50 text-amber-700',
+                                                ][$activity['type']] ?? 'bg-slate-100 text-slate-500';
+                                                $activity_time = $activity['created_at'] ? (new DateTime($activity['created_at']))->format('d M Y, h:i A') : 'Recently added';
+                                                ?>
+                                                <div class="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 p-2.5 hover:bg-slate-50 transition">
+                                                    <div class="w-8 h-8 rounded-xl flex items-center justify-center text-sm shrink-0 <?= $activity_bg ?> shadow-2xs">
+                                                        <?= $activity_icon ?>
+                                                    </div>
+                                                    <div class="min-w-0 flex-1">
+                                                        <div class="flex items-center justify-between gap-2">
+                                                            <p class="text-xs font-bold text-slate-800 truncate"><?= htmlspecialchars($activity['title']) ?></p>
+                                                            <span class="text-[10px] text-slate-400 shrink-0"><?= htmlspecialchars($activity_time) ?></span>
+                                                        </div>
+                                                        <p class="text-xs text-slate-500 truncate mt-0.5"><?= htmlspecialchars($activity['detail']) ?></p>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="flex flex-col items-center justify-center py-10 text-center">
+                                            <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center text-xl mb-3">📋</div>
+                                            <p class="text-xs font-bold text-slate-600">No recent activity logged yet</p>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+
+                                <!-- Supervisor Allocation Distribution Card -->
+                                <div class="bg-white border border-slate-200/80 rounded-2xl p-5 sm:p-6 shadow-xs">
+                                    <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                                        <div class="flex items-center gap-2">
+                                            <span class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center text-xs font-bold">👨‍🏫</span>
+                                            <h2 class="text-xs font-black text-slate-800 tracking-wider uppercase">Supervisor Mentorship Load</h2>
+                                        </div>
+                                        <a href="?tab=supervisors" class="text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:underline">Manage →</a>
+                                    </div>
+                                    <div class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                        <?php if (!empty($supervisor_workloads)): ?>
+                                            <?php foreach (array_slice($supervisor_workloads, 0, 5) as $sw): ?>
+                                                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-100 hover:border-emerald-200 transition">
+                                                    <div class="flex items-center gap-2.5 min-w-0">
+                                                        <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                                                            <?= strtoupper($sw['username'][0]) ?>
+                                                        </div>
+                                                        <div class="min-w-0">
+                                                            <p class="text-xs font-bold text-slate-800 truncate"><?= htmlspecialchars($sw['username']) ?></p>
+                                                            <p class="text-[10px] text-slate-400 truncate"><?= htmlspecialchars($sw['department']) ?></p>
+                                                        </div>
+                                                    </div>
+                                                    <span class="px-2.5 py-1 rounded-lg text-xs font-bold <?= $sw['count'] > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600' ?> shrink-0">
+                                                        👥 <?= $sw['count'] ?> <?= $sw['count'] === 1 ? 'intern' : 'interns' ?>
+                                                    </span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <div class="py-6 text-center text-xs text-slate-400">No supervisor records found.</div>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+
                             </div>
 
                         </div>
