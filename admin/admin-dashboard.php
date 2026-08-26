@@ -754,7 +754,7 @@ foreach ($students as $s) {
         $supervisor_workloads[$sid]['count']++;
     }
 }
-usort($supervisor_workloads, function($a, $b) {
+usort($supervisor_workloads, function ($a, $b) {
     return $b['count'] <=> $a['count'];
 });
 
@@ -816,8 +816,8 @@ usort($supervisor_workloads, function($a, $b) {
         $activePage = $activePageMap[$tab] ?? 'dashboard';
 
         $pageTitlesMap = [
-            'overview'    => '📊 Executive Dashboard',
-            'students'    => '🎓 Student Management & Assignments',
+            'overview'    => '📊 Dashboard',
+            'students'    => '🎓 Student Management',
             'supervisors' => '👨‍🏫 Supervisor Overview & Distribution',
             'manage'      => ($filter_pending ? '⏳ Pending Account Approvals' : ($filter_role === 'supervisor' ? '👨‍🏫 Manage Supervisors' : ($filter_role === 'student' ? '🎓 Manage Students' : '👥 User Account Management'))),
             'archive'     => '📦 Academic Year Archive & History',
@@ -1000,7 +1000,7 @@ usort($supervisor_workloads, function($a, $b) {
                                     </div>
 
                                     <!-- Placement Progress Bar -->
-                                    <?php 
+                                    <?php
                                     $placed_pct = $student_count > 0 ? round(($placed_students_count / $student_count) * 100) : 0;
                                     $sup_assigned_pct = $student_count > 0 ? round(($assigned_supervisor_count / $student_count) * 100) : 0;
                                     ?>
@@ -1274,12 +1274,15 @@ usort($supervisor_workloads, function($a, $b) {
                                         <tbody id="studentTableBody" class="divide-y divide-slate-100">
                                             <?php
                                             $current_batch_year = null;
+                                            $batch_student_index = 0;
                                             foreach ($students as $i => $s):
                                                 $s_ay = $s['academic_year'] ?: 'Unassigned Year';
                                                 $is_new_batch = ($s_ay !== $current_batch_year);
                                                 if ($is_new_batch) {
                                                     $current_batch_year = $s_ay;
+                                                    $batch_student_index = 0;
                                                 }
+                                                $batch_student_index++;
                                                 $stu_search_str = strtolower(trim(($s['student_roll'] ?? '') . ' ' . ($s['username'] ?? '') . ' ' . ($s['full_name'] ?? '') . ' ' . ($s['email'] ?? '') . ' ' . ($s['company_name'] ?? '') . ' ' . ($s['job_role'] ?? '') . ' ' . ($s['supervisor_name'] ?? '') . ' ' . $s_ay));
                                             ?>
                                                 <?php if ($is_new_batch && (empty($filter_stu_year) || $filter_stu_year === 'all')): ?>
@@ -1296,7 +1299,7 @@ usort($supervisor_workloads, function($a, $b) {
                                                 <tr class="student-row hover:bg-slate-50/80 transition-colors" data-search="<?= htmlspecialchars($stu_search_str) ?>" data-ay="<?= htmlspecialchars($s_ay) ?>">
                                                     <td class="px-4 py-3.5">
                                                         <div class="flex items-center gap-2">
-                                                            <span class="text-slate-400 font-mono text-xs w-5"><?= $i + 1 ?></span>
+                                                            <span class="student-seq-badge text-slate-400 font-mono text-xs w-5"><?= $batch_student_index ?></span>
                                                             <span class="font-mono font-bold text-slate-800 text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60"><?= htmlspecialchars($s['student_roll'] ?: $s['username']) ?></span>
                                                         </div>
                                                     </td>
@@ -2368,10 +2371,11 @@ usort($supervisor_workloads, function($a, $b) {
             const rows = document.querySelectorAll('.student-row');
             let visibleCount = 0;
             const visibleBatchYears = new Set();
+            const batchCounters = {};
 
             rows.forEach(function(row) {
                 const searchData = row.getAttribute('data-search') || row.innerText.toLowerCase();
-                const rowAy = (row.getAttribute('data-ay') || '').trim();
+                const rowAy = (row.getAttribute('data-ay') || 'Unassigned Year').trim();
 
                 const matchesYear = (selectedYear === 'all' || selectedYear === '' || rowAy === selectedYear);
                 const matchesQuery = (!query || searchData.includes(query));
@@ -2380,6 +2384,13 @@ usort($supervisor_workloads, function($a, $b) {
                     row.style.display = '';
                     visibleCount++;
                     if (rowAy) visibleBatchYears.add(rowAy);
+
+                    // Re-index row numbers sequentially per academic batch starting from 1
+                    batchCounters[rowAy] = (batchCounters[rowAy] || 0) + 1;
+                    const seqBadge = row.querySelector('.student-seq-badge');
+                    if (seqBadge) {
+                        seqBadge.textContent = batchCounters[rowAy];
+                    }
                 } else {
                     row.style.display = 'none';
                 }

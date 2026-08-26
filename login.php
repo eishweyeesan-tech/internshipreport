@@ -253,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <!-- Login Form -->
                         <form method="POST" class="space-y-5" autocomplete="off">
                             <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Email</label>
+                                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Email Address</label>
                                 <div class="relative">
                                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                                         <i class="fa-regular fa-envelope text-slate-400"></i>
