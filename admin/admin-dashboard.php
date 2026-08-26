@@ -71,11 +71,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     $s_email         = trim($_POST['s_email'] ?? '');
     $s_company_id    = (int) ($_POST['s_company_id'] ?? 0);
     $s_supervisor_id = (int) ($_POST['s_supervisor_id'] ?? 0);
-    $s_instructor    = trim($_POST['s_instructor'] ?? '');
-    $s_start         = trim($_POST['s_start_date'] ?? '');
-    $s_end           = trim($_POST['s_end_date'] ?? '');
-    $s_academic      = trim($_POST['s_academic_year'] ?? '') ?: $current_active_year_label;
-    $s_password      = $_POST['s_password'] ?? '';
+    $s_instructor       = trim($_POST['s_instructor'] ?? '');
+    $s_instructor_email = trim($_POST['s_instructor_email'] ?? '');
+    $s_start            = trim($_POST['s_start_date'] ?? '');
+    $s_end              = trim($_POST['s_end_date'] ?? '');
+    $s_academic         = trim($_POST['s_academic_year'] ?? '') ?: $current_active_year_label;
+    $s_password         = $_POST['s_password'] ?? '';
 
     if (empty($s_name) || empty($s_roll) || empty($s_email) || empty($s_password)) {
         $err = 'Name, Roll No, Email, and Password are required.';
@@ -121,8 +122,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
                 $ins_u->execute();
                 $uid = (int) $db->insert_id;
 
-                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins_sp->bind_param("isssisisss", $uid, $s_name, $s_roll, $s_major, $s_company_id, $company_name, $s_supervisor_id, $s_instructor, $s_start, $s_end);
+                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, instructor_email, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $ins_sp->bind_param("isssisissss", $uid, $s_name, $s_roll, $s_major, $s_company_id, $company_name, $s_supervisor_id, $s_instructor, $s_instructor_email, $s_start, $s_end);
                 $ins_sp->execute();
 
                 $msg = "Student \"{$s_name}\" created. Email: {$s_email}, Password: {$s_password}";
@@ -1164,18 +1165,24 @@ usort($supervisor_workloads, function ($a, $b) {
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Company <span class="text-slate-300 font-normal">(ကုမ္ပဏီ)</span></label>
-                                        <select name="s_company_id" id="s_company_select" onchange="autoFillCompanyInstructor(this)" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition cursor-pointer">
+                                        <select name="s_company_id" id="s_company_select" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition cursor-pointer">
                                             <option value="">— Select Company —</option>
                                             <?php foreach ($companies as $c): ?>
-                                                <option value="<?= $c['id'] ?>" data-instructor="<?= htmlspecialchars($c['contact_person'] ?? '') ?>">
-                                                    <?= htmlspecialchars($c['company_name']) ?><?= !empty($c['contact_person']) ? ' (' . htmlspecialchars($c['contact_person']) . ')' : '' ?>
+                                                <option value="<?= $c['id'] ?>">
+                                                    <?= htmlspecialchars($c['company_name']) ?><?= !empty($c['contact_person']) ? ' (Contact: ' . htmlspecialchars($c['contact_person']) . ')' : '' ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label class="block text-sm font-bold text-slate-500 mb-1">Company Instructor <span class="text-xs font-normal text-teal-600">(Auto-filled on company select)</span></label>
-                                        <input type="text" name="s_instructor" id="s_instructor_input" placeholder="e.g. U Tin Aung" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-500 mb-1">Workplace Instructor Name</label>
+                                            <input type="text" name="s_instructor" id="s_instructor_input" placeholder="e.g. U Tin Aung" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-bold text-slate-500 mb-1">Instructor Email <span class="text-xs font-normal text-teal-600">(for Review)</span></label>
+                                            <input type="email" name="s_instructor_email" placeholder="instructor@company.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                        </div>
                                     </div>
                                     <div>
                                         <label class="block text-sm font-bold text-slate-500 mb-1">Supervisor <span class="text-slate-300 font-normal">(ကျောင်းကဆရာ/မ)</span></label>
@@ -1754,10 +1761,11 @@ usort($supervisor_workloads, function ($a, $b) {
                                                 'position' => $u['position'] ?: '',
                                                 'academic_year' => $u['academic_year'] ?: '',
                                                 'company_name' => $u['company_name'] ?: '',
+                                                'company_contact_person' => $u['company_contact_person'] ?? '',
                                                 'job_role' => $u['job_role'] ?: '',
-                                                'instructor_name' => $u['instructor_name'] ?: ($u['company_contact_person'] ?? ''),
-                                                'instructor_email' => $u['instructor_email'] ?: ($u['company_contact_email'] ?? ''),
-                                                'instructor_phone' => $u['instructor_phone'] ?: ($u['company_contact_phone'] ?? ''),
+                                                'instructor_name' => $u['instructor_name'] ?: '',
+                                                'instructor_email' => $u['instructor_email'] ?: '',
+                                                'instructor_phone' => $u['instructor_phone'] ?: '',
                                                 'internship_start_date' => (!empty($u['internship_start_date']) && $u['internship_start_date'] !== '0000-00-00') ? (new DateTime($u['internship_start_date']))->format('d M Y') : '',
                                                 'internship_end_date' => (!empty($u['internship_end_date']) && $u['internship_end_date'] !== '0000-00-00') ? (new DateTime($u['internship_end_date']))->format('d M Y') : '',
                                                 'supervisor_name' => $u['supervisor_username'] ?: '',

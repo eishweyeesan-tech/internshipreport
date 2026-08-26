@@ -14,6 +14,35 @@ $db       = $mysqli ?? $conn;
 // ── Centralized Notification Action Handler ────────────────────
 handle_notification_ajax_actions($db, $sup_id);
 
+// ── Handle Supervisor Update Student Placement & Instructor ──────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_student_placement'])) {
+    $target_uid       = (int) ($_POST['student_id'] ?? 0);
+    $company_name     = trim($_POST['company_name'] ?? '');
+    $job_role         = trim($_POST['job_role'] ?? '');
+    $instructor_name  = trim($_POST['instructor_name'] ?? '');
+    $instructor_email = trim($_POST['instructor_email'] ?? '');
+    $instructor_phone = trim($_POST['instructor_phone'] ?? '');
+    $start_date       = !empty($_POST['internship_start_date']) ? $_POST['internship_start_date'] : null;
+    $end_date         = !empty($_POST['internship_end_date']) ? $_POST['internship_end_date'] : null;
+
+    if ($target_uid > 0) {
+        $chk = $db->prepare("SELECT user_id FROM student_profiles WHERE user_id = ? AND supervisor_id = ?");
+        $chk->bind_param("ii", $target_uid, $sup_id);
+        $chk->execute();
+        if ($chk->get_result()->fetch_assoc()) {
+            $upd = $db->prepare("UPDATE student_profiles SET
+                company_name = ?, job_role = ?,
+                instructor_name = ?, instructor_email = ?, instructor_phone = ?,
+                internship_start_date = ?, internship_end_date = ?
+                WHERE user_id = ?");
+            $upd->bind_param("sssssssi", $company_name, $job_role, $instructor_name, $instructor_email, $instructor_phone, $start_date, $end_date, $target_uid);
+            $upd->execute();
+        }
+    }
+    header('Location: my-students.php?placement_saved=1');
+    exit;
+}
+
 // ── Handle Single "Send Warning" for Behind Schedule Student ────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_warning'])) {
     $warn_student_id = (int) ($_POST['student_id'] ?? 0);
@@ -840,7 +869,12 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
 
                 <!-- Company & Instructor Placement -->
                 <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100 space-y-2">
-                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Host Company</p>
+                    <div class="flex items-center justify-between">
+                        <p class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Host Company & Instructor</p>
+                        <button type="button" onclick="openEditPlacementModal()" class="text-[11px] font-bold text-teal-700 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200/80 px-2.5 py-0.5 rounded-lg transition cursor-pointer flex items-center gap-1">
+                            ✏️ Edit Placement
+                        </button>
+                    </div>
                     <div>
                         <span class="text-slate-500">Company:</span>
                         <p id="modalCompanyName" class="font-bold text-slate-800 mt-0.5 break-words leading-snug"></p>
@@ -871,6 +905,59 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                     </a>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- ════ SUPERVISOR EDIT PLACEMENT & INSTRUCTOR MODAL ════ -->
+    <div id="editPlacementModal" class="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+                <h3 class="text-sm font-black text-slate-800 flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center font-bold">🏢</span>
+                    Assign Company & Instructor
+                </h3>
+                <button type="button" onclick="closeEditPlacementModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-bold transition cursor-pointer">✕</button>
+            </div>
+            <form method="POST" class="space-y-4 text-xs">
+                <input type="hidden" name="update_student_placement" value="1">
+                <input type="hidden" name="student_id" id="editPlacementStudentId" value="">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Company / Host Organization *</label>
+                    <input type="text" name="company_name" id="editPlacementCompanyName" placeholder="e.g. Ace Data Systems" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-600 focus:bg-white transition" required>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Internship Job Role</label>
+                    <input type="text" name="job_role" id="editPlacementJobRole" placeholder="e.g. Web Developer Intern" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-600 focus:bg-white transition">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Company Instructor Name *</label>
+                        <input type="text" name="instructor_name" id="editPlacementInstructorName" placeholder="e.g. U Kyaw Kyaw" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-600 focus:bg-white transition" required>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Instructor Email * <span class="text-teal-600 font-normal">(for Evaluation)</span></label>
+                        <input type="email" name="instructor_email" id="editPlacementInstructorEmail" placeholder="instructor@company.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-600 focus:bg-white transition" required>
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">Instructor Phone</label>
+                    <input type="text" name="instructor_phone" id="editPlacementInstructorPhone" placeholder="09xxxxxxxxx" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-600 focus:bg-white transition">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">Start Date</label>
+                        <input type="date" name="internship_start_date" id="editPlacementStartDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-600 focus:bg-white transition">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">End Date</label>
+                        <input type="date" name="internship_end_date" id="editPlacementEndDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-teal-600 focus:bg-white transition">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeEditPlacementModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition cursor-pointer">Cancel</button>
+                    <button type="submit" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-xs transition cursor-pointer">Save Placement</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1119,10 +1206,13 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                 });
         }
 
+        let currentQuickModalStudentId = null;
+
         /**
          * Quick Student Info Modal
          */
         function openStudentQuickModal(studentId) {
+            currentQuickModalStudentId = studentId;
             const row = document.querySelector(`.student-row[data-uid="${studentId}"]`);
             if (!row) return;
 
@@ -1200,6 +1290,34 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
 
         function closeStudentQuickModal() {
             const modal = document.getElementById('studentQuickModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        /**
+         * Open Edit Placement Modal
+         */
+        function openEditPlacementModal(studentId) {
+            const id = studentId || currentQuickModalStudentId;
+            if (!id) return;
+            const row = document.querySelector(`.student-row[data-uid="${id}"]`);
+            if (!row) return;
+
+            document.getElementById('editPlacementStudentId').value = id;
+            const rawComp = row.getAttribute('data-raw-company') || '';
+            document.getElementById('editPlacementCompanyName').value = (rawComp !== '—' && rawComp !== '—') ? rawComp : '';
+            document.getElementById('editPlacementJobRole').value = row.getAttribute('data-job-role') || '';
+            const rawInst = row.getAttribute('data-raw-instructor') || '';
+            document.getElementById('editPlacementInstructorName').value = (rawInst !== '—' && rawInst !== '—') ? rawInst : '';
+            document.getElementById('editPlacementInstructorEmail').value = row.getAttribute('data-instructor-email') || '';
+            document.getElementById('editPlacementInstructorPhone').value = row.getAttribute('data-instructor-phone') || '';
+            document.getElementById('editPlacementStartDate').value = row.getAttribute('data-start-date') || '';
+            document.getElementById('editPlacementEndDate').value = row.getAttribute('data-end-date') || '';
+
+            document.getElementById('editPlacementModal').classList.remove('hidden');
+        }
+
+        function closeEditPlacementModal() {
+            const modal = document.getElementById('editPlacementModal');
             if (modal) modal.classList.add('hidden');
         }
     </script>

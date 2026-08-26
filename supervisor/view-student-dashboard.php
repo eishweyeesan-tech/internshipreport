@@ -358,6 +358,9 @@ if ($intern_start) {
                             <div class="min-w-0">
                                 <p class="text-label font-bold text-slate-400 uppercase tracking-wider">Instructor</p>
                                 <p class="text-xs font-bold text-slate-700 truncate"><?= htmlspecialchars($instructor_name) ?></p>
+                                <?php if (!empty($profile['instructor_email'])): ?>
+                                    <p class="text-[10px] text-slate-500 font-mono truncate"><?= htmlspecialchars($profile['instructor_email']) ?></p>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <?php if ($intern_start && $intern_end): ?>

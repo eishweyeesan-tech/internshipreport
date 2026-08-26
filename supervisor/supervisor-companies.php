@@ -67,6 +67,7 @@ $company_count = (int) ($row[0] ?? 0);
 $sql = "
     SELECT u.id AS uid, u.username,
            sp.full_name, sp.student_roll, sp.job_role, sp.company_name,
+           sp.instructor_name, sp.instructor_email, sp.instructor_phone,
            c.id AS company_id, c.address, c.contact_person, c.contact_email, c.contact_phone, c.website
     FROM student_profiles sp
     JOIN users u ON u.id = sp.user_id
@@ -78,10 +79,10 @@ $types = "i";
 $params = [$sup_id];
 
 if ($search) {
-    $sql .= " AND (sp.company_name LIKE ? OR sp.full_name LIKE ? OR sp.job_role LIKE ? OR c.contact_person LIKE ? OR c.contact_email LIKE ?)";
+    $sql .= " AND (sp.company_name LIKE ? OR sp.full_name LIKE ? OR sp.job_role LIKE ? OR sp.instructor_name LIKE ? OR c.contact_person LIKE ? OR c.contact_email LIKE ?)";
     $like = '%' . $search . '%';
-    $types .= "sssss";
-    array_push($params, $like, $like, $like, $like, $like);
+    $types .= "ssssss";
+    array_push($params, $like, $like, $like, $like, $like, $like);
 }
 
 $sql .= " ORDER BY sp.company_name ASC, sp.full_name ASC";
@@ -98,22 +99,25 @@ foreach ($company_rows as $row) {
     $key = $row['company_name'];
     if (!isset($companies[$key])) {
         $companies[$key] = [
-            'company_name' => $row['company_name'],
-            'company_id'   => $row['company_id'],
-            'address'      => $row['address'],
+            'company_name'   => $row['company_name'],
+            'company_id'     => $row['company_id'],
+            'address'        => $row['address'],
             'contact_person' => $row['contact_person'],
             'contact_email'  => $row['contact_email'],
             'contact_phone'  => $row['contact_phone'],
             'website'        => $row['website'],
-            'students'     => [],
+            'students'       => [],
         ];
     }
     $companies[$key]['students'][] = [
-        'uid'         => (int) $row['uid'],
-        'full_name'   => $row['full_name'],
-        'username'    => $row['username'],
-        'student_roll' => $row['student_roll'],
-        'job_role'    => $row['job_role'],
+        'uid'              => (int) $row['uid'],
+        'full_name'        => $row['full_name'],
+        'username'         => $row['username'],
+        'student_roll'     => $row['student_roll'],
+        'job_role'         => $row['job_role'],
+        'instructor_name'  => $row['instructor_name'] ?? '',
+        'instructor_email' => $row['instructor_email'] ?? '',
+        'instructor_phone' => $row['instructor_phone'] ?? '',
     ];
 }
 
@@ -256,7 +260,7 @@ function build_query_url($overrides = [])
                                                     <p class="text-xs text-slate-500 font-medium flex items-start gap-2"><span class="shrink-0">📍</span><span><?= htmlspecialchars($company['address']) ?></span></p>
                                                 <?php endif; ?>
                                                 <?php if (!empty($company['contact_person'])): ?>
-                                                    <p class="text-xs text-slate-500 font-medium flex items-center gap-2"><span class="shrink-0">👤</span><span><?= htmlspecialchars($company['contact_person']) ?></span></p>
+                                                    <p class="text-xs text-slate-600 font-medium flex items-center gap-2"><span class="shrink-0" title="Company Contact / HR">🏢👤</span><span class="text-slate-400">Company Contact:</span><span class="font-bold text-slate-700"><?= htmlspecialchars($company['contact_person']) ?></span></p>
                                                 <?php endif; ?>
                                                 <?php if (!empty($company['contact_email'])): ?>
                                                     <p class="text-xs text-slate-500 font-medium flex items-center gap-2"><span class="shrink-0">✉️</span><a href="mailto:<?= htmlspecialchars($company['contact_email']) ?>" class="text-blue-600 hover:underline truncate"><?= htmlspecialchars($company['contact_email']) ?></a></p>
@@ -274,15 +278,24 @@ function build_query_url($overrides = [])
                                         <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Students</p>
                                         <div class="space-y-2">
                                             <?php foreach ($company['students'] as $stu): ?>
-                                                <a href="view-student-dashboard.php?id=<?= (int)$stu['uid'] ?>" class="flex items-center gap-2.5 p-2.5 bg-gradient-to-r from-slate-50 to-white border border-slate-100 rounded-xl hover:border-blue-200 hover:shadow-sm transition-all duration-200 group">
-                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-sm">
+                                                <a href="view-student-dashboard.php?id=<?= (int)$stu['uid'] ?>" class="flex items-start gap-2.5 p-2.5 bg-gradient-to-r from-slate-50 to-white border border-slate-100 rounded-xl hover:border-blue-200 hover:shadow-sm transition-all duration-200 group">
+                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-sm mt-0.5">
                                                         <?= strtoupper(substr($stu['full_name'] ?: $stu['username'], 0, 1)) ?>
                                                     </div>
                                                     <div class="min-w-0 flex-1">
                                                         <p class="text-xs font-bold text-slate-700 truncate group-hover:text-purple-600 transition-colors duration-150"><?= htmlspecialchars($stu['full_name'] ?: $stu['username']) ?></p>
                                                         <p class="text-[11px] text-slate-400 font-medium truncate"><?= htmlspecialchars($stu['student_roll'] ?: $stu['username']) ?><?= !empty($stu['job_role']) ? ' · ' . htmlspecialchars($stu['job_role']) : '' ?></p>
+                                                        <?php if (!empty($stu['instructor_name'])): ?>
+                                                            <p class="text-[10px] text-teal-700 font-semibold truncate flex items-center gap-1 mt-1 bg-teal-50/80 px-2 py-0.5 rounded-md border border-teal-100/60 w-fit max-w-full">
+                                                                <span>👨‍🏫 Instructor:</span>
+                                                                <span class="font-bold"><?= htmlspecialchars($stu['instructor_name']) ?></span>
+                                                                <?php if (!empty($stu['instructor_email'])): ?>
+                                                                    <span class="text-slate-400 font-mono font-normal truncate">(<?= htmlspecialchars($stu['instructor_email']) ?>)</span>
+                                                                <?php endif; ?>
+                                                            </p>
+                                                        <?php endif; ?>
                                                     </div>
-                                                    <span class="text-[11px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-150">View →</span>
+                                                    <span class="text-[11px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mt-1">View →</span>
                                                 </a>
                                             <?php endforeach; ?>
                                         </div>

@@ -4,15 +4,19 @@
  * 
  * Required variables (set before including):
  *   $pageTitle (string)              – Page title text
- *   $student_name (string)           – Student full name
+ *   $student_name (string)           – Student full name (auto-fetched if not set)
  * 
  * Optional variables:
- *   $student_roll (string|null)      – Student roll number
- *   $profile_pic (string|null)       – Profile picture filename
+ *   $student_roll (string|null)      – Student roll number (auto-fetched if not set)
+ *   $profile_pic (string|null)       – Profile picture filename (auto-fetched if not set)
  *   $show_back_link (bool)           – Show "Back to Dashboard" link
  *   $unread_notif_count (int)        – Unread notification count (auto-fetched if not set)
  *   $recent_notifications (array)    – Notification rows (auto-fetched if not set)
  */
+
+if (session_status() === PHP_SESSION_NONE) {
+    @session_start();
+}
 
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/notify.php';
@@ -20,28 +24,65 @@ require_once __DIR__ . '/notification_actions.php';
 
 $student_user_id = (int)($_SESSION['user_id'] ?? 0);
 
-$db = $mysqli ?? $conn ?? null;
+$db = $db ?? $mysqli ?? $conn ?? null;
 
-if ($student_user_id > 0 && $db) {
+if ($student_user_id > 0 && $db && is_object($db)) {
     handle_notification_ajax_actions($db, $student_user_id);
 }
 
+// Auto-fetch student profile information if not already provided
+if ($student_user_id > 0 && $db && is_object($db)) {
+    if (empty($student_name) || !isset($student_roll) || !isset($profile_pic)) {
+        $_prof_stmt = $db->prepare("SELECT sp.full_name, sp.student_roll, u.profile_pic, u.username, u.email 
+                                    FROM users u 
+                                    LEFT JOIN student_profiles sp ON sp.user_id = u.id 
+                                    WHERE u.id = ? LIMIT 1");
+        if ($_prof_stmt) {
+            $_prof_stmt->bind_param("i", $student_user_id);
+            $_prof_stmt->execute();
+            $_prof_res = $_prof_stmt->get_result();
+            if ($_prof_res && $_prof_row = $_prof_res->fetch_assoc()) {
+                if (empty($student_name)) {
+                    $student_name = !empty($_prof_row['full_name']) ? $_prof_row['full_name'] : (!empty($_prof_row['username']) ? $_prof_row['username'] : ($_SESSION['username'] ?? 'Student'));
+                }
+                if (!isset($student_roll) || $student_roll === null || $student_roll === '') {
+                    $student_roll = $_prof_row['student_roll'] ?? '';
+                }
+                if (!isset($profile_pic) || empty($profile_pic)) {
+                    $profile_pic = $_prof_row['profile_pic'] ?? ($_SESSION['profile_pic'] ?? '');
+                }
+            }
+            $_prof_stmt->close();
+        }
+    }
+}
+
 if (!isset($unread_notif_count) || !isset($recent_notifications)) {
-    if ($student_user_id > 0 && $db) {
+    if ($student_user_id > 0 && $db && is_object($db)) {
         if (!isset($unread_notif_count)) {
             $_unr = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
-            $_unr->bind_param("i", $student_user_id);
-            $_unr->execute();
-            $_res = $_unr->get_result();
-            $_row = $_res ? $_res->fetch_row() : null;
-            $unread_notif_count = (int)($_row[0] ?? 0);
+            if ($_unr) {
+                $_unr->bind_param("i", $student_user_id);
+                $_unr->execute();
+                $_res = $_unr->get_result();
+                $_row = $_res ? $_res->fetch_row() : null;
+                $unread_notif_count = (int)($_row[0] ?? 0);
+                $_unr->close();
+            } else {
+                $unread_notif_count = 0;
+            }
         }
         if (!isset($recent_notifications)) {
             $_rnr = $db->prepare("SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 15");
-            $_rnr->bind_param("i", $student_user_id);
-            $_rnr->execute();
-            $_res = $_rnr->get_result();
-            $recent_notifications = $_res ? $_res->fetch_all(MYSQLI_ASSOC) : [];
+            if ($_rnr) {
+                $_rnr->bind_param("i", $student_user_id);
+                $_rnr->execute();
+                $_res = $_rnr->get_result();
+                $recent_notifications = $_res ? $_res->fetch_all(MYSQLI_ASSOC) : [];
+                $_rnr->close();
+            } else {
+                $recent_notifications = [];
+            }
         }
     } else {
         if (!isset($unread_notif_count)) $unread_notif_count = 0;
@@ -50,25 +91,27 @@ if (!isset($unread_notif_count) || !isset($recent_notifications)) {
 }
 
 $student_academic_year = '';
-if ($student_user_id > 0 && $db) {
+if ($student_user_id > 0 && $db && is_object($db)) {
     $student_year_stmt = $db->prepare("SELECT u.academic_year FROM users u WHERE u.id = ? LIMIT 1");
-    $student_year_stmt->bind_param("i", $student_user_id);
-    $student_year_stmt->execute();
-    $_res = $student_year_stmt->get_result();
-    $student_year_row = $_res ? $_res->fetch_assoc() : null;
-    if ($student_year_row) {
-        $student_academic_year = trim((string) ($student_year_row['academic_year'] ?? ''));
+    if ($student_year_stmt) {
+        $student_year_stmt->bind_param("i", $student_user_id);
+        $student_year_stmt->execute();
+        $_res = $student_year_stmt->get_result();
+        $student_year_row = $_res ? $_res->fetch_assoc() : null;
+        if ($student_year_row) {
+            $student_academic_year = trim((string) ($student_year_row['academic_year'] ?? ''));
+        }
+        $student_year_stmt->close();
     }
-    $student_year_stmt->close();
 }
 
 if (!function_exists('student_notif_url')) {
-    function student_notif_url($type, $related_week, $announcement_id = null) {
+    function student_notif_url($type, $related_week = null, $announcement_id = null) {
         if ($announcement_id) {
             return 'student-dashboard.php';
         }
         $base = 'student-dashboard.php';
-        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved', 'report_needs_review', 'report_submitted'], true)) {
+        if (in_array($type, ['instructor_approved', 'instructor_rejected', 'supervisor_approved', 'report_needs_review', 'report_submitted', 'new_report_submitted'], true)) {
             $url = $base . '?tab=weekly-report';
             if ($related_week) $url .= '&week=' . (int)$related_week;
             $url .= '#feedback-section';
@@ -89,10 +132,16 @@ if (!function_exists('student_notif_url')) {
         <button type="button" onclick="toggleStudentSidebar()" class="lg:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer" aria-label="Toggle Navigation">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <span class="text-lg font-bold text-slate-800"><?= htmlspecialchars($pageTitle ?? 'Dashboard') ?></span>
+        <?php if (!empty($show_back_link)): ?>
+        <a href="student-dashboard.php" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 hover:text-teal-900 border border-teal-200/80 rounded-xl transition cursor-pointer shrink-0" title="Back to Dashboard">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+            <span class="hidden sm:inline">Back to Dashboard</span>
+        </a>
+        <?php endif; ?>
+        <span class="text-lg font-bold text-slate-800"><?= htmlspecialchars((string)($pageTitle ?? 'Dashboard')) ?></span>
         <?php if (!empty($student_academic_year)): ?>
         <span class="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">
-            Academic Year <?= htmlspecialchars($student_academic_year) ?>
+            Academic Year <?= htmlspecialchars((string)$student_academic_year) ?>
         </span>
         <?php endif; ?>
     </div>
@@ -100,9 +149,9 @@ if (!function_exists('student_notif_url')) {
 
         <!-- Notification Bell – Facebook Style -->
         <div class="relative" id="notif-bell-wrapper">
-            <button onclick="toggleNotifDropdown(event)" class="relative p-2 hover:bg-teal-50 rounded-full transition cursor-pointer" id="notif-bell-btn">
+            <button onclick="toggleNotifDropdown(event)" class="relative p-2 hover:bg-teal-50 rounded-full transition cursor-pointer" id="notif-bell-btn" aria-label="Notifications">
                 <svg class="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                <?php if ($unread_notif_count > 0): ?>
+                <?php if (($unread_notif_count ?? 0) > 0): ?>
                 <span id="notif-badge" class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white shadow-sm"><?= $unread_notif_count > 9 ? '9+' : $unread_notif_count ?></span>
                 <?php else: ?>
                 <span id="notif-badge" class="hidden absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full items-center justify-center border-2 border-white shadow-sm">0</span>
@@ -111,15 +160,27 @@ if (!function_exists('student_notif_url')) {
             <div id="notif-dropdown" class="hidden absolute right-0 top-full mt-2 w-[360px] bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden">
                 <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gradient-to-br from-teal-50/80 to-white/60">
                     <h3 class="text-[17px] font-bold text-gray-900">Notifications</h3>
-                    <button onclick="markAllNotificationsRead()" id="notif-mark-all-btn" class="text-[13px] font-semibold text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-2 py-1 rounded-lg transition cursor-pointer <?= $unread_notif_count === 0 ? 'hidden' : '' ?>">Mark all as read</button>
+                    <button onclick="markAllNotificationsRead()" id="notif-mark-all-btn" class="text-[13px] font-semibold text-teal-600 hover:text-teal-700 hover:bg-teal-50 px-2 py-1 rounded-lg transition cursor-pointer <?= ($unread_notif_count ?? 0) === 0 ? 'hidden' : '' ?>">Mark all as read</button>
                 </div>
                 <div class="max-h-[420px] overflow-y-auto" id="notif-list">
                     <?php if (!empty($recent_notifications)): ?>
                         <?php
-                        $_today = (new DateTime())->format('Y-m-d');
+                        $_today = date('Y-m-d');
                         $_section = '';
                         foreach ($recent_notifications as $_notif):
-                            $_ndate = (new DateTime($_notif['created_at']))->format('Y-m-d');
+                            $_created_at_raw = $_notif['created_at'] ?? '';
+                            $_ndate = '';
+                            $_formatted_time = '';
+                            if (!empty($_created_at_raw)) {
+                                try {
+                                    $_dt = new DateTime($_created_at_raw);
+                                    $_ndate = $_dt->format('Y-m-d');
+                                    $_formatted_time = $_dt->format('d M Y, h:i A');
+                                } catch (Exception $e) {
+                                    $_ndate = '';
+                                    $_formatted_time = (string)$_created_at_raw;
+                                }
+                            }
                             if ($_ndate === $_today && $_section !== 'today') {
                                 $_section = 'today';
                                 echo '<div class="px-4 pt-3 pb-1"><p class="text-[13px] font-bold text-gray-900">New</p></div>';
@@ -127,13 +188,12 @@ if (!function_exists('student_notif_url')) {
                                 $_section = 'older';
                                 echo '<div class="px-4 pt-3 pb-1 border-t border-gray-100"><p class="text-[13px] font-bold text-gray-900">Earlier</p></div>';
                             }
+                            $_notif_href = function_exists('notif_action_url') ? notif_action_url($_notif, 'student') : (function_exists('student_notif_url') ? student_notif_url($_notif['type'] ?? '', $_notif['related_week'] ?? null, $_notif['announcement_id'] ?? null) : 'student-dashboard.php');
+                            $_is_read = !empty($_notif['is_read']);
                         ?>
-                        <?php
-                            $_notif_href = notif_action_url($_notif, 'student');
-                        ?>
-                        <a href="<?= htmlspecialchars($_notif_href) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-teal-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_notif['is_read'] ? 'bg-teal-50/40' : '' ?>" onclick="return onNotificationItemClick(event, this)" data-notif-id="<?= (int)$_notif['id'] ?>" data-redirect-url="<?= htmlspecialchars($_notif_href) ?>" data-fallback-href="<?= htmlspecialchars($_notif_href) ?>">
-                            <?php if (!$_notif['is_read']): ?>
-                            <span class="w-2.5 h-2.5 bg-teal-500 rounded-full flex-shrink-0 mt-2 shadow-sm"></span>
+                        <a href="<?= htmlspecialchars((string)$_notif_href) ?>" class="flex items-start gap-3 px-4 py-3 hover:bg-teal-50 transition-colors duration-100 cursor-pointer group relative no-underline <?= !$_is_read ? 'bg-teal-50/40' : '' ?>" onclick="return onNotificationItemClick(event, this)" data-notif-id="<?= (int)($_notif['id'] ?? 0) ?>" data-redirect-url="<?= htmlspecialchars((string)$_notif_href) ?>" data-fallback-href="<?= htmlspecialchars((string)$_notif_href) ?>">
+                            <?php if (!$_is_read): ?>
+                            <span class="unread-dot w-2.5 h-2.5 bg-teal-500 rounded-full flex-shrink-0 mt-2 shadow-sm"></span>
                             <?php else: ?>
                             <span class="w-2.5 flex-shrink-0 mt-2"></span>
                             <?php endif; ?>
@@ -147,9 +207,9 @@ if (!function_exists('student_notif_url')) {
                                 <?php endif; ?>
                             </div>
                             <div class="min-w-0 flex-1">
-                                <p class="text-[13px] leading-snug <?= !$_notif['is_read'] ? 'font-semibold text-gray-900' : 'text-gray-600' ?>"><?= htmlspecialchars($_notif['title']) ?></p>
-                                <p class="text-[12px] text-gray-400 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars($_notif['message']) ?></p>
-                                <p class="text-[11px] mt-1 <?= !$_notif['is_read'] ? 'text-teal-600 font-medium' : 'text-gray-400' ?>" data-notif-time="<?= htmlspecialchars($_notif['created_at']) ?>"><?= (new DateTime($_notif['created_at']))->format('d M Y, h:i A') ?></p>
+                                <p class="text-[13px] leading-snug <?= !$_is_read ? 'font-semibold text-gray-900' : 'text-gray-600' ?>"><?= htmlspecialchars((string)($_notif['title'] ?? '')) ?></p>
+                                <p class="text-[12px] text-gray-400 mt-0.5 leading-snug line-clamp-2"><?= htmlspecialchars((string)($_notif['message'] ?? '')) ?></p>
+                                <p class="text-[11px] mt-1 <?= !$_is_read ? 'text-teal-600 font-medium' : 'text-gray-400' ?>" data-notif-time="<?= htmlspecialchars((string)$_created_at_raw) ?>"><?= htmlspecialchars((string)$_formatted_time) ?></p>
                             </div>
                         </a>
                         <?php endforeach; ?>
@@ -164,15 +224,19 @@ if (!function_exists('student_notif_url')) {
                     <?php endif; ?>
                 </div>
                 <div class="border-t border-gray-100">
-                    <a href="log-history.php" class="block text-center py-3 text-[13px] font-semibold text-teal-600 hover:bg-teal-50 transition-colors">See all</a>
+                    <a href="notifications.php" class="block text-center py-3 text-[13px] font-semibold text-teal-600 hover:bg-teal-50 transition-colors">See all</a>
                 </div>
             </div>
         </div>
 
         <!-- Profile Dropdown -->
         <?php
-        $topbar_student_name = !empty($student_name) ? trim($student_name) : ($_SESSION['username'] ?? 'Student');
-        $topbar_student_initial = mb_strtoupper(mb_substr($topbar_student_name, 0, 1, 'UTF-8'), 'UTF-8');
+        $topbar_student_name = !empty($student_name) ? trim((string)$student_name) : (string)($_SESSION['username'] ?? 'Student');
+        if (function_exists('mb_substr') && function_exists('mb_strtoupper')) {
+            $topbar_student_initial = mb_strtoupper(mb_substr($topbar_student_name, 0, 1, 'UTF-8'), 'UTF-8');
+        } else {
+            $topbar_student_initial = strtoupper(substr($topbar_student_name, 0, 1));
+        }
         if ($topbar_student_initial === '') {
             $topbar_student_initial = 'S';
         }
@@ -190,7 +254,7 @@ if (!function_exists('student_notif_url')) {
             'from-emerald-600 to-teal-800',
         ];
         $avatar_grad = $avatar_gradients[abs(crc32($topbar_student_name)) % count($avatar_gradients)];
-        $student_subtext = !empty($student_roll) ? $student_roll : ($_SESSION['email'] ?? 'Student Portal');
+        $student_subtext = !empty($student_roll) ? (string)$student_roll : (string)($_SESSION['email'] ?? 'Student Portal');
         ?>
         <div class="relative shrink-0" id="profile-dropdown-wrapper">
             <button
@@ -202,20 +266,20 @@ if (!function_exists('student_notif_url')) {
             >
                 <div class="relative shrink-0">
                     <?php if ($has_profile_img): ?>
-                    <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover ring-2 ring-teal-500/20 shadow-xs" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                    <img src="../uploads/avatars/<?= htmlspecialchars((string)$profile_pic) ?>" alt="Avatar" class="w-9 h-9 rounded-xl object-cover ring-2 ring-teal-500/20 shadow-xs" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
                     <div class="hidden w-9 h-9 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
-                        <?= htmlspecialchars($topbar_student_initial) ?>
+                        <?= htmlspecialchars((string)$topbar_student_initial) ?>
                     </div>
                     <?php else: ?>
                     <div class="w-9 h-9 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
-                        <?= htmlspecialchars($topbar_student_initial) ?>
+                        <?= htmlspecialchars((string)$topbar_student_initial) ?>
                     </div>
                     <?php endif; ?>
                     <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
                 </div>
                 <div class="text-left hidden sm:block">
-                    <p class="font-bold text-xs text-slate-800 leading-tight group-hover:text-teal-700 transition-colors"><?= htmlspecialchars($topbar_student_name) ?></p>
-                    <p class="text-[11px] font-medium text-teal-700 capitalize"><?= !empty($student_roll) ? htmlspecialchars($student_roll) : 'Student' ?></p>
+                    <p class="font-bold text-xs text-slate-800 leading-tight group-hover:text-teal-700 transition-colors"><?= htmlspecialchars((string)$topbar_student_name) ?></p>
+                    <p class="text-[11px] font-medium text-teal-700 capitalize"><?= !empty($student_roll) ? htmlspecialchars((string)$student_roll) : 'Student' ?></p>
                 </div>
                 <svg class="w-3.5 h-3.5 text-slate-400 group-hover:text-teal-600 shrink-0 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
@@ -231,22 +295,22 @@ if (!function_exists('student_notif_url')) {
                 <div class="p-3 bg-gradient-to-br from-slate-50 to-teal-50/50 rounded-xl border border-teal-100/60 mb-1.5 flex items-center gap-3">
                     <div class="relative shrink-0">
                         <?php if ($has_profile_img): ?>
-                        <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-teal-200 shadow-xs" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
+                        <img src="../uploads/avatars/<?= htmlspecialchars((string)$profile_pic) ?>" alt="Avatar" class="w-10 h-10 rounded-xl object-cover border border-teal-200 shadow-xs" onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
                         <div class="hidden w-10 h-10 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
-                            <?= htmlspecialchars($topbar_student_initial) ?>
+                            <?= htmlspecialchars((string)$topbar_student_initial) ?>
                         </div>
                         <?php else: ?>
                         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr <?= $avatar_grad ?> flex items-center justify-center font-bold text-sm text-white shadow-xs">
-                            <?= htmlspecialchars($topbar_student_initial) ?>
+                            <?= htmlspecialchars((string)$topbar_student_initial) ?>
                         </div>
                         <?php endif; ?>
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-1.5">
-                            <p class="font-bold text-xs text-slate-900 truncate"><?= htmlspecialchars($topbar_student_name) ?></p>
+                            <p class="font-bold text-xs text-slate-900 truncate"><?= htmlspecialchars((string)$topbar_student_name) ?></p>
                             <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-teal-100 text-teal-800">Student</span>
                         </div>
-                        <p class="text-[11px] text-slate-500 truncate mt-0.5"><?= htmlspecialchars($student_subtext) ?></p>
+                        <p class="text-[11px] text-slate-500 truncate mt-0.5"><?= htmlspecialchars((string)$student_subtext) ?></p>
                     </div>
                 </div>
 
@@ -312,10 +376,6 @@ function toggleStudentSidebar() {
         if (bd) bd.classList.add('hidden');
     }
 }
-<?php
-// Announcement modal intentionally removed for student view to avoid showing modal.
-// If needed later, set $enable_announcement_modal = true before including this file.
-?>
 </script>
 
 <script src="../assets/js/main.js"></script>

@@ -664,7 +664,23 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
             report_status = 'pending', evaluated_at = NOW()");
         $sig_stmt->bind_param("iiss", $internship_id, $selected_week, $sig_type, $sig_val);
         $sig_stmt->execute();
-        $message = 'signature_saved';
+        
+        // Auto-generate Token & Dispatch Review Email directly to Instructor
+        $token = bin2hex(random_bytes(16));
+        $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
+        $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
+        $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
+        $link_stmt->execute();
+
+        require_once __DIR__ . '/../config/mailer.php';
+        $mail_res = send_instructor_magic_link($db, $internship_id, $selected_week, $token);
+        if (!$mail_res['success'] && ($mail_res['mode'] ?? '') === 'no_email') {
+            $message = 'sig_saved_no_instructor_email';
+        } else {
+            $message = 'sig_saved_email_dispatched';
+        }
 
         if (!empty($profile_row['supervisor_id'])) {
             require_once __DIR__ . '/../config/notify.php';
@@ -701,9 +717,33 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
 
 $is_week_approved = $rejection && in_array($rejection['report_status'], ['approved_by_instructor', 'approved_by_supervisor']);
 
-// Fetch active magic link or generate (only if NOT already approved)
+// Handle resending review email to instructor
+if ($magic_link_unlocked && (isset($_POST['resend_instructor_email']) || isset($_POST['generate_magic_link']))) {
+    $token = bin2hex(random_bytes(16));
+    $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
+
+    $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
+    $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
+    $link_stmt->execute();
+
+    require_once __DIR__ . '/../config/mailer.php';
+    $mail_res = send_instructor_magic_link($db, $internship_id, $selected_week, $token);
+
+    if ($mail_res['success']) {
+        $message = 'email_sent_success';
+    } else {
+        if (($mail_res['mode'] ?? '') === 'no_email') {
+            $message = 'email_no_instructor';
+        } else {
+            $message = 'email_send_failed';
+        }
+    }
+}
+
+// Fetch active magic link status (only if NOT already approved)
 $existing_link = null;
-$magic_link = '';
 
 if ($is_week_approved) {
     // If approved, expire/delete any remaining magic link
@@ -715,25 +755,16 @@ if ($is_week_approved) {
     $act_res = $active_token_stmt->get_result();
     $existing_link = $act_res ? $act_res->fetch_assoc() : null;
 
-    if ($existing_link) {
-        $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-            . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
-            . '/instructor/view-report.php?token=' . $existing_link['token'];
-    }
-
-    if ($magic_link_unlocked && isset($_POST['generate_magic_link'])) {
+    if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
         $token = bin2hex(random_bytes(16));
         $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
-
         $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
             VALUES (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
         $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
         $link_stmt->execute();
 
-        $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-            . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
-            . '/instructor/view-report.php?token=' . $token;
+        $existing_link = ['token' => $token, 'expires_at' => $expires_at];
     }
 }
 
@@ -931,7 +962,7 @@ $sup_eval_list_stmt->execute();
 $sup_list_res = $sup_eval_list_stmt->get_result();
 $sup_evaluations = $sup_list_res ? $sup_list_res->fetch_all(MYSQLI_ASSOC) : [];
 
-if ($magic_link_unlocked && empty($magic_link)) {
+if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
     $token = bin2hex(random_bytes(16));
     $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
     $link_stmt = $db->prepare("INSERT INTO magic_links (internship_id, week_number, token, expires_at)
@@ -939,10 +970,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
         ON DUPLICATE KEY UPDATE token = VALUES(token), expires_at = VALUES(expires_at)");
     $link_stmt->bind_param("iiss", $internship_id, $selected_week, $token, $expires_at);
     $link_stmt->execute();
-
-    $magic_link = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http')
-        . "://$_SERVER[HTTP_HOST]" . rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/')
-        . '/instructor/view-report.php?token=' . $token;
 }
 ?>
 <!DOCTYPE html>
@@ -1136,7 +1163,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                         existingSet[d] = true;
                     });
                 } catch (e) {
-                    /* keep previous state */ }
+                    /* keep previous state */
+                }
             }
         }
 
@@ -1697,9 +1725,19 @@ if ($magic_link_unlocked && empty($magic_link)) {
             <?php elseif ($message === 'reflection_saved'): ?>
                 showToast('Weekly reflection saved successfully.', 'success');
             <?php elseif ($message === 'student_sig_required'): ?>
-                showToast('Please provide your signature before generating the link.', 'error');
+                showToast('Please provide your signature before submitting.', 'error');
+            <?php elseif ($message === 'sig_saved_email_dispatched'): ?>
+                showToast('✅ Signed successfully! Review request email sent to your instructor.', 'success');
+            <?php elseif ($message === 'sig_saved_no_instructor_email'): ?>
+                showToast('⚠️ Signed successfully, but no instructor email found in profile. Please add instructor email.', 'warning');
             <?php elseif ($message === 'signature_saved'): ?>
                 showToast('Student signature saved successfully.', 'success');
+            <?php elseif ($message === 'email_sent_success'): ?>
+                showToast('✉️ Review request email resent to instructor successfully.', 'success');
+            <?php elseif ($message === 'email_no_instructor'): ?>
+                showToast('⚠️ No instructor email configured. Please update your profile first.', 'error');
+            <?php elseif ($message === 'email_send_failed'): ?>
+                showToast('⚠️ Failed to dispatch email. Please check mail configuration.', 'error');
             <?php elseif ($message === 'date_out_of_range'): ?>
                 openDateAlertModal({
                     title: 'Internship ကာလအတွင်း မရှိပါ',
@@ -2153,8 +2191,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                     <span class="font-bold <?= $student_signed ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $student_signed ? 'Signed' : 'Pending' ?></span>
                                                 </li>
                                                 <li class="flex items-center justify-between text-sm">
-                                                    <span class="text-slate-500 font-medium">Magic Link</span>
-                                                    <span class="font-bold <?= $magic_link_unlocked ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $magic_link_unlocked ? 'Ready' : 'Locked' ?></span>
+                                                    <span class="text-slate-500 font-medium">Instructor Review</span>
+                                                    <span class="font-bold <?= $magic_link_unlocked ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $magic_link_unlocked ? 'Email Dispatched' : 'Locked' ?></span>
                                                 </li>
                                             </ul>
                                         <?php else: ?>
@@ -2331,9 +2369,9 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                             <div id="week-menu" class="absolute left-0 top-full mt-1.5 w-60 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden overflow-hidden py-1 max-h-72 overflow-y-auto">
                                                 <?php if (!empty($weeks)): ?>
                                                     <?php foreach ($weeks as $wn => $wr): ?>
-                                                        <?php 
-                                                            $w_start = (new DateTime($wr['start']))->format('d M');
-                                                            $w_end = (new DateTime($wr['end']))->format('d M Y');
+                                                        <?php
+                                                        $w_start = (new DateTime($wr['start']))->format('d M');
+                                                        $w_end = (new DateTime($wr['end']))->format('d M Y');
                                                         ?>
                                                         <a href="?tab=<?= urlencode($tab) ?>&week=<?= $wn ?>" class="flex items-center justify-between px-3.5 py-2.5 text-xs font-bold <?= $selected_week === $wn ? 'bg-indigo-50 text-indigo-600' : 'text-slate-700 hover:bg-slate-50' ?> transition">
                                                             <span>Week <?= $wn ?></span>
@@ -2349,9 +2387,9 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                                     <!-- Right: Selected Week Date Range -->
                                     <?php if (!empty($weeks[$selected_week])): ?>
-                                        <?php 
-                                            $cur_start = (new DateTime($weeks[$selected_week]['start']))->format('d M Y');
-                                            $cur_end = (new DateTime($weeks[$selected_week]['end']))->format('d M Y');
+                                        <?php
+                                        $cur_start = (new DateTime($weeks[$selected_week]['start']))->format('d M Y');
+                                        $cur_end = (new DateTime($weeks[$selected_week]['end']))->format('d M Y');
                                         ?>
                                         <div class="flex items-center gap-2 text-xs font-bold text-indigo-700 bg-indigo-50/80 border border-indigo-100 px-3.5 py-2 rounded-xl shadow-2xs">
                                             <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2597,7 +2635,9 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                 </h2>
                                                 <?php if (!$reflection_submitted): ?>
                                                     <span class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">
-                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                        </svg>
                                                         Locked
                                                     </span>
                                                 <?php elseif ($student_signed): ?>
@@ -2670,11 +2710,11 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                             <!-- Typed Mode -->
                                                             <div id="left-sig-typed-fields" class="space-y-1.5">
                                                                 <label class="block text-xs font-bold text-slate-700">Enter Name to Sign</label>
-                                                                <input type="text" name="student_typed_name" id="left_typed_name" 
+                                                                <input type="text" name="student_typed_name" id="left_typed_name"
                                                                     value="<?= htmlspecialchars($student_name) ?>"
                                                                     placeholder="Enter your name"
                                                                     oninput="previewLeftSig()"
-                                                                    class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
+                                                    class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
                                                             </div>
 
                                                             <!-- Upload Mode -->
@@ -2721,7 +2761,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
 
                             <?php if ($tab === 'weekly-report'): ?>
 
-                                <!-- ════ TWO-COLUMN: Weekly Summary + Magic Link ════ -->
+                                <!-- ════ TWO-COLUMN: Weekly Summary + Instructor Review ════ -->
                                 <div class="w-full grid grid-cols-1 md:grid-cols-12 gap-6 mb-6 items-stretch">
 
                                     <!-- ── LEFT: Weekly Summary ── -->
@@ -2748,8 +2788,8 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                         <span class="text-xs font-bold <?= $student_signed ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $student_signed ? 'Signed' : 'Pending' ?></span>
                                                     </div>
                                                     <div class="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
-                                                        <span class="text-xs text-slate-500 font-medium">Magic Link</span>
-                                                        <span class="text-xs font-bold <?= $magic_link_unlocked ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $magic_link_unlocked ? 'Ready' : 'Locked' ?></span>
+                                                        <span class="text-xs text-slate-500 font-medium">Instructor Email</span>
+                                                        <span class="text-xs font-bold <?= $magic_link_unlocked ? 'text-emerald-600' : 'text-slate-400' ?>"><?= $magic_link_unlocked ? 'Dispatched' : 'Locked' ?></span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2771,18 +2811,26 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                         </div>
                                     </div>
 
-                                    <!-- ── RIGHT: Magic Link & Guide ── -->
+                                    <!-- ── RIGHT: Instructor Review Status & Email Dispatch ── -->
                                     <div class="md:col-span-6">
                                         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 h-full flex flex-col">
-                                            <h3 class="text-xs font-black text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                                                <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                                </svg>
-                                                Magic Link
+                                            <div class="flex items-center justify-between mb-4">
+                                                <h3 class="text-xs font-black text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                                    <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                    </svg>
+                                                    Instructor Review &amp; Evaluation
+                                                </h3>
                                                 <?php if (!$magic_link_unlocked): ?>
-                                                    <span class="ml-auto text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">Locked</span>
+                                                    <span class="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">Locked</span>
+                                                <?php elseif ($is_week_approved): ?>
+                                                    <span class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-0.5 rounded-full">Approved</span>
+                                                <?php elseif ($is_rejected): ?>
+                                                    <span class="text-xs font-bold text-red-700 bg-red-100 px-2.5 py-0.5 rounded-full">Action Required</span>
+                                                <?php else: ?>
+                                                    <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2.5 py-0.5 rounded-full">Email Dispatched</span>
                                                 <?php endif; ?>
-                                            </h3>
+                                            </div>
 
                                             <?php if ($is_week_approved): ?>
                                                 <!-- ── Approved & Review Locked State ── -->
@@ -2792,108 +2840,121 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                                     </div>
                                                     <h4 class="text-xs font-black text-emerald-900 uppercase tracking-wider">Instructor Sign-off Completed</h4>
                                                     <p class="text-xs text-emerald-700 mt-1.5 leading-relaxed max-w-sm">
-                                                        Company Instructor has signed and approved this report. Magic link has expired and review submissions are permanently locked.
+                                                        Company Instructor has signed and approved this report. The review token has expired and submissions are locked.
                                                     </p>
                                                     <div class="mt-4 inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 text-white rounded-full text-xs font-bold shadow-xs">
                                                         <span>🔒</span> Forwarded to University Supervisor
                                                     </div>
                                                 </div>
+                                             <?php elseif ($magic_link_unlocked): ?>
 
-                                            <?php elseif ($magic_link_unlocked): ?>
+                                                 <?php if ($is_rejected): ?>
+                                                     <div class="bg-red-50 border border-red-200 rounded-xl p-3.5 mb-4">
+                                                         <p class="text-xs font-bold text-red-700 mb-1 flex items-center gap-1.5">
+                                                             <span>⚠️</span> Report Rejected by Instructor
+                                                         </p>
+                                                         <p class="text-xs text-red-600 leading-relaxed">
+                                                             <?= htmlspecialchars($rejection_reason ?: 'Please revise your daily logs and reflection according to your instructor’s feedback, then sign and resend.') ?>
+                                                         </p>
+                                                     </div>
+                                                 <?php endif; ?>
 
-                                                <?php if ($is_rejected): ?>
-                                                    <div class="bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
-                                                        <p class="text-xs font-bold text-red-600">
-                                                            Report was rejected. Update your logs and reflection, then regenerate a fresh link.
-                                                        </p>
-                                                    </div>
-                                                <?php endif; ?>
+                                                 <!-- Instructor Email Status Card -->
+                                                 <div class="flex-1 flex flex-col justify-between space-y-4">
+                                                     <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
+                                                         <div class="flex items-center gap-3 mb-3">
+                                                             <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                                 </svg>
+                                                             </div>
+                                                             <div class="min-w-0 flex-1">
+                                                                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Assigned Instructor</p>
+                                                                 <p class="text-sm font-bold text-slate-800 truncate"><?= htmlspecialchars($instructor_name ?: 'Company Instructor') ?></p>
+                                                             </div>
+                                                         </div>
 
-                                                <!-- 2-column sub-layout: Link Generator + How to Share -->
-                                                <div class="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                    <!-- Left: Link Generator -->
-                                                    <div>
-                                                        <p class="text-xs text-slate-400 mb-3 leading-relaxed">
-                                                            Generate a secure link for your Company Instructor.
-                                                        </p>
-                                                        <?php if ($magic_link): ?>
-                                                            <div class="bg-slate-50 border border-slate-200 rounded-xl p-2.5 mb-2.5">
-                                                                <label class="block text-[11px] font-bold text-slate-400 mb-1 uppercase tracking-wider">Your Magic Link</label>
-                                                                <input type="text" id="magic_link_input" value="<?= htmlspecialchars($magic_link) ?>" readonly class="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-600 focus:outline-none select-all">
-                                                            </div>
-                                                            <button id="copy_btn" onclick="copyLink()" class="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 active:scale-[0.99] text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
-                                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                                                </svg>
-                                                                <span>Copy Link</span>
-                                                            </button>
-                                                            <p class="text-[11px] text-slate-400 text-center mt-1.5">Link expires in 7 days.</p>
-                                                        <?php else: ?>
-                                                            <form method="POST">
-                                                                <p class="text-xs text-slate-500 mb-2.5">Click below to generate the link.</p>
-                                                                <button type="submit" name="generate_magic_link" class="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 active:scale-[0.99] text-white text-xs font-bold rounded-lg shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer">
-                                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                                                    </svg>
-                                                                    <span>Generate &amp; Send Link</span>
-                                                                </button>
-                                                            </form>
-                                                            <p class="text-[11px] text-slate-400 text-center mt-1.5">No active link yet.</p>
-                                                        <?php endif; ?>
-                                                    </div>
+                                                         <div class="space-y-2 border-t border-slate-200/60 pt-3">
+                                                             <div class="flex items-center justify-between text-xs">
+                                                                 <span class="text-slate-500 font-medium">Recipient Email</span>
+                                                                 <?php if (!empty($instructor_email)): ?>
+                                                                     <span class="font-mono font-bold text-indigo-600 truncate max-w-[200px]" title="<?= htmlspecialchars($instructor_email) ?>">
+                                                                         <?= htmlspecialchars($instructor_email) ?>
+                                                                     </span>
+                                                                 <?php else: ?>
+                                                                     <span class="font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded text-[11px]">Not Configured</span>
+                                                                 <?php endif; ?>
+                                                             </div>
+                                                             <div class="flex items-center justify-between text-xs">
+                                                                 <span class="text-slate-500 font-medium">Delivery Status</span>
+                                                                 <?php if (!empty($instructor_email)): ?>
+                                                                     <span class="inline-flex items-center gap-1 font-bold text-emerald-600">
+                                                                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                                         Dispatched to Inbox
+                                                                     </span>
+                                                                 <?php else: ?>
+                                                                     <span class="font-bold text-amber-600">Awaiting Email Address</span>
+                                                                 <?php endif; ?>
+                                                             </div>
+                                                             <div class="flex items-center justify-between text-xs">
+                                                                 <span class="text-slate-500 font-medium">Link Validity</span>
+                                                                 <span class="font-semibold text-slate-600">7 Days (Single Use)</span>
+                                                             </div>
+                                                         </div>
+                                                     </div>
 
-                                                    <!-- Right: How to Share -->
-                                                    <div class="bg-slate-50 border border-slate-100 rounded-xl p-4 flex flex-col justify-center">
-                                                        <h4 class="text-caption font-bold text-slate-600 mb-2.5">
-                                                            How to share
-                                                        </h4>
-                                                        <ul class="text-label text-slate-400 space-y-2">
-                                                            <li class="flex items-start gap-2">
-                                                                <span class="w-4 h-4 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-micro font-bold shrink-0 mt-0.5">1</span>
-                                                                <span>Copy the link above</span>
-                                                            </li>
-                                                            <li class="flex items-start gap-2">
-                                                                <span class="w-4 h-4 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-micro font-bold shrink-0 mt-0.5">2</span>
-                                                                <span>Paste into Email, Viber, Telegram, etc.</span>
-                                                            </li>
-                                                            <li class="flex items-start gap-2">
-                                                                <span class="w-4 h-4 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-micro font-bold shrink-0 mt-0.5">3</span>
-                                                                <span>Instructor clicks link and sees your reports</span>
-                                                            </li>
-                                                            <li class="flex items-start gap-2">
-                                                                <span class="w-4 h-4 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-micro font-bold shrink-0 mt-0.5">4</span>
-                                                                <span>No login required for them</span>
-                                                            </li>
-                                                        </ul>
-                                                    </div>
-                                                </div>
+                                                     <?php if (empty($instructor_email)): ?>
+                                                         <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-800">
+                                                             <p class="font-bold mb-1 flex items-center gap-1.5">
+                                                                 <span>⚠️</span> Instructor Email Missing
+                                                             </p>
+                                                             <p class="text-amber-700 leading-relaxed mb-3">
+                                                                 သင်၏ Company Instructor Email လိပ်စာကို ထည့်သွင်းထားခြင်း မရှိသေးပါ။ Email သို့ တိုက်ရိုက် ပို့ဆောင်နိုင်ရန် Profile တွင် အရင် ဖြည့်သွင်းပေးပါ။
+                                                             </p>
+                                                             <a href="profile.php" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition shadow-xs">
+                                                                 ✏️ Update Instructor Email in Profile
+                                                             </a>
+                                                         </div>
+                                                     <?php else: ?>
+                                                         <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 text-[11px] text-indigo-900 leading-relaxed">
+                                                             <p class="font-semibold text-indigo-800 mb-1 flex items-center gap-1">
+                                                                 <span>🔒</span> လုံခြုံရေး အသိပေးချက် / Security Notice:
+                                                             </p>
+                                                             ကျောင်းသား Screen ပေါ်တွင် Token Link ကို လုံခြုံရေးအရ လုံးဝ ပြသမည်မဟုတ်ဘဲ Instructor ထံသို့ HTML Email ဖြင့် တိုက်ရိုက် ပို့ဆောင်ထားပါသည်။ Instructor မှ Email ရှိ Link ကို နှိပ်၍ တိုက်ရိုက် စစ်ဆေးလက်မှတ်ထိုးပေးနိုင်ပါသည်။
+                                                         </div>
 
-                                            <?php else: ?>
-                                                <!-- Locked State -->
-                                                <div class="flex-1 flex flex-col justify-center">
-                                                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
-                                                        <div class="flex items-start gap-2">
-                                                            <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                                            </svg>
-                                                            <div>
-                                                                <p class="text-caption font-bold text-amber-700 mb-1">Requirements not met for Week <?= $selected_week ?></p>
-                                                                <ul class="text-label text-amber-600 space-y-0.5">
-                                                                    <li>Daily Logs: <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong> days</li>
-                                                                    <li>Weekly Reflection: <strong><?= $reflection_submitted ? 'Submitted' : 'Not yet' ?></strong></li>
-                                                                    <li>Student Signature: <strong><?= $student_signed ? 'Signed' : 'Not yet' ?></strong></li>
-                                                                </ul>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="opacity-50 pointer-events-none select-none">
-                                                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3">
-                                                            <input type="text" readonly value="················" class="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-caption font-mono text-slate-300 focus:outline-none">
-                                                        </div>
-                                                        <button class="w-full px-3 py-2 bg-purple-300 text-white text-xs font-bold rounded-lg shadow-sm cursor-not-allowed">Generate Magic Link</button>
-                                                    </div>
-                                                </div>
-                                            <?php endif; ?>
+                                                         <form method="POST" class="pt-1">
+                                                             <button type="submit" name="resend_instructor_email" class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
+                                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                 </svg>
+                                                                 <span>✉️ Resend Review Email to Instructor</span>
+                                                             </button>
+                                                         </form>
+                                                     <?php endif; ?>
+                                                 </div>
+
+                                             <?php else: ?>
+                                                 <!-- Locked State -->
+                                                 <div class="flex-1 flex flex-col justify-center">
+                                                     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+                                                         <div class="flex items-start gap-2">
+                                                             <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                             </svg>
+                                                             <div>
+                                                                 <p class="text-caption font-bold text-amber-700 mb-1">Requirements not met for Week <?= $selected_week ?></p>
+                                                                 <ul class="text-label text-amber-600 space-y-0.5">
+                                                                     <li>Daily Logs: <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong> days</li>
+                                                                     <li>Weekly Reflection: <strong><?= $reflection_submitted ? 'Submitted' : 'Pending' ?></strong></li>
+                                                                     <li>Student Signature: <strong><?= $student_signed ? 'Signed' : 'Pending' ?></strong></li>
+                                                                 </ul>
+                                                             </div>
+                                                         </div>
+                                                     </div>
+                                                     <p class="text-caption text-slate-400 text-center">Complete all 3 previous steps to dispatch review email to your instructor.</p>
+                                                 </div>
+                                             <?php endif; ?>
                                         </div>
                                     </div>
 
@@ -3066,7 +3127,9 @@ if ($magic_link_unlocked && empty($magic_link)) {
             <div class="space-y-3">
                 <button onclick="document.getElementById('export-modal').classList.add('hidden'); window.open('print_report.php?week=<?= $selected_week ?>', '_blank');" class="w-full flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-indigo-50 hover:border-indigo-200 transition group cursor-pointer">
                     <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
                     </span>
                     <div class="text-left">
                         <p class="font-bold text-slate-700 group-hover:text-indigo-700">Official Weekly Report (Print / PDF)</p>
@@ -3075,7 +3138,9 @@ if ($magic_link_unlocked && empty($magic_link)) {
                 </button>
                 <button onclick="document.getElementById('export-modal').classList.add('hidden'); window.open('print_report.php?week=all', '_blank');" class="w-full flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl hover:bg-blue-50 hover:border-blue-200 transition group cursor-pointer">
                     <span class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
                     </span>
                     <div class="text-left">
                         <p class="font-bold text-slate-700 group-hover:text-blue-700">Full Internship Record (All Weeks)</p>

@@ -7,7 +7,104 @@ require_once __DIR__ . '/../includes/ui_helpers.php';
 
 $db = $mysqli ?? $conn;
 
-// ── Magic Link Token Validation (No Login Required) ─────────────
+/**
+ * Render standard error modal
+ */
+function render_error($title, $msg, $icon = '🔒')
+{
+?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title><?= htmlspecialchars($title) ?> – InternReport</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-50 flex items-center justify-center min-h-screen p-6 font-sans">
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xl p-8 max-w-md w-full text-center">
+            <div class="w-16 h-16 rounded-full bg-red-50 text-red-500 border border-red-100 flex items-center justify-center text-3xl mx-auto mb-4"><?= $icon ?></div>
+            <h2 class="text-lg font-black text-slate-800 mb-2"><?= htmlspecialchars($title) ?></h2>
+            <p class="text-xs text-slate-500 leading-relaxed mb-6"><?= htmlspecialchars($msg) ?></p>
+            <div class="pt-4 border-t border-slate-100 flex flex-col gap-2">
+                <a href="../login.php" class="inline-flex items-center justify-center px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition shadow-xs">
+                    Return to Login
+                </a>
+            </div>
+        </div>
+    </body>
+    </html>
+<?php
+    exit;
+}
+
+/**
+ * Render Student Blocked Screen to prevent students from self-evaluating
+ */
+function render_student_blocked_error($student_username = 'Student')
+{
+    http_response_code(403);
+?>
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Access Denied – Student Session Active</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-900 min-h-screen flex items-center justify-center p-6 font-sans antialiased text-slate-100">
+        <div class="max-w-md w-full bg-slate-800/90 backdrop-blur border border-slate-700/80 rounded-2xl p-8 shadow-2xl text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-500 to-red-500"></div>
+
+            <div class="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center text-3xl mx-auto mb-5 shadow-inner">
+                🛡️
+            </div>
+
+            <span class="inline-block px-3 py-1 bg-red-500/20 text-red-300 text-[11px] font-bold tracking-wider uppercase rounded-full mb-3 border border-red-500/30">
+                Security Guard Active
+            </span>
+
+            <h2 class="text-xl font-black text-white mb-2 tracking-tight">Access Denied: Student Account Detected</h2>
+            
+            <p class="text-xs text-slate-300 leading-relaxed mb-4">
+                You are currently signed in as student <strong class="text-white font-bold bg-slate-700 px-2 py-0.5 rounded">@<?= htmlspecialchars($student_username) ?></strong>.
+            </p>
+
+            <div class="bg-slate-900/80 border border-slate-700 rounded-xl p-4 mb-6 text-left">
+                <p class="text-[11px] text-amber-300 font-semibold mb-1 flex items-center gap-1.5">
+                    <span>⚠️</span> သတိပေးချက် / Notice:
+                </p>
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                    ကျောင်းသားအကောင့် Login ဝင်ထားသော Browser ဖြင့် Instructor အကဲဖြတ်ခြင်း စာမျက်နှာကို ဝင်ရောက်ခွင့်မပြုပါ။ ဤစာမျက်နှာကို Company Instructor ကသာ Email မှတစ်ဆင့် သီးသန့် ဖွင့်လှစ် အကဲဖြတ်ရမည် ဖြစ်ပါသည်။
+                </p>
+            </div>
+
+            <div class="flex flex-col gap-2.5">
+                <a href="../student/student-dashboard.php" class="w-full inline-flex items-center justify-center px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/20">
+                    📋 Return to Student Dashboard
+                </a>
+                <a href="../logout.php" class="w-full inline-flex items-center justify-center px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs font-semibold transition border border-slate-600">
+                    🚪 Log Out from Student Account
+                </a>
+            </div>
+
+            <p class="text-[11px] text-slate-400 mt-5 leading-relaxed">
+                💡 <em>Testing note: If testing as instructor, open this link in an Incognito / Private Window.</em>
+            </p>
+        </div>
+    </body>
+    </html>
+<?php
+    exit;
+}
+
+// ── 1. Security Check: Prevent Logged-in Students from Accessing Instructor Page ──
+if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'student') {
+    render_student_blocked_error($_SESSION['username'] ?? 'Student');
+}
+
+// ── 2. Magic Link Token Validation (No Login Required) ─────────────
 $token = trim($_GET['token'] ?? '');
 
 if (!$token || !preg_match('/^[a-f0-9]{32,64}$/i', $token)) {
@@ -116,6 +213,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_report'])) {
                 evaluated_at = NOW()");
             $rej->bind_param("iis", $student_id, $week_number, $reject_reason);
             $rej->execute();
+
+            // Invalidate/delete magic link upon rejection
+            $del_link = $db->prepare("DELETE FROM magic_links WHERE internship_id = ? AND week_number = ?");
+            $del_link->bind_param("ii", $student_id, $week_number);
+            $del_link->execute();
 
             // Insert notification for the student
             $instructor_label = ($profile['instructor_name'] ?? '') ?: 'Your instructor';
@@ -228,32 +330,6 @@ $grade_labels = [
     'average'           => ['Average',            'text-amber-600',   'bg-amber-50'],
     'needs_improvement' => ['Needs Improvement',  'text-red-600',     'bg-red-50'],
 ];
-
-function render_error($title, $msg, $icon)
-{
-?>
-    <!DOCTYPE html>
-    <html lang="en">
-
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title><?= htmlspecialchars($title) ?></title>
-        <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-
-    <body class="bg-slate-50 flex items-center justify-center min-h-screen p-6">
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 max-w-sm text-center">
-            <div class="w-14 h-14 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-2xl mx-auto mb-4"><?= $icon ?></div>
-            <h2 class="text-sm font-black text-slate-800 mb-2"><?= htmlspecialchars($title) ?></h2>
-            <p class="text-xs text-slate-400"><?= htmlspecialchars($msg) ?></p>
-        </div>
-    </body>
-
-    </html>
-<?php
-    exit;
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">

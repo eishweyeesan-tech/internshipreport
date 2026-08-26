@@ -1,0 +1,8 @@
+# Logs and temporary mail previews
+logs/
+uploads/mail_previews/
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db

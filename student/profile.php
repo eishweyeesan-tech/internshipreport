@@ -73,43 +73,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $student_roll      = trim($_POST['student_roll'] ?? '');
     $major             = trim($_POST['major'] ?? '');
     $phone             = trim($_POST['phone'] ?? '');
-    $company_name      = trim($_POST['company_name'] ?? '');
-    $instructor_name   = trim($_POST['instructor_name'] ?? '');
-    $instructor_email  = trim($_POST['instructor_email'] ?? '');
-    $instructor_phone  = trim($_POST['instructor_phone'] ?? '');
-    $internship_start  = trim($_POST['internship_start_date'] ?? '');
-    $internship_end    = trim($_POST['internship_end_date'] ?? '');
 
     $phone_err = phone_validation_error($phone);
-    $instructor_err = phone_validation_error($instructor_phone);
     if ($phone_err !== null) {
         $profile_err = $phone_err;
-    } elseif ($instructor_err !== null) {
-        $profile_err = $instructor_err;
     } else {
-        $phone            = normalize_phone($phone);
-        $instructor_phone = normalize_phone($instructor_phone);
+        $phone = normalize_phone($phone);
 
         $upd_prof = $db->prepare("UPDATE student_profiles SET
-            full_name = ?, student_roll = ?, major = ?, phone = ?,
-            company_name = ?, instructor_name = ?,
-            instructor_email = ?, instructor_phone = ?,
-            internship_start_date = ?, internship_end_date = ?
+            full_name = ?, student_roll = ?, major = ?, phone = ?
             WHERE user_id = ?");
-        $istart = $internship_start ?: null;
-        $iend   = $internship_end ?: null;
         $upd_prof->bind_param(
-            "ssssssssssi",
+            "ssssi",
             $full_name,
             $student_roll,
             $major,
             $phone,
-            $company_name,
-            $instructor_name,
-            $instructor_email,
-            $instructor_phone,
-            $istart,
-            $iend,
             $user_id
         );
         $upd_prof->execute();
@@ -126,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         $supervisor_name  = $profile['supervisor_name'] ?? '';
         $supervisor_email = $profile['supervisor_email'] ?? '';
 
-        $profile_msg = 'Profile updated successfully.';
+        $profile_msg = 'Personal details updated successfully.';
     }
 }
 
@@ -572,13 +551,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                                     </svg>
                                 </span>
-                                Internship &amp; Supervision Details
+                                Internship &amp; Placement Details
                             </h3>
-                            <button type="button" onclick="toggleEdit('internship')" class="edit-toggle px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition cursor-pointer">Edit</button>
+                            <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-xl border border-amber-200/80">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                Supervisor Assigned
+                            </span>
                         </div>
 
-                        <!-- View Mode -->
-                        <div class="view-mode p-6">
+                        <!-- Read-Only View Mode (Students cannot edit their instructor to prevent self-approval fraud) -->
+                        <div class="p-6">
                             <dl class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                                 <div>
                                     <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Company / Organization</dt>
@@ -628,48 +610,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     <?= $supervisor_name ? 'Supervised' : 'Pending Assignment' ?>
                                 </span>
                             </div>
-                        </div>
 
-                        <!-- Edit Mode -->
-                        <form method="POST" class="edit-mode hidden">
-                            <input type="hidden" name="update_profile" value="1">
-                            <div class="p-6 space-y-4">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Company / Organization</label>
-                                        <input type="text" name="company_name" value="<?= htmlspecialchars($profile['company_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Company Instructor Name</label>
-                                        <input type="text" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Instructor Email</label>
-                                        <input type="email" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Instructor Phone</label>
-                                        <input type="text" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid phone number" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Internship Start Date</label>
-                                        <input type="date" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
-                                    </div>
-                                    <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Internship End Date</label>
-                                        <input type="date" name="internship_end_date" value="<?= htmlspecialchars($profile['internship_end_date']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
-                                    </div>
-                                </div>
-                                <!-- Hidden fields to preserve personal data on save -->
-                                <input type="hidden" name="full_name" value="<?= htmlspecialchars($profile['full_name']) ?>">
-                                <input type="hidden" name="student_roll" value="<?= htmlspecialchars($profile['student_roll']) ?>">
-                                <input type="hidden" name="major" value="<?= htmlspecialchars($profile['major']) ?>">
-                                <input type="hidden" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>">
-                                <div class="flex justify-end pt-2">
-                                    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer">Save Changes</button>
-                                </div>
-                            </div>
-                        </form>
+                            <p class="text-[11px] text-slate-500 mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
+                                <span class="text-amber-600 font-bold">🔒 လုံခြုံရေး အသိပေးချက်:</span>
+                                ကုမ္ပဏီနှင့် Instructor အချက်အလက်များကို Supervisor / Admin ကသာ တရားဝင် သတ်မှတ်ပြင်ဆင်ပေးပါသည်။ (ပြောင်းလဲလိုပါက တာဝန်ခံ Supervisor ထံ ဆက်သွယ်ပါ)
+                            </p>
+                        </div>
                     </div>
 
                     <!-- ════ SECURITY & CHANGE PASSWORD ════ -->
