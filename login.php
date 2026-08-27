@@ -26,11 +26,11 @@ if (isset($_GET['error']) && $_GET['error'] === 'inactive') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email    = trim($_POST['email'] ?? $_POST['username'] ?? '');
+    $email    = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
     if (empty($email) || empty($password)) {
-        $error = 'Please enter email and password.';
+        $error = 'Please enter your email and password.';
     } else {
         $db = $mysqli ?? $conn;
         $stmt = $db->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");

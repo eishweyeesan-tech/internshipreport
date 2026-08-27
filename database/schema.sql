@@ -66,18 +66,6 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Supervisor–Academic Year assignment (many-to-many)
-CREATE TABLE IF NOT EXISTS supervisor_academic_assignments (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    supervisor_id INT NOT NULL,
-    academic_year_id INT NOT NULL,
-    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    assigned_by INT DEFAULT NULL,
-    UNIQUE KEY unique_sup_year (supervisor_id, academic_year_id),
-    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (academic_year_id) REFERENCES academic_years(id) ON DELETE CASCADE,
-    FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
 -- 2. STUDENT & SUPERVISOR PROFILE TABLES
@@ -243,5 +231,11 @@ INSERT IGNORE INTO academic_years (year_label, start_date, end_date, is_current,
 -- Default admin account (password: "password")
 INSERT IGNORE INTO users (username, email, password, role, is_first_login) VALUES
 ('admin', 'admin@gmail.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', 0);
+
+-- Default faculty supervisors (with exact dropdown department & rank options)
+INSERT IGNORE INTO users (username, email, phone, department, position, password, role, is_first_login, status) VALUES
+('U Mya', 'umya.instructor@gmail.com', '09-450012345', 'Faculty of Computer Science (FCS)', 'Lecturer', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'supervisor', 0, 'Active'),
+('Dr. Aung Kyaw', 'aungkyaw.supervisor@gmail.com', '09-450012346', 'Faculty of Computer Science (FCS)', 'Professor', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'supervisor', 0, 'Active'),
+('Dr. Su Su Hlaing', 'susu.supervisor@gmail.com', '09-450012347', 'Faculty of Computer Systems and Technologies (FCST)', 'Associate Professor', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'supervisor', 0, 'Active');
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -66,19 +66,39 @@ switch ($action) {
         $supervisors = get_supervisors_for_year($db, $academic_year_id);
         $total_supervisors = get_total_supervisors_for_year($db, $academic_year_id);
 
-        // Student count for this year
-        $st_cnt = $db->prepare("SELECT COUNT(*) FROM users u WHERE u.role = 'student' AND (u.academic_year_id = ? OR u.academic_year = (SELECT year_label FROM academic_years WHERE id = ?))");
-        $st_cnt->bind_param("ii", $academic_year_id, $academic_year_id);
-        $st_cnt->execute();
-        $st_res = $st_cnt->get_result();
-        $st_row = $st_res ? $st_res->fetch_row() : null;
-        $student_count = (int) ($st_row[0] ?? 0);
+        // Fetch students list for this year
+        $st_list_stmt = $db->prepare("
+            SELECT u.id, u.username, u.email, u.phone, u.status, u.is_first_login,
+                   sp.full_name, sp.student_roll, sp.major, sp.company_name, sp.job_role,
+                   sup_u.username AS supervisor_name
+            FROM users u
+            LEFT JOIN student_profiles sp ON sp.user_id = u.id
+            LEFT JOIN users sup_u ON sup_u.id = sp.supervisor_id
+            WHERE u.role = 'student'
+              AND (u.academic_year_id = ? OR u.academic_year = (SELECT year_label FROM academic_years WHERE id = ?))
+            ORDER BY sp.student_roll ASC, u.username ASC
+        ");
+        $st_list_stmt->bind_param("ii", $academic_year_id, $academic_year_id);
+        $st_list_stmt->execute();
+        $st_list_res = $st_list_stmt->get_result();
+        $students_list = $st_list_res ? $st_list_res->fetch_all(MYSQLI_ASSOC) : [];
+        $st_list_stmt->close();
+
+        // Natural sort students by roll number (e.g. 5CS-1, 5CS-2, 5CS-10)
+        usort($students_list, function($a, $b) {
+            $rA = trim($a['student_roll'] ?: $a['username']);
+            $rB = trim($b['student_roll'] ?: $b['username']);
+            $cmp = strnatcasecmp($rA, $rB);
+            if ($cmp !== 0) return $cmp;
+            return strcasecmp($a['full_name'] ?: $a['username'], $b['full_name'] ?: $b['username']);
+        });
 
         echo json_encode([
             'success' => true,
             'supervisors' => $supervisors,
             'supervisor_count' => $total_supervisors,
-            'student_count' => $student_count,
+            'student_count' => count($students_list),
+            'students' => $students_list,
         ]);
         break;
 
@@ -123,6 +143,26 @@ switch ($action) {
         $year2 = $yr2 ? $yr2->fetch_assoc() : null;
         $label2 = $year2 ? $year2['year_label'] : 'Unknown';
 
+        // Check if supervisor currently has assigned students in this academic year
+        $stu_chk = $db->prepare("
+            SELECT COUNT(*) FROM student_profiles sp
+            JOIN users stu ON stu.id = sp.user_id
+            WHERE sp.supervisor_id = ?
+              AND (stu.academic_year_id = ? OR stu.academic_year = (SELECT year_label FROM academic_years WHERE id = ?))
+        ");
+        $stu_chk->bind_param("iii", $supervisor_id, $academic_year_id, $academic_year_id);
+        $stu_chk->execute();
+        $stu_cnt = (int)($stu_chk->get_result()->fetch_row()[0] ?? 0);
+        $stu_chk->close();
+
+        if ($stu_cnt > 0) {
+            echo json_encode([
+                'success' => false,
+                'error' => "Cannot unassign supervisor: {$stu_cnt} student(s) are currently assigned to this supervisor in {$label2}. Please reassign the students first."
+            ]);
+            exit;
+        }
+
         $ok2 = unassign_supervisor_from_year($db, $supervisor_id, $academic_year_id);
         echo json_encode([
             'success' => true,
@@ -142,6 +182,7 @@ switch ($action) {
         echo json_encode([
             'success' => true,
             'supervisor' => $history['supervisor'],
+            'status' => $history['supervisor']['status'] ?? 'Active',
             'assignments' => $history['assignments'],
             'total_students' => $history['total_students'],
             'total_assigned_years' => $history['total_assigned_years'],
