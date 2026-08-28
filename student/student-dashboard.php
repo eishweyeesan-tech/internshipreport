@@ -664,7 +664,7 @@ if ($reflection_submitted && isset($_POST['save_student_signature'])) {
             report_status = 'pending', evaluated_at = NOW()");
         $sig_stmt->bind_param("iiss", $internship_id, $selected_week, $sig_type, $sig_val);
         $sig_stmt->execute();
-        
+
         // Auto-generate Token & Dispatch Review Email directly to Instructor
         $token = bin2hex(random_bytes(16));
         $expires_at = date('Y-m-d H:i:s', strtotime('+7 days'));
@@ -2433,7 +2433,7 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                     <input type="hidden" name="selected_week" value="<?= (int) $selected_week ?>">
                                                     <!-- Date (always visible) -->
                                                     <div>
-                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Date / Day <span class="text-slate-400 font-normal text-[11px]">/ ရက်စွဲရွေးချယ်ပါ</span></label>
+                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">ရက်စွဲ/နေ့</span></label>
                                                         <input type="date" name="log_date" id="log_date" required
                                                             value="<?= htmlspecialchars($form_date ?? '') ?>"
                                                             min="<?= htmlspecialchars($intern_start ?? '') ?>"
@@ -2454,7 +2454,7 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
 
                                                     <!-- Attendance Status -->
                                                     <div>
-                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Attendance Status <span class="text-slate-400 font-normal text-[11px]">/ တက်ရောက်မှုအခြေအနေ</span></label>
+                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">တက်ရောက်မှုအခြေအနေ</label>
                                                         <div class="flex items-center gap-3 flex-wrap">
                                                             <?php $edit_att = $editing_log['attendance_status'] ?? 'present'; ?>
                                                             <label class="flex items-center gap-2 px-3.5 py-2 bg-emerald-50/80 border border-emerald-200 rounded-xl cursor-pointer hover:bg-emerald-100 text-xs font-bold text-emerald-800 transition">
@@ -2480,31 +2480,27 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                                 <input type="time" name="end_time" id="end_time" value="17:00" onchange="calcHours()" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs sm:text-sm text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                                             </div>
                                                             <div>
-                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">Duration</label>
+                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">ကြာချိန်</label>
                                                                 <input type="text" id="hours_display" value="<?= htmlspecialchars($editing_log['calculated_duration'] ?? '08:00') ?>" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs sm:text-sm text-blue-700 font-bold focus:outline-none cursor-default">
                                                                 <input type="hidden" name="hours_worked" id="hours_worked" value="<?= htmlspecialchars($editing_log['calculated_duration'] ?? '08:00') ?>">
                                                             </div>
                                                         </div>
                                                         <div class="space-y-4">
                                                             <div>
-                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">Intended Task <span class="text-slate-400 font-normal text-[11px]">/ ဆောင်ရွက်မည့်လုပ်ငန်း</span></label>
+                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">ဆောင်ရွက်မည့်လုပ်ငန်း</label>
                                                                 <input type="text" name="intended_task" value="<?= htmlspecialchars($editing_log['task_title'] ?? '') ?>" placeholder="e.g. UI Design & API Integration" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                                             </div>
                                                             <div>
-                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">Task Detail <span class="text-slate-400 font-normal text-[11px]">/ ဆောင်ရွက်မည့် လုပ်ငန်းစဉ်များ</span></label>
-                                                                <textarea name="task_detail" rows="3" placeholder="Describe the planned tasks in detail…" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['task_detail'] ?? '') ?></textarea>
-                                                            </div>
-                                                            <div>
-                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">Actual Task Performed <span class="text-slate-400 font-normal text-[11px]">/ အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</span></label>
+                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</label>
                                                                 <textarea name="actual_task" rows="3" placeholder="What you actually accomplished today…" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['tasks_performed'] ?? '') ?></textarea>
                                                             </div>
                                                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                                 <div>
-                                                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Tools / Tech Used <span class="text-slate-400 font-normal text-[11px]">/ အသုံးပြုသောပစ္စည်းများ</span></label>
+                                                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">အသုံးပြုသောပစ္စည်းများ</label>
                                                                     <input type="text" name="tools_used" value="<?= htmlspecialchars($editing_log['tools_used'] ?? '') ?>" placeholder="PHP, TailwindCSS, MySQL…" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 font-mono text-xs sm:text-sm text-emerald-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                                                 </div>
                                                                 <div>
-                                                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Knowledge Gained <span class="text-slate-400 font-normal text-[11px]">/ လေ့လာသိရှိသော အသိပညာ</span></label>
+                                                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">လေ့လာသိရှိသော အသိပညာ</label>
                                                                     <input type="text" name="knowledge_gained" value="<?= htmlspecialchars($editing_log['learnt_skills'] ?? '') ?>" placeholder="Database optimization, REST APIs…" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                                                 </div>
                                                             </div>
@@ -2514,7 +2510,7 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                     <!-- ══════ ABSENT FIELDS ══════ -->
                                                     <div id="absent-fields" class="<?= $edit_att === 'absent' ? '' : 'hidden' ?>">
                                                         <div>
-                                                            <label class="block text-xs font-bold text-slate-700 mb-1.5">Reason for Absence <span class="text-slate-400 font-normal text-[11px]">/ ခွင့်ယူရသည့်အကြောင်းအရင်း</span></label>
+                                                            <label class="block text-xs font-bold text-slate-700 mb-1.5">ခွင့်ယူရသည့်အကြောင်းအရင်း</label>
                                                             <textarea name="reason_for_absence" rows="2" placeholder="Please state your reason for absence…" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['reason_for_absence'] ?? '') ?></textarea>
                                                         </div>
                                                     </div>
@@ -2714,7 +2710,7 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                                     value="<?= htmlspecialchars($student_name) ?>"
                                                                     placeholder="Enter your name"
                                                                     oninput="previewLeftSig()"
-                                                    class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
+                                                                    class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
                                                             </div>
 
                                                             <!-- Upload Mode -->
@@ -2846,115 +2842,115 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                         <span>🔒</span> Forwarded to University Supervisor
                                                     </div>
                                                 </div>
-                                             <?php elseif ($magic_link_unlocked): ?>
+                                            <?php elseif ($magic_link_unlocked): ?>
 
-                                                 <?php if ($is_rejected): ?>
-                                                     <div class="bg-red-50 border border-red-200 rounded-xl p-3.5 mb-4">
-                                                         <p class="text-xs font-bold text-red-700 mb-1 flex items-center gap-1.5">
-                                                             <span>⚠️</span> Report Rejected by Instructor
-                                                         </p>
-                                                         <p class="text-xs text-red-600 leading-relaxed">
-                                                             <?= htmlspecialchars($rejection_reason ?: 'Please revise your daily logs and reflection according to your instructor’s feedback, then sign and resend.') ?>
-                                                         </p>
-                                                     </div>
-                                                 <?php endif; ?>
+                                                <?php if ($is_rejected): ?>
+                                                    <div class="bg-red-50 border border-red-200 rounded-xl p-3.5 mb-4">
+                                                        <p class="text-xs font-bold text-red-700 mb-1 flex items-center gap-1.5">
+                                                            <span>⚠️</span> Report Rejected by Instructor
+                                                        </p>
+                                                        <p class="text-xs text-red-600 leading-relaxed">
+                                                            <?= htmlspecialchars($rejection_reason ?: 'Please revise your daily logs and reflection according to your instructor’s feedback, then sign and resend.') ?>
+                                                        </p>
+                                                    </div>
+                                                <?php endif; ?>
 
-                                                 <!-- Instructor Email Status Card -->
-                                                 <div class="flex-1 flex flex-col justify-between space-y-4">
-                                                     <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
-                                                         <div class="flex items-center gap-3 mb-3">
-                                                             <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
-                                                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                                                 </svg>
-                                                             </div>
-                                                             <div class="min-w-0 flex-1">
-                                                                 <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Assigned Instructor</p>
-                                                                 <p class="text-sm font-bold text-slate-800 truncate"><?= htmlspecialchars($instructor_name ?: 'Company Instructor') ?></p>
-                                                             </div>
-                                                         </div>
+                                                <!-- Instructor Email Status Card -->
+                                                <div class="flex-1 flex flex-col justify-between space-y-4">
+                                                    <div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4">
+                                                        <div class="flex items-center gap-3 mb-3">
+                                                            <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                                                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                                                </svg>
+                                                            </div>
+                                                            <div class="min-w-0 flex-1">
+                                                                <p class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Assigned Instructor</p>
+                                                                <p class="text-sm font-bold text-slate-800 truncate"><?= htmlspecialchars($instructor_name ?: 'Company Instructor') ?></p>
+                                                            </div>
+                                                        </div>
 
-                                                         <div class="space-y-2 border-t border-slate-200/60 pt-3">
-                                                             <div class="flex items-center justify-between text-xs">
-                                                                 <span class="text-slate-500 font-medium">Recipient Email</span>
-                                                                 <?php if (!empty($instructor_email)): ?>
-                                                                     <span class="font-mono font-bold text-indigo-600 truncate max-w-[200px]" title="<?= htmlspecialchars($instructor_email) ?>">
-                                                                         <?= htmlspecialchars($instructor_email) ?>
-                                                                     </span>
-                                                                 <?php else: ?>
-                                                                     <span class="font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded text-[11px]">Not Configured</span>
-                                                                 <?php endif; ?>
-                                                             </div>
-                                                             <div class="flex items-center justify-between text-xs">
-                                                                 <span class="text-slate-500 font-medium">Delivery Status</span>
-                                                                 <?php if (!empty($instructor_email)): ?>
-                                                                     <span class="inline-flex items-center gap-1 font-bold text-emerald-600">
-                                                                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                                                         Dispatched to Inbox
-                                                                     </span>
-                                                                 <?php else: ?>
-                                                                     <span class="font-bold text-amber-600">Awaiting Email Address</span>
-                                                                 <?php endif; ?>
-                                                             </div>
-                                                             <div class="flex items-center justify-between text-xs">
-                                                                 <span class="text-slate-500 font-medium">Link Validity</span>
-                                                                 <span class="font-semibold text-slate-600">7 Days (Single Use)</span>
-                                                             </div>
-                                                         </div>
-                                                     </div>
+                                                        <div class="space-y-2 border-t border-slate-200/60 pt-3">
+                                                            <div class="flex items-center justify-between text-xs">
+                                                                <span class="text-slate-500 font-medium">Recipient Email</span>
+                                                                <?php if (!empty($instructor_email)): ?>
+                                                                    <span class="font-mono font-bold text-indigo-600 truncate max-w-[200px]" title="<?= htmlspecialchars($instructor_email) ?>">
+                                                                        <?= htmlspecialchars($instructor_email) ?>
+                                                                    </span>
+                                                                <?php else: ?>
+                                                                    <span class="font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded text-[11px]">Not Configured</span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                            <div class="flex items-center justify-between text-xs">
+                                                                <span class="text-slate-500 font-medium">Delivery Status</span>
+                                                                <?php if (!empty($instructor_email)): ?>
+                                                                    <span class="inline-flex items-center gap-1 font-bold text-emerald-600">
+                                                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                                        Dispatched to Inbox
+                                                                    </span>
+                                                                <?php else: ?>
+                                                                    <span class="font-bold text-amber-600">Awaiting Email Address</span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                            <div class="flex items-center justify-between text-xs">
+                                                                <span class="text-slate-500 font-medium">Link Validity</span>
+                                                                <span class="font-semibold text-slate-600">7 Days (Single Use)</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                                                     <?php if (empty($instructor_email)): ?>
-                                                         <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-800">
-                                                             <p class="font-bold mb-1 flex items-center gap-1.5">
-                                                                 <span>⚠️</span> Instructor Email Missing
-                                                             </p>
-                                                             <p class="text-amber-700 leading-relaxed mb-3">
-                                                                 သင်၏ Company Instructor Email လိပ်စာကို ထည့်သွင်းထားခြင်း မရှိသေးပါ။ Email သို့ တိုက်ရိုက် ပို့ဆောင်နိုင်ရန် Profile တွင် အရင် ဖြည့်သွင်းပေးပါ။
-                                                             </p>
-                                                             <a href="profile.php" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition shadow-xs">
-                                                                 ✏️ Update Instructor Email in Profile
-                                                             </a>
-                                                         </div>
-                                                     <?php else: ?>
-                                                         <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 text-[11px] text-indigo-900 leading-relaxed">
-                                                             <p class="font-semibold text-indigo-800 mb-1 flex items-center gap-1">
-                                                                 <span>🔒</span> လုံခြုံရေး အသိပေးချက် / Security Notice:
-                                                             </p>
-                                                             ကျောင်းသား Screen ပေါ်တွင် Token Link ကို လုံခြုံရေးအရ လုံးဝ ပြသမည်မဟုတ်ဘဲ Instructor ထံသို့ HTML Email ဖြင့် တိုက်ရိုက် ပို့ဆောင်ထားပါသည်။ Instructor မှ Email ရှိ Link ကို နှိပ်၍ တိုက်ရိုက် စစ်ဆေးလက်မှတ်ထိုးပေးနိုင်ပါသည်။
-                                                         </div>
+                                                    <?php if (empty($instructor_email)): ?>
+                                                        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-800">
+                                                            <p class="font-bold mb-1 flex items-center gap-1.5">
+                                                                <span>⚠️</span> Instructor Email Missing
+                                                            </p>
+                                                            <p class="text-amber-700 leading-relaxed mb-3">
+                                                                သင်၏ Company Instructor Email လိပ်စာကို ထည့်သွင်းထားခြင်း မရှိသေးပါ။ Email သို့ တိုက်ရိုက် ပို့ဆောင်နိုင်ရန် Profile တွင် အရင် ဖြည့်သွင်းပေးပါ။
+                                                            </p>
+                                                            <a href="profile.php" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition shadow-xs">
+                                                                ✏️ Update Instructor Email in Profile
+                                                            </a>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 text-[11px] text-indigo-900 leading-relaxed">
+                                                            <p class="font-semibold text-indigo-800 mb-1 flex items-center gap-1">
+                                                                <span>🔒</span> လုံခြုံရေး အသိပေးချက် / Security Notice:
+                                                            </p>
+                                                            ကျောင်းသား Screen ပေါ်တွင် Token Link ကို လုံခြုံရေးအရ လုံးဝ ပြသမည်မဟုတ်ဘဲ Instructor ထံသို့ HTML Email ဖြင့် တိုက်ရိုက် ပို့ဆောင်ထားပါသည်။ Instructor မှ Email ရှိ Link ကို နှိပ်၍ တိုက်ရိုက် စစ်ဆေးလက်မှတ်ထိုးပေးနိုင်ပါသည်။
+                                                        </div>
 
-                                                         <form method="POST" class="pt-1">
-                                                             <button type="submit" name="resend_instructor_email" class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
-                                                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                                                                 </svg>
-                                                                 <span>✉️ Resend Review Email to Instructor</span>
-                                                             </button>
-                                                         </form>
-                                                     <?php endif; ?>
-                                                 </div>
+                                                        <form method="POST" class="pt-1">
+                                                            <button type="submit" name="resend_instructor_email" class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center justify-center gap-2 cursor-pointer">
+                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                                </svg>
+                                                                <span>✉️ Resend Review Email to Instructor</span>
+                                                            </button>
+                                                        </form>
+                                                    <?php endif; ?>
+                                                </div>
 
-                                             <?php else: ?>
-                                                 <!-- Locked State -->
-                                                 <div class="flex-1 flex flex-col justify-center">
-                                                     <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
-                                                         <div class="flex items-start gap-2">
-                                                             <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                                                             </svg>
-                                                             <div>
-                                                                 <p class="text-caption font-bold text-amber-700 mb-1">Requirements not met for Week <?= $selected_week ?></p>
-                                                                 <ul class="text-label text-amber-600 space-y-0.5">
-                                                                     <li>Daily Logs: <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong> days</li>
-                                                                     <li>Weekly Reflection: <strong><?= $reflection_submitted ? 'Submitted' : 'Pending' ?></strong></li>
-                                                                     <li>Student Signature: <strong><?= $student_signed ? 'Signed' : 'Pending' ?></strong></li>
-                                                                 </ul>
-                                                             </div>
-                                                         </div>
-                                                     </div>
-                                                     <p class="text-caption text-slate-400 text-center">Complete all 3 previous steps to dispatch review email to your instructor.</p>
-                                                 </div>
-                                             <?php endif; ?>
+                                            <?php else: ?>
+                                                <!-- Locked State -->
+                                                <div class="flex-1 flex flex-col justify-center">
+                                                    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+                                                        <div class="flex items-start gap-2">
+                                                            <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                                                            </svg>
+                                                            <div>
+                                                                <p class="text-caption font-bold text-amber-700 mb-1">Requirements not met for Week <?= $selected_week ?></p>
+                                                                <ul class="text-label text-amber-600 space-y-0.5">
+                                                                    <li>Daily Logs: <strong><?= $weekly_log_count ?>/<?= $total_weekdays ?></strong> days</li>
+                                                                    <li>Weekly Reflection: <strong><?= $reflection_submitted ? 'Submitted' : 'Pending' ?></strong></li>
+                                                                    <li>Student Signature: <strong><?= $student_signed ? 'Signed' : 'Pending' ?></strong></li>
+                                                                </ul>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <p class="text-caption text-slate-400 text-center">Complete all 3 previous steps to dispatch review email to your instructor.</p>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
 

@@ -188,46 +188,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Academic Dossier – University Internship Portal</title>
+    <title>My Profile – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;0,800;0,900;1,600&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    colors: {
-                        oxford: {
-                            DEFAULT: '#002147',
-                            50: '#f0f4f9',
-                            100: '#dce5f1',
-                            800: '#002855',
-                            900: '#002147',
-                            950: '#00142b',
-                        },
-                        gold: {
-                            DEFAULT: '#c5a059',
-                            50: '#fcfaf6',
-                            100: '#f7f2e8',
-                            200: '#ede0c8',
-                            300: '#dfcaa0',
-                            400: '#c5a059',
-                            500: '#b8860b',
-                            600: '#996f08',
-                        }
+                    fontSize: {
+                        'micro': '0.5rem',
+                        'caption': '0.6875rem',
+                        'label': '0.8125rem',
+                        'subtitle': '0.9375rem',
                     },
-                    fontFamily: {
-                        'sans': ['Inter', 'sans-serif'],
-                        'serif': ['"Playfair Display"', 'Georgia', 'serif'],
-                        'crest': ['Cinzel', 'serif'],
-                        'mono': ['"JetBrains Mono"', 'monospace'],
-                    }
                 }
             }
         }
     </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         html {
             scrollbar-gutter: stable;
@@ -236,20 +213,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f8f7f4;
-            background-image: 
-                radial-gradient(circle at 100% 0%, rgba(197, 160, 89, 0.05) 0%, transparent 25%),
-                radial-gradient(circle at 0% 100%, rgba(0, 33, 71, 0.04) 0%, transparent 25%);
         }
 
         .glass-sidebar {
-            background: #002147;
-            border-right: 1px solid rgba(197, 160, 89, 0.25);
+            background: #005f73;
+            border-right: 1px solid rgba(15, 118, 110, 0.4);
         }
 
         .glass-sidebar nav {
             scrollbar-width: thin;
-            scrollbar-color: rgba(197, 160, 89, 0.3) transparent;
+            scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
         }
 
         .glass-sidebar nav::-webkit-scrollbar {
@@ -257,40 +230,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
         }
 
         .glass-sidebar nav::-webkit-scrollbar-thumb {
-            background: rgba(197, 160, 89, 0.3);
+            background: rgba(255, 255, 255, 0.15);
             border-radius: 4px;
         }
 
         .nav-link {
-            color: #dce5f1;
+            color: #ccfbf1;
             font-weight: 500;
         }
 
         .nav-link:hover {
-            color: #ffffff;
-            background: rgba(197, 160, 89, 0.15);
+            color: #fff;
+            background: rgba(15, 118, 110, 0.6);
         }
 
         .active-nav {
-            background: linear-gradient(135deg, rgba(197, 160, 89, 0.25) 0%, rgba(197, 160, 89, 0.1) 100%);
-            color: #ffffff;
+            background: #0a9396;
+            color: #fff;
             font-weight: 600;
-            border-left: 3px solid #c5a059;
-        }
-
-        .parchment-card {
-            background: #ffffff;
-            border: 1px solid #e7e2d7;
-            box-shadow: 0 4px 20px -2px rgba(0, 33, 71, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.02);
-        }
-
-        .oxford-gradient {
-            background: linear-gradient(135deg, #001833 0%, #002147 50%, #0a2f5c 100%);
-        }
-
-        .academic-seal-watermark {
-            background-image: radial-gradient(rgba(197, 160, 89, 0.08) 1px, transparent 1px);
-            background-size: 20px 20px;
+            box-shadow: 0 4px 12px rgba(10, 147, 150, 0.3);
         }
 
         @media print {
@@ -323,13 +281,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
             if (edit.classList.contains('hidden')) {
                 view.classList.add('hidden');
                 edit.classList.remove('hidden');
-                btn.innerHTML = '<i class="fa-solid fa-xmark text-xs mr-1"></i> Cancel';
-                btn.className = 'edit-toggle px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg border border-slate-300 transition cursor-pointer';
+                btn.textContent = '✕ Cancel';
+                btn.classList.remove('bg-slate-800', 'hover:bg-slate-900');
+                btn.classList.add('bg-slate-200', 'hover:bg-slate-300', 'text-slate-700');
             } else {
                 edit.classList.add('hidden');
                 view.classList.remove('hidden');
-                btn.innerHTML = '<i class="fa-solid fa-pen-nib text-xs mr-1"></i> Edit Record';
-                btn.className = 'edit-toggle px-3.5 py-1.5 bg-[#c5a059] hover:bg-[#b8860b] text-[#002147] text-xs font-bold rounded-lg shadow-xs transition cursor-pointer';
+                btn.textContent = 'Edit';
+                btn.classList.remove('bg-slate-200', 'hover:bg-slate-300', 'text-slate-700');
+                btn.classList.add('bg-slate-800', 'hover:bg-slate-900');
             }
         }
 
@@ -342,318 +302,235 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                 input.type = 'text';
                 if (eyeSlash) eyeSlash.classList.add('hidden');
                 if (eyeOpen) eyeOpen.classList.remove('hidden');
+                btn.setAttribute('title', 'Hide password');
             } else {
                 input.type = 'password';
                 if (eyeOpen) eyeOpen.classList.add('hidden');
                 if (eyeSlash) eyeSlash.classList.remove('hidden');
+                btn.setAttribute('title', 'Show password');
             }
         }
     </script>
 </head>
 
-<body class="font-sans antialiased text-slate-800">
+<body class="bg-slate-100 font-sans antialiased">
 
     <div class="flex h-screen overflow-hidden">
 
         <!-- ─── SIDEBAR BACKDROP (MOBILE) ─── -->
-        <div id="studentSidebarBackdrop" onclick="toggleStudentSidebar()" class="hidden fixed inset-0 bg-[#00142b]/60 backdrop-blur-xs z-40 lg:hidden print:hidden"></div>
+        <div id="studentSidebarBackdrop" onclick="toggleStudentSidebar()" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden print:hidden"></div>
 
         <!-- ─── SIDEBAR ─── -->
-        <aside id="studentSidebar" class="w-64 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 lg:static lg:z-auto transition-transform duration-200 ease-in-out glass-sidebar flex flex-col shrink-0 text-white shadow-2xl print:hidden">
-            <!-- University Crest Top Brand -->
-            <div class="h-20 flex items-center gap-3 px-5 border-b border-[#c5a059]/25 shrink-0 bg-[#001833]">
-                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#c5a059] to-[#8f6d28] text-[#002147] flex items-center justify-center font-bold text-lg shadow-md border border-[#f7f2e8]/40 shrink-0">
-                    <i class="fa-solid fa-graduation-cap"></i>
-                </div>
-                <div class="min-w-0">
-                    <span class="font-crest tracking-wider text-sm font-bold text-white block uppercase leading-tight">University Portal</span>
-                    <span class="text-[10px] text-[#c5a059] font-medium tracking-widest uppercase block">Internship Dossier</span>
-                </div>
-                <button type="button" onclick="toggleStudentSidebar()" class="lg:hidden ml-auto text-slate-300 hover:text-white p-1 rounded-lg transition" aria-label="Close sidebar">✕</button>
+        <aside id="studentSidebar" class="w-64 fixed inset-y-0 left-0 z-50 transform -translate-x-full lg:translate-x-0 lg:static lg:z-auto transition-transform duration-200 ease-in-out glass-sidebar flex flex-col shrink-0 text-white shadow-xl print:hidden">
+            <div class="h-16 flex items-center justify-between px-5 border-b border-white/10 shrink-0">
+                <span class="font-black text-white tracking-tight text-lg">InternReport</span>
+                <button type="button" onclick="toggleStudentSidebar()" class="lg:hidden text-teal-200 hover:text-white p-1 rounded-lg transition" aria-label="Close sidebar">✕</button>
             </div>
-
-            <!-- Navigation Links -->
-            <nav class="flex-1 min-h-0 py-5 space-y-1.5 px-3 overflow-y-auto">
-                <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors duration-200">
-                    <i class="fa-solid fa-chart-line text-sm w-5 text-center text-[#c5a059]"></i>
-                    <span>Dashboard</span>
+            <nav class="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
+                <a href="student-dashboard.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg> Dashboard
                 </a>
-                <a href="log-history.php" class="nav-link flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors duration-200">
-                    <i class="fa-solid fa-book-bookmark text-sm w-5 text-center text-[#c5a059]"></i>
-                    <span>Log History</span>
+                <a href="log-history.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg> Log History
                 </a>
-                <a href="instructions.php" class="nav-link flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors duration-200">
-                    <i class="fa-solid fa-scroll text-sm w-5 text-center text-[#c5a059]"></i>
-                    <span>Guidelines</span>
+                <a href="instructions.php" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253z" />
+                    </svg> Instructions
                 </a>
-                <a href="profile.php" class="nav-link active-nav flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm transition-colors duration-200">
-                    <i class="fa-solid fa-id-card-clip text-sm w-5 text-center text-[#c5a059]"></i>
-                    <span>Academic Dossier</span>
+                <a href="profile.php" class="nav-link active-nav flex items-center gap-3 px-3 py-2.5 rounded-lg text-subtitle leading-relaxed transition-colors duration-200">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg> Profile
                 </a>
             </nav>
-
-            <div class="p-4 border-t border-[#c5a059]/20 bg-[#001833]">
-                <a href="../logout.php" class="flex items-center gap-3 px-3 py-2 text-xs font-bold text-rose-300 hover:text-white hover:bg-rose-900/30 rounded-lg transition-colors duration-200">
-                    <i class="fa-solid fa-arrow-right-from-bracket text-xs w-4 text-center"></i>
-                    <span>Sign Out</span>
+            <div class="p-3 border-t border-white/10">
+                <a href="../logout.php" class="flex items-center gap-3 px-3 py-2.5 text-subtitle leading-relaxed font-semibold text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors duration-200">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg> Logout
                 </a>
             </div>
         </aside>
 
-        <!-- ─── MAIN CONTENT ─── -->
-        <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <!-- ─── MAIN ─── -->
+        <div class="flex-1 flex flex-col min-h-0">
 
             <!-- Top Bar -->
-            <?php $pageTitle = '🎓 Student Academic Dossier';
+            <?php $pageTitle = 'My Profile';
             $show_back_link = true;
             include '../includes/student-topbar.php'; ?>
 
-            <!-- Content Container -->
-            <main class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8" style="scrollbar-gutter: stable;">
-                <div class="max-w-6xl mx-auto w-full space-y-6 pb-20">
+            <!-- Content -->
+            <main class="flex-1 overflow-y-auto p-6 md:p-8">
+                <div class="max-w-5xl mx-auto w-full space-y-6">
 
                     <!-- Alerts -->
                     <?php if ($profile_msg): ?>
-                        <div class="bg-emerald-50 border-l-4 border-emerald-600 text-emerald-900 text-xs font-semibold px-4 py-3 rounded-r-xl flex items-center gap-2.5 shadow-xs">
-                            <i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i>
-                            <span><?= htmlspecialchars($profile_msg) ?></span>
+                        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <?= htmlspecialchars($profile_msg) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($profile_err): ?>
-                        <div class="bg-rose-50 border-l-4 border-rose-600 text-rose-900 text-xs font-semibold px-4 py-3 rounded-r-xl flex items-center gap-2.5 shadow-xs">
-                            <i class="fa-solid fa-circle-exclamation text-rose-600 text-sm"></i>
-                            <span><?= htmlspecialchars($profile_err) ?></span>
+                        <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <?= htmlspecialchars($profile_err) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($pw_msg): ?>
-                        <div class="bg-emerald-50 border-l-4 border-emerald-600 text-emerald-900 text-xs font-semibold px-4 py-3 rounded-r-xl flex items-center gap-2.5 shadow-xs">
-                            <i class="fa-solid fa-shield-halved text-emerald-600 text-sm"></i>
-                            <span><?= htmlspecialchars($pw_msg) ?></span>
+                        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <?= htmlspecialchars($pw_msg) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($pw_err): ?>
-                        <div class="bg-rose-50 border-l-4 border-rose-600 text-rose-900 text-xs font-semibold px-4 py-3 rounded-r-xl flex items-center gap-2.5 shadow-xs">
-                            <i class="fa-solid fa-triangle-exclamation text-rose-600 text-sm"></i>
-                            <span><?= htmlspecialchars($pw_err) ?></span>
+                        <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <?= htmlspecialchars($pw_err) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($avatar_msg): ?>
-                        <div class="bg-emerald-50 border-l-4 border-emerald-600 text-emerald-900 text-xs font-semibold px-4 py-3 rounded-r-xl flex items-center gap-2.5 shadow-xs">
-                            <i class="fa-solid fa-camera text-emerald-600 text-sm"></i>
-                            <span><?= htmlspecialchars($avatar_msg) ?></span>
+                        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <?= htmlspecialchars($avatar_msg) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($avatar_err): ?>
-                        <div class="bg-rose-50 border-l-4 border-rose-600 text-rose-900 text-xs font-semibold px-4 py-3 rounded-r-xl flex items-center gap-2.5 shadow-xs">
-                            <i class="fa-solid fa-circle-xmark text-rose-600 text-sm"></i>
-                            <span><?= htmlspecialchars($avatar_err) ?></span>
+                        <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <?= htmlspecialchars($avatar_err) ?>
                         </div>
                     <?php endif; ?>
 
-                    <!-- ══════════════════════════════════════════════════════════ -->
-                    <!-- 🏛️ PRESTIGIOUS OXFORD-STYLE UNIVERSITY IDENTITY HERO BANNER -->
-                    <!-- ══════════════════════════════════════════════════════════ -->
-                    <div class="oxford-gradient rounded-2xl border-2 border-[#c5a059]/40 shadow-xl overflow-hidden text-white relative">
-                        <!-- Subtle Academic Pattern Overlay -->
-                        <div class="absolute inset-0 academic-seal-watermark opacity-25 pointer-events-none"></div>
-                        <div class="absolute -right-12 -bottom-16 text-[#c5a059]/10 text-[220px] font-crest pointer-events-none select-none">
-                            <i class="fa-solid fa-landmark"></i>
-                        </div>
-
-                        <!-- Top Prestige Header Ribbon -->
-                        <div class="px-6 py-2.5 bg-[#00142b]/80 border-b border-[#c5a059]/30 flex flex-wrap items-center justify-between gap-3 text-xs">
-                            <div class="flex items-center gap-2.5">
-                                <span class="w-2 h-2 rounded-full bg-[#c5a059] animate-pulse"></span>
-                                <span class="font-crest tracking-widest text-[#c5a059] uppercase text-[11px] font-bold">Faculty of Computer Studies</span>
-                                <span class="text-slate-400 hidden sm:inline">•</span>
-                                <span class="text-slate-300 text-[11px] hidden sm:inline">Official Student Internship Record</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#c5a059]/20 text-[#c5a059] border border-[#c5a059]/40 font-mono uppercase tracking-wider">
-                                    AY <?= htmlspecialchars($academic_year ?: '2023-2024') ?>
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Main Hero Body -->
-                        <div class="p-6 sm:p-8 relative z-10">
-                            <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-
-                                <!-- Student Profile & Avatar -->
-                                <div class="flex items-center gap-5 sm:gap-6">
-                                    <!-- Avatar with Gold Academic Ring -->
-                                    <div class="relative group shrink-0">
-                                        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden ring-4 ring-[#c5a059]/50 border-2 border-white shadow-2xl bg-[#001833] flex items-center justify-center">
-                                            <?php if ($profile_pic): ?>
-                                                <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-full h-full object-cover">
-                                            <?php else: ?>
-                                                <?php
-                                                $_p_initial = mb_substr($student_name, 0, 1, 'UTF-8');
-                                                $_p_initial_display = ($_p_initial === '—' || empty($_p_initial)) ? 'S' : mb_strtoupper($_p_initial, 'UTF-8');
-                                                ?>
-                                                <span class="text-4xl font-serif font-bold text-[#c5a059]"><?= htmlspecialchars($_p_initial_display) ?></span>
-                                            <?php endif; ?>
+                    <!-- ════ UNIFIED AVATAR & STUDENT PROFILE HEADER ════ -->
+                    <div class="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 sm:p-7">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+                            <div class="flex items-center gap-5">
+                                <div class="relative w-20 h-20 shrink-0">
+                                    <?php if ($profile_pic): ?>
+                                        <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-20 h-20 rounded-2xl object-cover border-2 border-indigo-100 shadow-xs">
+                                    <?php else: ?>
+                                        <?php
+                                        $_p_initial = mb_substr($student_name, 0, 1, 'UTF-8');
+                                        $_p_initial_display = ($_p_initial === '—' || empty($_p_initial)) ? 'S' : mb_strtoupper($_p_initial, 'UTF-8');
+                                        ?>
+                                        <div class="w-20 h-20 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center justify-center text-2xl font-black shadow-xs">
+                                            <?= htmlspecialchars($_p_initial_display) ?>
                                         </div>
-
-                                        <!-- Camera Upload Badge Overlay -->
-                                        <form method="POST" enctype="multipart/form-data" class="absolute inset-0 flex items-center justify-center bg-[#00142b]/75 rounded-2xl opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer">
-                                            <input type="hidden" name="update_avatar" value="1">
-                                            <input type="file" name="avatar" id="heroPhotoInput" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="this.form.submit()">
-                                            <button type="button" onclick="document.getElementById('heroPhotoInput').click()" class="text-[#c5a059] text-xs font-bold flex flex-col items-center gap-1 cursor-pointer">
-                                                <i class="fa-solid fa-camera text-base"></i>
-                                                <span class="text-[10px] text-white">Update Photo</span>
-                                            </button>
-                                        </form>
-                                    </div>
-
-                                    <!-- Identity Info -->
-                                    <div class="min-w-0 space-y-1.5">
-                                        <div class="flex items-center gap-3 flex-wrap">
-                                            <h1 class="text-2xl sm:text-3xl font-serif font-bold text-white tracking-tight leading-none"><?= htmlspecialchars($student_name) ?></h1>
-                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-500/40">
-                                                <i class="fa-solid fa-shield-halved text-[10px]"></i> Enrolled Candidate
-                                            </span>
-                                        </div>
-                                        <p class="text-xs sm:text-sm text-slate-300 font-mono flex items-center gap-2">
-                                            <i class="fa-regular fa-envelope text-[#c5a059]"></i>
-                                            <span><?= htmlspecialchars($user_email) ?></span>
-                                        </p>
-
-                                        <!-- Academic Badges -->
-                                        <div class="flex items-center gap-2 pt-1 flex-wrap">
-                                            <?php if (!empty($student_roll)): ?>
-                                                <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-[#c5a059]/20 text-[#c5a059] text-xs font-mono font-bold rounded-lg border border-[#c5a059]/40 shadow-xs">
-                                                    <i class="fa-solid fa-id-badge text-[11px]"></i>
-                                                    <span>Roll: <?= htmlspecialchars($student_roll) ?></span>
-                                                </span>
-                                            <?php endif; ?>
-                                            <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 text-slate-200 text-xs font-bold rounded-lg border border-white/15">
-                                                <i class="fa-solid fa-graduation-cap text-[#c5a059] text-xs"></i>
-                                                <span><?= htmlspecialchars($profile['major'] ?: 'Computer Science') ?></span>
-                                            </span>
-                                            <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-white/10 text-slate-200 text-xs font-bold rounded-lg border border-white/15">
-                                                <i class="fa-regular fa-calendar text-[#c5a059] text-xs"></i>
-                                                <span>AY <?= htmlspecialchars($academic_year ?: '2023-2024') ?></span>
-                                            </span>
-                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                                <div>
+                                    <h2 class="text-base sm:text-lg font-black text-slate-800 tracking-tight"><?= htmlspecialchars($student_name) ?></h2>
+                                    <p class="text-xs text-slate-500 font-medium mt-0.5"><?= htmlspecialchars($user_email) ?></p>
+                                    <div class="flex items-center gap-2 mt-2 flex-wrap">
+                                        <span class="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-lg border border-teal-200 capitalize">Student</span>
+                                        <?php if (!empty($student_roll)): ?>
+                                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200 font-mono"><?= htmlspecialchars($student_roll) ?></span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($academic_year)): ?>
+                                            <span class="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">AY: <?= htmlspecialchars($academic_year) ?></span>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
-
-                                <!-- Placement Seal Snippet -->
-                                <div class="w-full md:w-auto bg-[#00142b]/70 backdrop-blur-md rounded-xl border border-[#c5a059]/30 p-4 shrink-0 space-y-2">
-                                    <div class="flex items-center gap-2 text-[#c5a059] text-[10px] font-crest font-bold uppercase tracking-widest">
-                                        <i class="fa-solid fa-building-columns"></i>
-                                        <span>Practicum Host Institution</span>
-                                    </div>
-                                    <p class="text-sm font-serif font-bold text-white"><?= htmlspecialchars($profile['company_name'] ?: 'Pending Placement') ?></p>
-                                    <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-4 text-xs">
-                                        <span class="text-slate-400">Faculty Advisor:</span>
-                                        <span class="font-bold text-[#c5a059]"><?= htmlspecialchars($supervisor_name ?: 'Pending Assignment') ?></span>
-                                    </div>
-                                </div>
-
                             </div>
+
+                            <!-- Avatar Upload Form -->
+                            <form method="POST" enctype="multipart/form-data" class="flex flex-col sm:items-end gap-2 w-full sm:w-auto pt-4 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                                <input type="hidden" name="update_avatar" value="1">
+                                <div class="flex items-center gap-2">
+                                    <input type="file" name="avatar" id="avatarFileInput" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="this.form.submit()">
+                                    <button type="button" onclick="document.getElementById('avatarFileInput').click()" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">
+                                        <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        Change Photo
+                                    </button>
+                                </div>
+                                <p class="text-[10px] text-slate-400">JPG, PNG, WEBP. Max 2MB.</p>
+                            </form>
                         </div>
                     </div>
 
-                    <!-- ══════════════════════════════════════════════════════════ -->
-                    <!-- 2-COLUMN PRESTIGE DOSSIER & RECORD LAYOUT -->
-                    <!-- ══════════════════════════════════════════════════════════ -->
-                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-                        <!-- ── LEFT COLUMN (4 cols): OFFICIAL DIGITAL STUDENT PASS CARD ── -->
-                        <div class="lg:col-span-4 space-y-6">
-
-                            <!-- University Pass Card -->
-                            <div class="parchment-card rounded-2xl overflow-hidden border-2 border-[#e2d9c8]">
-                                <!-- Card Header -->
-                                <div class="bg-[#002147] text-white p-4 text-center border-b-2 border-[#c5a059] relative">
-                                    <div class="w-8 h-8 mx-auto mb-1 rounded-full bg-[#c5a059] text-[#002147] flex items-center justify-center font-bold text-sm">
-                                        <i class="fa-solid fa-feather-pointed"></i>
-                                    </div>
-                                    <h2 class="font-crest text-xs tracking-widest uppercase font-bold text-[#c5a059]">Academic Student Pass</h2>
-                                    <p class="text-[10px] text-slate-300">Department of Computer Studies</p>
-                                </div>
-
-                                <!-- Card Photo & Roll -->
-                                <div class="p-6 text-center space-y-3 bg-gradient-to-b from-[#fcfbf9] to-[#f7f5ef]">
-                                    <div class="w-20 h-20 mx-auto rounded-xl overflow-hidden border-2 border-[#c5a059] shadow-md bg-[#002147] flex items-center justify-center">
-                                        <?php if ($profile_pic): ?>
-                                            <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Pass Avatar" class="w-full h-full object-cover">
-                                        <?php else: ?>
-                                            <span class="text-3xl font-serif font-bold text-[#c5a059]"><?= htmlspecialchars($_p_initial_display) ?></span>
-                                        <?php endif; ?>
-                                    </div>
-                                    <div>
-                                        <h3 class="font-serif text-base font-bold text-[#002147]"><?= htmlspecialchars($student_name) ?></h3>
-                                        <p class="text-xs font-mono font-bold text-[#b8860b] mt-0.5"><?= htmlspecialchars($student_roll ?: '5CS-PENDING') ?></p>
-                                    </div>
-
-                                    <div class="pt-3 border-t border-[#e2d9c8] text-left space-y-2 text-xs">
-                                        <div class="flex justify-between items-center">
-                                            <span class="text-slate-500 font-medium">Program:</span>
-                                            <span class="font-bold text-slate-800"><?= htmlspecialchars($profile['major'] ?: 'Computer Science') ?></span>
-                                        </div>
-                                        <div class="flex justify-between items-center">
-                                            <span class="text-slate-500 font-medium">Academic Batch:</span>
-                                            <span class="font-bold font-mono text-slate-800"><?= htmlspecialchars($academic_year ?: '2023-2024') ?></span>
-                                        </div>
-                                        <div class="flex justify-between items-center">
-                                            <span class="text-slate-500 font-medium">Practicum Length:</span>
-                                            <span class="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">12 Weeks (60 Days)</span>
-                                        </div>
-                                    </div>
-
-                                    <div class="pt-3 border-t border-[#e2d9c8] flex items-center justify-center gap-2 text-[10px] text-slate-400 font-mono uppercase tracking-wider">
-                                        <i class="fa-solid fa-stamp text-[#c5a059]"></i>
-                                        <span>Verified Academic Credential</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Quick Support Card -->
-                            <div class="parchment-card rounded-2xl p-5 border border-[#e2d9c8] space-y-3">
-                                <div class="flex items-center gap-2.5 text-[#002147]">
-                                    <div class="w-7 h-7 rounded-lg bg-[#c5a059]/20 text-[#8f6d28] flex items-center justify-center text-xs font-bold">
-                                        <i class="fa-solid fa-circle-info"></i>
-                                    </div>
-                                    <h4 class="font-serif text-xs font-bold uppercase tracking-wider">Practicum Guidelines</h4>
-                                </div>
-                                <p class="text-xs text-slate-600 leading-relaxed">
-                                    အလုပ်သင်ကာလအတွင်း နေ့စဉ်မှတ်တမ်း (Daily Logs) များနှင့် အပတ်စဉ်သုံးသပ်ချက် (Weekly Reflections) များကို အချိန်မီ တင်ပြပေးရပါမည်။
-                                </p>
-                                <a href="instructions.php" class="inline-flex items-center gap-1.5 text-xs font-bold text-[#002147] hover:text-[#b8860b] transition">
-                                    <span>Read Full Guidelines</span>
-                                    <i class="fa-solid fa-arrow-right text-[10px]"></i>
-                                </a>
-                            </div>
-
+                    <!-- ════ PERSONAL INFORMATION ════ -->
+                    <div id="card-personal" class="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                </span>
+                                Personal Information
+                            </h3>
+                            <button type="button" onclick="toggleEdit('personal')" class="edit-toggle px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition cursor-pointer">Edit</button>
                         </div>
 
-                        <!-- ── RIGHT COLUMN (8 cols): ACADEMIC DOSSIER, PLACEMENT & SECURITY ── -->
-                        <div class="lg:col-span-8 space-y-6">
-
-                            <!-- ── SECTION 1: PERSONAL & ACADEMIC DOSSIER ── -->
-                            <div id="card-personal" class="parchment-card rounded-2xl border border-[#e2d9c8] overflow-hidden">
-                                <div class="px-6 py-4 bg-[#fcfbf9] border-b border-[#e2d9c8] flex items-center justify-between">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-lg bg-[#002147] text-[#c5a059] flex items-center justify-center text-xs font-bold shadow-xs">
-                                            <i class="fa-solid fa-user-graduate"></i>
-                                        </div>
-                                        <div>
-                                            <h2 class="font-serif text-sm font-bold text-[#002147] tracking-tight">Student Academic Dossier</h2>
-                                            <p class="text-[11px] text-slate-500">Official student identity and registration information</p>
-                                        </div>
-                                    </div>
-                                    <button type="button" onclick="toggleEdit('personal')" class="edit-toggle px-3.5 py-1.5 bg-[#c5a059] hover:bg-[#b8860b] text-[#002147] text-xs font-bold rounded-lg shadow-xs transition cursor-pointer">
-                                        <i class="fa-solid fa-pen-nib text-xs mr-1"></i> Edit Record
-                                    </button>
+                        <!-- View Mode -->
+                        <div class="view-mode p-6">
+                            <dl class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                                <div>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Full Name</dt>
+                                    <dd class="text-xs sm:text-sm text-slate-800 font-bold"><?= htmlspecialchars($profile['full_name'] ?: '—') ?></dd>
                                 </div>
+                                <div>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Student Roll No</dt>
+                                    <dd class="text-xs sm:text-sm text-slate-800 font-bold font-mono"><?= htmlspecialchars($profile['student_roll'] ?: '—') ?></dd>
+                                </div>
+                                <div>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Major / Department</dt>
+                                    <dd class="text-xs sm:text-sm text-slate-800 font-bold"><?= htmlspecialchars($profile['major'] ?: '—') ?></dd>
+                                </div>
+                                <div>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Phone Number</dt>
+                                    <dd class="text-xs sm:text-sm text-slate-800 font-bold font-mono"><?= htmlspecialchars($profile['phone'] ?: '—') ?></dd>
+                                </div>
+                                <div>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Email Address</dt>
+                                    <dd class="text-xs sm:text-sm text-slate-800 font-bold"><?= htmlspecialchars($user_email) ?></dd>
+                                </div>
+                                <div>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Academic Year</dt>
+                                    <dd class="text-xs sm:text-sm text-slate-800 font-bold"><?= htmlspecialchars($academic_year ?: '—') ?></dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <!-- Edit Mode -->
+                        <form method="POST" class="edit-mode hidden">
+                            <input type="hidden" name="update_profile" value="1">
+                            <div class="p-6 space-y-4">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
+                                        <input type="text" name="full_name" value="<?= htmlspecialchars($profile['full_name']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Student Roll No</label>
+                                        <input type="text" name="student_roll" value="<?= htmlspecialchars($profile['student_roll']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Major / Department</label>
+                                        <input type="text" name="major" value="<?= htmlspecialchars($profile['major']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
+                                        <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                    </div>
+                                </div>
+                                <!-- Hidden fields to preserve internship data on save -->
+                                <input type="hidden" name="company_name" value="<?= htmlspecialchars($profile['company_name']) ?>">
+                                <input type="hidden" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name']) ?>">
                                 <input type="hidden" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email']) ?>">
                                 <input type="hidden" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>">
                                 <input type="hidden" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>">
@@ -677,9 +554,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                 Internship &amp; Placement Details
                             </h3>
                             <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-xl border border-amber-200/80">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                                 Supervisor Assigned
                             </span>
                         </div>
@@ -841,124 +716,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
             </main>
         </div>
     </div>
-
-</body>
-
-</html>
-<div class="w-9 h-9 rounded-xl bg-[#002147] text-[#c5a059] flex items-center justify-center font-bold text-sm">
-    <i class="fa-solid fa-timeline"></i>
-</div>
-<div>
-    <p class="text-[10px] font-crest font-bold text-slate-400 uppercase tracking-widest">12-Week Semester Program Timeline</p>
-    <p class="text-xs sm:text-sm font-serif font-bold text-[#002147]">
-        <?= $profile['internship_start_date'] ? (new DateTime($profile['internship_start_date']))->format('d M Y') : '02 Oct 2023' ?>
-        <span class="text-slate-400 font-normal mx-1.5">to</span>
-        <?= $profile['internship_end_date'] ? (new DateTime($profile['internship_end_date']))->format('d M Y') : '22 Dec 2023' ?>
-    </p>
-</div>
-</div>
-<span class="text-xs font-mono font-bold text-[#002147] bg-[#c5a059]/20 border border-[#c5a059]/40 px-3 py-1.5 rounded-lg w-fit">
-    60 Working Days Required
-</span>
-</div>
-
-<p class="text-xs text-slate-500 pt-2 border-t border-[#e2d9c8] flex items-center gap-2">
-    <span class="text-[#b8860b] font-bold">🔒 Academic Standing:</span>
-    Placement and supervisor credentials are authenticated and overseen by the University Internship Board.
-</p>
-</div>
-</div>
-
-<!-- ── SECTION 3: PORTAL CREDENTIALS & SECURITY ── -->
-<div class="parchment-card rounded-2xl border border-[#e2d9c8] overflow-hidden">
-    <div class="px-6 py-4 bg-[#fcfbf9] border-b border-[#e2d9c8] flex items-center justify-between">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-[#002147] text-[#c5a059] flex items-center justify-center text-xs font-bold shadow-xs">
-                <i class="fa-solid fa-lock"></i>
-            </div>
-            <div>
-                <h2 class="font-serif text-sm font-bold text-[#002147] tracking-tight">Security & Authentication</h2>
-                <p class="text-[11px] text-slate-500">Manage your student portal login password</p>
-            </div>
-        </div>
-        <span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-            <span>Authenticated Session</span>
-        </span>
-    </div>
-
-    <div class="p-6 space-y-6">
-        <!-- Security Info Cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div class="flex items-center gap-3 p-3.5 bg-[#fcfbf9] rounded-xl border border-[#e7e2d7]">
-                <span class="w-3 h-3 bg-emerald-600 rounded-full shrink-0 shadow-xs"></span>
-                <div>
-                    <p class="text-[10px] font-crest font-bold text-slate-400 uppercase">Account Status</p>
-                    <p class="text-xs font-serif font-bold text-emerald-800">Active University Account</p>
-                </div>
-            </div>
-            <div class="flex items-center gap-3 p-3.5 bg-[#fcfbf9] rounded-xl border border-[#e7e2d7]">
-                <span class="w-3 h-3 bg-[#002147] rounded-full shrink-0 shadow-xs"></span>
-                <div>
-                    <p class="text-[10px] font-crest font-bold text-slate-400 uppercase">Last Login Record</p>
-                    <p class="text-xs font-mono font-bold text-slate-700"><?= $last_login_at ? date('d M Y, h:i A', strtotime($last_login_at)) : 'Current Active Session' ?></p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Password Form -->
-        <form method="POST" class="pt-3 space-y-4 border-t border-[#e2d9c8]">
-            <input type="hidden" name="change_password" value="1">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-xs font-serif font-bold text-[#002147] uppercase tracking-wider mb-1.5">Current Password</label>
-                    <div class="relative">
-                        <input type="password" id="current_password" name="current_password" required placeholder="••••••••" class="w-full bg-white border border-[#e2d9c8] rounded-xl pl-3.5 pr-9 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/30 focus:border-[#c5a059] transition">
-                        <button type="button" onclick="togglePasswordVisibility('current_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
-                            <i class="eye-slash fa-regular fa-eye-slash text-xs"></i>
-                            <i class="eye-open fa-regular fa-eye text-xs hidden text-[#b8860b]"></i>
-                        </button>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-serif font-bold text-[#002147] uppercase tracking-wider mb-1.5">New Password</label>
-                    <div class="relative">
-                        <input type="password" id="new_password" name="new_password" required minlength="6" placeholder="Min 6 characters" class="w-full bg-white border border-[#e2d9c8] rounded-xl pl-3.5 pr-9 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/30 focus:border-[#c5a059] transition">
-                        <button type="button" onclick="togglePasswordVisibility('new_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
-                            <i class="eye-slash fa-regular fa-eye-slash text-xs"></i>
-                            <i class="eye-open fa-regular fa-eye text-xs hidden text-[#b8860b]"></i>
-                        </button>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs font-serif font-bold text-[#002147] uppercase tracking-wider mb-1.5">Confirm New Password</label>
-                    <div class="relative">
-                        <input type="password" id="confirm_password" name="confirm_password" required placeholder="Repeat new password" class="w-full bg-white border border-[#e2d9c8] rounded-xl pl-3.5 pr-9 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/30 focus:border-[#c5a059] transition">
-                        <button type="button" onclick="togglePasswordVisibility('confirm_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
-                            <i class="eye-slash fa-regular fa-eye-slash text-xs"></i>
-                            <i class="eye-open fa-regular fa-eye text-xs hidden text-[#b8860b]"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="flex justify-end pt-2">
-                <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#c5a059] hover:bg-[#b8860b] text-[#002147] font-serif font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer">
-                    <i class="fa-solid fa-key text-xs"></i>
-                    <span>Update Password</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-</div>
-
-</div>
-
-</div>
-</main>
-</div>
-</div>
 
 </body>
 

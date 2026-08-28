@@ -622,11 +622,6 @@ if ($editing_log && !empty($editing_log['log_date'])) {
                                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                             </div>
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Task Detail</label>
-                                <textarea name="task_detail" rows="2" placeholder="Describe the planned tasks…"
-                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['task_detail'] ?? '') ?></textarea>
-                            </div>
-                            <div>
                                 <label class="block text-sm font-bold text-slate-500 mb-1">Actual Task Performed</label>
                                 <textarea name="actual_task" rows="2" placeholder="What you actually accomplished…"
                                     class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['tasks_performed'] ?? '') ?></textarea>

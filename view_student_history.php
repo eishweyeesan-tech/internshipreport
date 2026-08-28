@@ -525,8 +525,8 @@ $sgd = [
                                                 <?php endif; ?>
                                             <?php endif; ?>
                                         </td>
-                                        <?php $is_absent = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
-                                        <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                        <?php $is_absent = ($wl['attendance_status'] ?? 'present') !== 'present'; ?>
+                                        <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent ? htmlspecialchars($wl['reason_for_absence'] ?: ($wl['task_title'] ?: '-')) : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
                                         <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[200px]"><?= $is_absent ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
                                         <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
                                         <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>
@@ -823,8 +823,8 @@ $sgd = [
                                                     <span class="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-200/60">Absent</span>
                                                 <?php endif; ?>
                                             </td>
-                                            <?php $is_absent_m = ($wl['attendance_status'] ?? 'present') === 'absent'; ?>
-                                            <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent_m ? '-' : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
+                                            <?php $is_absent_m = ($wl['attendance_status'] ?? 'present') !== 'present'; ?>
+                                            <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent_m ? htmlspecialchars($wl['reason_for_absence'] ?: ($wl['task_title'] ?: '-')) : htmlspecialchars($wl['task_title'] ?: '-') ?></td>
                                             <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[200px]"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tasks_performed'] ?: '-') ?></td>
                                             <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent_m ? '-' : htmlspecialchars($wl['tools_used'] ?: '-') ?></td>
                                             <td class="px-4 py-3 text-sm text-slate-700 align-top break-words max-w-[150px]"><?= $is_absent_m ? '-' : htmlspecialchars($wl['learnt_skills'] ?: '-') ?></td>

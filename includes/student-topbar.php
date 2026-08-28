@@ -132,12 +132,6 @@ if (!function_exists('student_notif_url')) {
         <button type="button" onclick="toggleStudentSidebar()" class="lg:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition cursor-pointer" aria-label="Toggle Navigation">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
         </button>
-        <?php if (!empty($show_back_link)): ?>
-        <a href="student-dashboard.php" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-teal-700 bg-teal-50 hover:bg-teal-100 hover:text-teal-900 border border-teal-200/80 rounded-xl transition cursor-pointer shrink-0" title="Back to Dashboard">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-            <span class="hidden sm:inline">Back to Dashboard</span>
-        </a>
-        <?php endif; ?>
         <span class="text-lg font-bold text-slate-800"><?= htmlspecialchars((string)($pageTitle ?? 'Dashboard')) ?></span>
         <?php if (!empty($student_academic_year)): ?>
         <span class="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-semibold text-teal-700">

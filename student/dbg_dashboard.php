@@ -1572,10 +1572,6 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                         <input type="text" name="intended_task" value="<?= htmlspecialchars($editing_log['task_title'] ?? '') ?>" placeholder="e.g. UI Design & API Integration" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                     <div>
-                                        <label class="block text-caption font-bold text-slate-500 mb-1">Task Detail <span class="text-slate-300 font-normal">/ ဆောင်ရွက်မည့် လုပ်ငန်းစဉ်များ</span></label>
-                                        <textarea name="task_detail" rows="3" placeholder="Describe the planned tasks in detail…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['task_detail'] ?? '') ?></textarea>
-                                    </div>
-                                    <div>
                                         <label class="block text-caption font-bold text-slate-500 mb-1">Actual Task Performed <span class="text-slate-300 font-normal">/ အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</span></label>
                                         <textarea name="actual_task" rows="3" placeholder="What you actually accomplished today…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($editing_log['tasks_performed'] ?? '') ?></textarea>
                                     </div>

@@ -219,8 +219,6 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 -- Default system settings
 INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES
-('default_student_password', 'password1234'),
-('default_supervisor_password', 'password1234'),
 ('current_academic_year', '2023-2024');
 
 -- Default academic years

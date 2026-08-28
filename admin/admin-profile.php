@@ -30,17 +30,6 @@ try {
     $admin = $res ? $res->fetch_assoc() : null;
 }
 
-// ── Fetch system settings ────────────────────────────────────────
-$get_settings = $db->query("SELECT setting_key, setting_value FROM system_settings");
-$settings = [];
-if ($get_settings) {
-    while ($row = $get_settings->fetch_assoc()) {
-        $settings[$row['setting_key']] = $row['setting_value'];
-    }
-}
-$default_student_pw  = $settings['default_student_password'] ?? 'password123';
-$default_supervisor_pw = $settings['default_supervisor_password'] ?? 'password123';
-
 // ══════════════════════════════════════════════════════════════════
 // HANDLERS
 // ══════════════════════════════════════════════════════════════════
@@ -105,32 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
             $_SESSION['is_first_login'] = false;
             $msg = 'Password changed successfully.';
         }
-    }
-}
-
-// ── Update Default Passwords ─────────────────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_defaults'])) {
-    $d_student = trim($_POST['default_student_password'] ?? '');
-    $d_sup     = trim($_POST['default_supervisor_password'] ?? '');
-
-    if (empty($d_student) || empty($d_sup)) {
-        $err = 'Both default password fields are required.';
-    } elseif ($err_msg = validate_strong_password($d_student)) {
-        $err = 'Student default password invalid: ' . $err_msg;
-    } elseif ($err_msg = validate_strong_password($d_sup)) {
-        $err = 'Supervisor default password invalid: ' . $err_msg;
-    } else {
-        $st1 = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_student_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $st1->bind_param("s", $d_student);
-        $st1->execute();
-
-        $st2 = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('default_supervisor_password', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $st2->bind_param("s", $d_sup);
-        $st2->execute();
-
-        $default_student_pw = $d_student;
-        $default_supervisor_pw = $d_sup;
-        $msg = 'Default passwords updated.';
     }
 }
 
@@ -417,11 +380,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                         <i class="fa-regular fa-envelope text-slate-400"></i>
                                         <span><?= htmlspecialchars($admin['email'] ?? 'admin@internreport.edu') ?></span>
                                     </p>
-                                    <div class="flex items-center gap-2 pt-0.5 flex-wrap">
-                                        <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-white/90 px-2 py-0.5 rounded-md border border-slate-200/80">
-                                            <i class="fa-solid fa-id-badge text-teal-600"></i> Admin ID #<?= (int)$admin_id ?>
-                                        </span>
-                                    </div>
                                 </div>
                             </div>
 
@@ -641,100 +599,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             </div>
                         </div>
 
-                    </div>
-
-                    <!-- ════ 3. FULL-WIDTH CARD: GLOBAL DEFAULT PASSWORDS ════ -->
-                    <div id="global-defaults-card" class="saas-card p-6 sm:p-7 space-y-5">
-                        <div class="flex items-center justify-between pb-3.5 border-b border-slate-100">
-                            <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 border border-purple-200/80 flex items-center justify-center text-sm shrink-0 shadow-xs">
-                                    <i class="fa-solid fa-sliders"></i>
-                                </div>
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-900 tracking-tight">Global Default Passwords</h3>
-                                    <p class="text-[11px] text-slate-400">Configure initial default passwords used when provisioning new user accounts</p>
-                                </div>
-                            </div>
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/60">
-                                System Provisioning
-                            </span>
-                        </div>
-
-                        <form method="POST" class="space-y-4">
-                            <input type="hidden" name="update_defaults" value="1">
-
-                            <p class="text-xs text-slate-500 leading-relaxed">
-                                These default passwords are used when creating new accounts or resetting credentials. Users will be prompted to change their password on first login.
-                            </p>
-
-                            <!-- Two Column Password Fields on Desktop -->
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div class="space-y-1">
-                                    <label for="default_student_password" class="block text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                                        <i class="fa-solid fa-user-graduate text-teal-600"></i>
-                                        <span>Default Student Password <span class="text-rose-500">*</span></span>
-                                    </label>
-                                    <div class="relative">
-                                        <input
-                                            type="text"
-                                            id="default_student_password"
-                                            name="default_student_password"
-                                            value="<?= htmlspecialchars($default_student_pw) ?>"
-                                            required
-                                            minlength="6"
-                                            class="input-saas w-full pl-3.5 pr-9 py-2 text-xs text-slate-800 font-mono font-medium focus:bg-white">
-                                        <button
-                                            type="button"
-                                            onclick="togglePasswordVisibility('default_student_password', this)"
-                                            class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-700 p-1 rounded-md transition focus:outline-none cursor-pointer"
-                                            aria-label="Toggle Default Student Password Visibility">
-                                            <i class="fa-regular fa-eye-slash text-xs"></i>
-                                        </button>
-                                    </div>
-                                    <p class="text-[10px] text-slate-400">Applied during student account registration</p>
-                                </div>
-
-                                <div class="space-y-1">
-                                    <label for="default_supervisor_password" class="block text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
-                                        <i class="fa-solid fa-user-tie text-purple-600"></i>
-                                        <span>Default Supervisor Password <span class="text-rose-500">*</span></span>
-                                    </label>
-                                    <div class="relative">
-                                        <input
-                                            type="text"
-                                            id="default_supervisor_password"
-                                            name="default_supervisor_password"
-                                            value="<?= htmlspecialchars($default_supervisor_pw) ?>"
-                                            required
-                                            minlength="6"
-                                            class="input-saas w-full pl-3.5 pr-9 py-2 text-xs text-slate-800 font-mono font-medium focus:bg-white">
-                                        <button
-                                            type="button"
-                                            onclick="togglePasswordVisibility('default_supervisor_password', this)"
-                                            class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-700 p-1 rounded-md transition focus:outline-none cursor-pointer"
-                                            aria-label="Toggle Default Supervisor Password Visibility">
-                                            <i class="fa-regular fa-eye-slash text-xs"></i>
-                                        </button>
-                                    </div>
-                                    <p class="text-[10px] text-slate-400">Applied during supervisor account registration</p>
-                                </div>
-                            </div>
-
-                            <!-- Compact Warning Alert -->
-                            <div class="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3 flex items-start gap-2.5">
-                                <span class="text-amber-500 text-sm">⚠️</span>
-                                <p class="text-xs text-amber-800 leading-relaxed font-medium">
-                                    Changing these will affect future account creation and resets. Existing accounts will not be altered.
-                                </p>
-                            </div>
-
-                            <div class="flex justify-end pt-2 border-t border-slate-100">
-                                <button type="submit" class="btn-saas-purple px-5 py-2 text-white text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer">
-                                    <i class="fa-solid fa-check-double"></i>
-                                    <span>Save Defaults</span>
-                                </button>
-                            </div>
-                        </form>
                     </div>
 
                 </div>

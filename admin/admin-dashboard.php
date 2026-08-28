@@ -8,19 +8,6 @@ $db         = $mysqli ?? $conn;
 $msg = '';
 $err = '';
 
-// Default password values should be available before request handlers run.
-$def_student_pw = 'Intern@123';
-$def_supervisor_pw = 'Intern@123';
-$sys_settings = [];
-$res_st = $db->query("SELECT setting_key, setting_value FROM system_settings");
-if ($res_st) {
-    while ($row = $res_st->fetch_assoc()) {
-        $sys_settings[$row['setting_key']] = $row['setting_value'];
-    }
-}
-$def_student_pw = $sys_settings['default_student_password'] ?? $def_student_pw;
-$def_supervisor_pw = $sys_settings['default_supervisor_password'] ?? $def_supervisor_pw;
-
 require_once __DIR__ . '/../includes/security_helper.php';
 require_once __DIR__ . '/../includes/academic_year_helper.php';
 ensure_academic_years_table($db);
@@ -76,7 +63,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     $s_start            = trim($_POST['s_start_date'] ?? '');
     $s_end              = trim($_POST['s_end_date'] ?? '');
     $s_academic         = trim($_POST['s_academic_year'] ?? '') ?: $current_active_year_label;
-    $s_password         = trim($_POST['s_password'] ?? '') ?: $def_student_pw;
+    $s_password         = trim($_POST['s_password'] ?? '');
+    if (empty($s_password)) {
+        $s_password = generate_random_strong_password(8);
+    }
 
     if (empty($s_name) || empty($s_roll) || empty($s_email)) {
         $err = 'Name, Roll No, and Email are required.';
@@ -126,7 +116,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
                 $ins_sp->bind_param("isssisissss", $uid, $s_name, $s_roll, $s_major, $s_company_id, $company_name, $s_supervisor_id, $s_instructor, $s_instructor_email, $s_start, $s_end);
                 $ins_sp->execute();
 
-                $msg = "Student \"{$s_name}\" created. Email: {$s_email}, Password: {$s_password}";
+                $_SESSION['credential_slip'] = [
+                    'title' => 'Student Account Created',
+                    'name' => $s_name,
+                    'roll' => $s_roll,
+                    'major' => $s_major ?: '—',
+                    'email' => $s_email,
+                    'role' => 'Student',
+                    'academic_year' => $s_academic,
+                    'temp_password' => $s_password
+                ];
+
+                $msg = "Student \"{$s_name}\" created successfully. Unique temporary password generated.";
             }
         }
     }
@@ -138,7 +139,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
     $t_dept     = trim($_POST['t_dept'] ?? '');
     $t_pos      = trim($_POST['t_position'] ?? $_POST['position'] ?? '');
     $t_email    = trim($_POST['t_email'] ?? '');
-    $t_password = trim($_POST['t_password'] ?? '') ?: $def_supervisor_pw;
+    $t_password = trim($_POST['t_password'] ?? '');
+    if (empty($t_password)) {
+        $t_password = generate_random_strong_password(8);
+    }
 
     if (empty($t_name) || empty($t_email)) {
         $err = 'Name and Email are required.';
@@ -160,7 +164,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
             $ins_sup->bind_param("sssss", $uname, $t_email, $t_dept, $t_pos, $hash);
             $ins_sup->execute();
 
-            $msg = "Supervisor \"{$t_name}\" created. Email: {$t_email}, Password: {$t_password}";
+            $_SESSION['credential_slip'] = [
+                'title' => 'Supervisor Account Created',
+                'name' => $t_name,
+                'roll' => $t_dept ?: ($t_pos ?: 'Faculty Supervisor'),
+                'major' => $t_pos ?: '—',
+                'email' => $t_email,
+                'role' => 'Supervisor',
+                'academic_year' => $current_active_year_label,
+                'temp_password' => $t_password
+            ];
+
+            $msg = "Supervisor \"{$t_name}\" created successfully. Unique temporary password generated.";
         }
     }
 }
@@ -180,28 +195,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_user'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password'])) {
     $rid = (int) ($_POST['reset_uid'] ?? 0);
     if ($rid > 0 && $rid !== $admin_id) {
-        // Determine which default password to use based on the user's role
-        $r_role_q = $db->prepare("SELECT role FROM users WHERE id = ?");
-        $r_role_q->bind_param("i", $rid);
-        $r_role_q->execute();
-        $res = $r_role_q->get_result();
-        $row = $res ? $res->fetch_row() : null;
-        $r_role = $row[0] ?? '';
-        $default_pw = ($r_role === 'supervisor') ? $def_supervisor_pw : $def_student_pw;
-
-        $hash = password_hash($default_pw, PASSWORD_DEFAULT);
+        $new_temp_pw = generate_random_strong_password(8);
+        $hash = password_hash($new_temp_pw, PASSWORD_DEFAULT);
         $up = $db->prepare("UPDATE users SET password = ?, is_first_login = 1 WHERE id = ? AND role IN ('student','supervisor')");
         $up->bind_param("si", $hash, $rid);
         $up->execute();
 
-        $rname_q = $db->prepare("SELECT username FROM users WHERE id = ?");
-        $rname_q->bind_param("i", $rid);
-        $rname_q->execute();
-        $res = $rname_q->get_result();
-        $row = $res ? $res->fetch_row() : null;
-        $rname = $row[0] ?? 'User';
+        // Fetch user info for credential slip
+        $u_info_q = $db->prepare("SELECT u.username, u.email, u.role, u.department, u.position, sp.student_roll, sp.full_name, sp.major FROM users u LEFT JOIN student_profiles sp ON sp.user_id = u.id WHERE u.id = ?");
+        $u_info_q->bind_param("i", $rid);
+        $u_info_q->execute();
+        $u_res = $u_info_q->get_result();
+        $u_info = $u_res ? $u_res->fetch_assoc() : [];
 
-        $msg = "Password reset for \"{$rname}\". Default password: {$default_pw}";
+        $disp_name = ($u_info['full_name'] ?? '') ?: ($u_info['username'] ?? 'User');
+        $disp_roll = ($u_info['student_roll'] ?? '') ?: (($u_info['department'] ?? '') ?: '—');
+        $disp_role = ucfirst($u_info['role'] ?? 'User');
+
+        $_SESSION['credential_slip'] = [
+            'title' => 'Temporary Password Reset',
+            'name' => $disp_name,
+            'roll' => $disp_roll,
+            'major' => ($u_info['major'] ?? '') ?: (($u_info['position'] ?? '') ?: '—'),
+            'email' => $u_info['email'] ?? '',
+            'role' => $disp_role,
+            'academic_year' => $current_active_year_label,
+            'temp_password' => $new_temp_pw
+        ];
+
+        $msg = "Password reset for \"{$disp_name}\". New unique temporary password generated.";
     }
 }
 
@@ -777,6 +799,7 @@ usort($supervisor_workloads, function ($a, $b) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Executive Dashboard – InternReport</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -1289,10 +1312,10 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                 <?php endif; ?>
                                                             </div>
                                                             <div class="flex items-center gap-1.5">
-                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>?\nDefault password: <?= htmlspecialchars($def_student_pw) ?>')" class="inline">
+                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>?\nA new unique temporary password will be generated for manual delivery.')" class="inline">
                                                                     <input type="hidden" name="reset_password" value="1">
                                                                     <input type="hidden" name="reset_uid" value="<?= $s['uid'] ?>">
-                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset default password">
+                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset & generate temporary password">
                                                                         <i class="fa-solid fa-key text-[11px]"></i>
                                                                     </button>
                                                                 </form>
@@ -1466,10 +1489,10 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                         <span><?= $is_inactive ? 'Activate' : 'Deactivate' ?></span>
                                                                     </button>
                                                                 </form>
-                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\nDefault password: <?= htmlspecialchars($def_supervisor_pw) ?>')" class="inline m-0 p-0">
+                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\nA new unique temporary password will be generated for manual delivery.')" class="inline m-0 p-0">
                                                                     <input type="hidden" name="reset_password" value="1">
                                                                     <input type="hidden" name="reset_uid" value="<?= $sup['id'] ?>">
-                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset default password">
+                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset & generate temporary password">
                                                                         <i class="fa-solid fa-key text-[11px]"></i>
                                                                     </button>
                                                                 </form>
@@ -1699,10 +1722,10 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                     </button>
                                                                 </form>
                                                             <?php endif; ?>
-                                                            <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($u['full_name'] ?: $u['username']) ?>?\nNew password will be: <?= $u['role'] === 'supervisor' ? htmlspecialchars($def_supervisor_pw) : htmlspecialchars($def_student_pw) ?>')" class="inline m-0 p-0">
+                                                            <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($u['full_name'] ?: $u['username'], ENT_QUOTES) ?>?\nA new unique temporary password will be generated for manual delivery.')" class="inline m-0 p-0">
                                                                 <input type="hidden" name="reset_password" value="1">
                                                                 <input type="hidden" name="reset_uid" value="<?= $u['id'] ?>">
-                                                                <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer shrink-0" title="Reset default password">
+                                                                <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer shrink-0" title="Reset & generate temporary password">
                                                                     <i class="fa-solid fa-key text-[11px]"></i>
                                                                 </button>
                                                             </form>
@@ -2638,6 +2661,244 @@ usort($supervisor_workloads, function ($a, $b) {
             }
         }
 
+        /**
+         * Generate a random 8-character temporary password for an input field
+         */
+        function generateRandomPasswordForInput(inputId) {
+            const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+            const lower = 'abcdefghjkmnpqrstuvwxyz';
+            const digits = '23456789';
+            const syms = '@#$%&*!';
+            let pw = [
+                upper[Math.floor(Math.random() * upper.length)],
+                lower[Math.floor(Math.random() * lower.length)],
+                digits[Math.floor(Math.random() * digits.length)],
+                syms[Math.floor(Math.random() * syms.length)]
+            ];
+            const all = upper + lower + digits + syms;
+            for (let i = 4; i < 8; i++) {
+                pw.push(all[Math.floor(Math.random() * all.length)]);
+            }
+            pw.sort(function() {
+                return 0.5 - Math.random();
+            });
+            const el = document.getElementById(inputId);
+            if (el) {
+                el.value = pw.join('');
+                el.type = 'text';
+                el.classList.add('bg-amber-50', 'border-amber-400');
+                setTimeout(function() {
+                    el.classList.remove('bg-amber-50', 'border-amber-400');
+                }, 1000);
+            }
+        }
+
+        /**
+         * Close Credential Slip Modal
+         */
+        function closeCredentialSlipModal() {
+            const modal = document.getElementById('credentialSlipModal');
+            if (modal) modal.remove();
+        }
+
+        /**
+         * Copy the slip card element as an image to the clipboard (Direct Image Copy for Viber/Telegram)
+         */
+        async function copySlipAsImage() {
+            const area = document.getElementById('printableSlipArea');
+            if (!area) return;
+
+            const btn = document.getElementById('btnCopySlipImage');
+            const originalHtml = btn ? btn.innerHTML : '';
+            if (btn) {
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> <span>Creating Image...</span>';
+                btn.disabled = true;
+            }
+
+            try {
+                if (typeof html2canvas === 'undefined') {
+                    throw new Error('Image rendering library not loaded yet');
+                }
+
+                const canvas = await html2canvas(area, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false
+                });
+
+                canvas.toBlob(async function(blob) {
+                    if (!blob) {
+                        throw new Error('Failed to generate image blob');
+                    }
+
+                    let copied = false;
+                    if (navigator.clipboard && window.ClipboardItem) {
+                        try {
+                            const item = new ClipboardItem({ 'image/png': blob });
+                            await navigator.clipboard.write([item]);
+                            copied = true;
+                        } catch (clipErr) {
+                            console.warn('Clipboard write failed, fallback to download:', clipErr);
+                        }
+                    }
+
+                    if (copied) {
+                        if (btn) {
+                            btn.className = btn.className.replace('bg-indigo-600', 'bg-emerald-600').replace('hover:bg-indigo-700', 'hover:bg-emerald-700');
+                            btn.innerHTML = '<i class="fa-solid fa-check"></i> <span>Card Copied!</span>';
+                        }
+                        alert('✅ ကတ်တစ်ခုလုံးကို Image (ပုံ) အဖြစ် Copy ကူးယူပြီးပါပြီ!\n\nViber, Telegram, Messenger စသည့် Chat များတွင် တိုက်ရိုက် Paste (Ctrl+V) ချနိုင်ပါပြီ။');
+                    } else {
+                        // Fallback download
+                        const link = document.createElement('a');
+                        link.download = 'Student_Access_Slip.png';
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        alert('📥 Browser က Clipboard သို့ Image တိုက်ရိုက်ထည့်ခွင့် မပြုသဖြင့် ပုံကို Download ဆွဲပေးလိုက်ပါသည်။ Viber/Telegram တွင် ထိုပုံကို ပို့ပေးနိုင်ပါသည်။');
+                    }
+
+                    setTimeout(() => {
+                        if (btn) {
+                            btn.className = btn.className.replace('bg-emerald-600', 'bg-indigo-600').replace('hover:bg-emerald-700', 'hover:bg-indigo-700');
+                            btn.innerHTML = originalHtml;
+                            btn.disabled = false;
+                        }
+                    }, 2500);
+                }, 'image/png');
+
+            } catch (err) {
+                console.error('Copy slip error:', err);
+                alert('Card Image copy မအောင်မြင်ပါ: ' + err.message);
+                if (btn) {
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                }
+            }
+        }
+
+        /**
+         * Download slip card as PNG image
+         */
+        async function downloadSlipImage(fileName) {
+            const area = document.getElementById('printableSlipArea');
+            if (!area) return;
+
+            try {
+                if (typeof html2canvas === 'undefined') {
+                    throw new Error('Image rendering library not loaded');
+                }
+                const canvas = await html2canvas(area, {
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    logging: false
+                });
+                const cleanName = (fileName || 'Access_Slip').replace(/[^a-zA-Z0-9_-]/g, '_');
+                const link = document.createElement('a');
+                link.download = `Access_Slip_${cleanName}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            } catch (err) {
+                console.error('Download slip error:', err);
+                alert('Download image failed: ' + err.message);
+            }
+        }
+
+        /**
+         * Copy only the temporary password
+         */
+        function copySlipPassword(pw) {
+            navigator.clipboard.writeText(pw).then(function() {
+                alert('🔑 Temporary password copied to clipboard:\n' + pw);
+            }).catch(function() {
+                prompt('Copy this password:', pw);
+            });
+        }
+
+        /**
+         * Copy full credentials formatted for Viber / Telegram / SMS
+         */
+        function copyFullCredentials(slip) {
+            if (!slip) return;
+            const loginUrl = window.location.origin + window.location.pathname.replace(/\/admin\/[^\/]+$/, '/login.php');
+            const text = `🎓 [InternReport System - Account Credentials]\n` +
+                `Role: ${slip.role || 'User'}\n` +
+                `Name: ${slip.name || ''}\n` +
+                `ID / Roll / Dept: ${slip.roll || ''}\n` +
+                `Login Email: ${slip.email || ''}\n` +
+                `Temporary Password: ${slip.temp_password || ''}\n` +
+                `Login Portal: ${loginUrl}\n\n` +
+                `⚠️ Note: You will be required to change your temporary password immediately upon your first login.`;
+            navigator.clipboard.writeText(text).then(function() {
+                alert('📋 Full credentials text copied successfully!\n\nYou can now paste and send it directly via Viber, Telegram, SMS, or Email.');
+            }).catch(function() {
+                prompt('Copy credentials:', text);
+            });
+        }
+
+        /**
+         * Print printable credential slip
+         */
+        function printCredentialSlip() {
+            const area = document.getElementById('printableSlipArea');
+            if (!area) return;
+            const printWin = window.open('', '', 'width=650,height=550');
+            printWin.document.write(`
+                <!DOCTYPE html>
+                <html>
+                    <head>
+                        <title>Account Credential Slip</title>
+                        <style>
+                            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 40px; margin: 0; background: #fff; color: #1e293b; }
+                            .slip-box { border: 2px dashed #4f46e5; border-radius: 16px; padding: 28px; max-width: 480px; margin: 0 auto; background: #f8fafc; }
+                            .header { text-align: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 16px; }
+                            .badge { display: inline-block; padding: 4px 12px; background: #e0e7ff; color: #3730a3; border-radius: 999px; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; }
+                            .name { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 4px 0; }
+                            .sub { font-size: 12px; color: #64748b; margin: 0; }
+                            .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+                            .row-label { color: #64748b; font-weight: 500; }
+                            .row-val { font-weight: 700; color: #0f172a; font-family: monospace; font-size: 13px; }
+                            .pw-card { background: #fef3c7; border: 1px solid #fde68a; border-radius: 12px; padding: 14px; margin-top: 14px; text-align: center; }
+                            .pw-label { font-size: 10px; font-weight: bold; color: #92400e; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+                            .pw-code { font-family: monospace; font-size: 22px; font-weight: 900; color: #78350f; letter-spacing: 2px; }
+                            .notice { margin-top: 16px; font-size: 11px; color: #3730a3; background: #eef2ff; border: 1px solid #c7d2fe; padding: 10px; border-radius: 8px; line-height: 1.5; }
+                            .footer { margin-top: 20px; text-align: center; font-size: 11px; color: #94a3b8; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="slip-box">
+                            <div class="header">
+                                <div class="badge">InternReport System</div>
+                                <div class="name">${document.querySelector('#printableSlipArea h4')?.innerText || 'Account Slip'}</div>
+                                <div class="sub">${document.querySelector('#printableSlipArea p')?.innerText || ''}</div>
+                            </div>
+                            <div class="row">
+                                <span class="row-label">Login Email:</span>
+                                <span class="row-val">${document.querySelector('#printableSlipArea .font-mono')?.innerText || ''}</span>
+                            </div>
+                            <div class="pw-card">
+                                <div class="pw-label">Temporary Password</div>
+                                <div class="pw-code">${document.getElementById('slipTempPwText')?.innerText || ''}</div>
+                            </div>
+                            <div class="notice">
+                                <strong>⚠️ First-Login Notice:</strong> You must change this temporary password to your own secret password upon your first login.
+                            </div>
+                            <div class="footer">
+                                University Internship Supervision Portal
+                            </div>
+                        </div>
+                    </body>
+                </html>
+            `);
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(function() {
+                printWin.print();
+                printWin.close();
+            }, 350);
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             const userModal = document.getElementById('userDetailsModal');
             if (userModal) {
@@ -2860,6 +3121,29 @@ usort($supervisor_workloads, function ($a, $b) {
                                 class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-2.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
                         </div>
                     </div>
+
+                    <div class="sm:col-span-2 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-100">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label for="modal_s_password" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                Temporary Password <span class="text-slate-400 font-normal text-[11px]">(Optional)</span>
+                            </label>
+                            <button type="button" onclick="generateRandomPasswordForInput('modal_s_password')" class="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs">
+                                <span>🎲 Generate Random</span>
+                            </button>
+                        </div>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                                <i class="fa-solid fa-key text-xs"></i>
+                            </span>
+                            <input type="text"
+                                id="modal_s_password"
+                                name="s_password"
+                                placeholder="Leave blank to auto-generate unique 8-character password"
+                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_password'] ?? '') : '' ?>"
+                                class="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-1">If left blank, the system will automatically create a unique random password for manual delivery.</p>
+                    </div>
                 </div>
 
                 <!-- Footer Actions -->
@@ -2877,7 +3161,6 @@ usort($supervisor_workloads, function ($a, $b) {
             </form>
         </div>
     </div>
-    </script>
 
     <!-- ════ ADD NEW SUPERVISOR MODAL ════ -->
     <div id="addSupervisorModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true" aria-labelledby="addSupervisorModalTitle">
@@ -2966,6 +3249,28 @@ usort($supervisor_workloads, function ($a, $b) {
                     </div>
                 </div>
 
+                <div class="bg-emerald-50/40 p-3.5 rounded-xl border border-emerald-100">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label for="modal_t_password" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                            Temporary Password <span class="text-slate-400 font-normal text-[11px]">(Optional)</span>
+                        </label>
+                        <button type="button" onclick="generateRandomPasswordForInput('modal_t_password')" class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs">
+                            <span>🎲 Generate Random</span>
+                        </button>
+                    </div>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-key text-xs"></i>
+                        </span>
+                        <input type="text"
+                            id="modal_t_password"
+                            name="t_password"
+                            placeholder="Leave blank to auto-generate unique 8-character password"
+                            value="<?= (isset($_POST['add_supervisor']) && !empty($err)) ? htmlspecialchars($_POST['t_password'] ?? '') : '' ?>"
+                            class="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition">
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-1">If left blank, the system will automatically create a unique random password for manual delivery.</p>
+                </div>
 
                 <!-- Footer Actions -->
                 <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
@@ -2982,7 +3287,101 @@ usort($supervisor_workloads, function ($a, $b) {
             </form>
         </div>
     </div>
-    </script>
+
+    <!-- ════ CREDENTIAL SLIP / MANUAL DELIVERY MODAL ════ -->
+    <?php if (!empty($_SESSION['credential_slip'])):
+        $slip = $_SESSION['credential_slip'];
+        unset($_SESSION['credential_slip']);
+    ?>
+        <div id="credentialSlipModal" class="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="credModalTitle">
+            <div class="relative w-full max-w-lg bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-200">
+                <!-- Modal Header -->
+                <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 text-white flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl font-bold shadow-inner">
+                            🔑
+                        </div>
+                        <div>
+                            <h3 id="credModalTitle" class="text-base font-black tracking-tight text-white"><?= htmlspecialchars($slip['title'] ?? 'User Credentials') ?></h3>
+                            <p class="text-xs text-white/80 font-medium">Ready for manual distribution</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="closeCredentialSlipModal()" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition cursor-pointer" title="Close">
+                        <i class="fa-solid fa-xmark text-sm"></i>
+                    </button>
+                </div>
+
+                <!-- Modal Printable Body -->
+                <div class="p-6 space-y-4">
+                    <div id="printableSlipArea" class="bg-gradient-to-b from-slate-50 to-white p-5 rounded-2xl border-2 border-dashed border-indigo-200 shadow-xs">
+                        <!-- Slip Header -->
+                        <div class="text-center pb-3 border-b border-slate-100">
+                            <div class="inline-flex items-center justify-center gap-1.5 px-3 py-1 bg-indigo-100 text-indigo-800 rounded-full text-xs font-bold uppercase tracking-wider mb-2">
+                                🎓 <?= htmlspecialchars($slip['role'] ?? 'User') ?> Access Slip
+                            </div>
+                            <h4 class="text-lg font-black text-slate-800"><?= htmlspecialchars($slip['name'] ?? '') ?></h4>
+                            <p class="text-xs text-slate-500 font-medium"><?= htmlspecialchars($slip['roll'] ?? '') ?> • Academic Year <?= htmlspecialchars($slip['academic_year'] ?? '') ?></p>
+                        </div>
+
+                        <!-- Slip Details Table -->
+                        <div class="py-3 space-y-2 text-xs">
+                            <div class="flex justify-between py-1.5 border-b border-slate-100">
+                                <span class="text-slate-500 font-medium">Login Email:</span>
+                                <span class="font-bold text-slate-800 font-mono"><?= htmlspecialchars($slip['email'] ?? '') ?></span>
+                            </div>
+                            <div class="flex justify-between items-center py-2.5 bg-amber-50/90 px-3 rounded-xl border border-amber-200 mt-2">
+                                <div>
+                                    <span class="text-amber-800 font-bold block text-[10px] uppercase tracking-wider">Temporary Password:</span>
+                                    <span id="slipTempPwText" class="font-black text-base text-amber-900 font-mono tracking-wider"><?= htmlspecialchars($slip['temp_password'] ?? '') ?></span>
+                                </div>
+                                <button type="button" data-html2canvas-ignore="true" onclick="copySlipPassword('<?= htmlspecialchars($slip['temp_password'] ?? '', ENT_QUOTES) ?>')" class="px-2.5 py-1.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer">
+                                    <i class="fa-regular fa-copy"></i> Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Security Notice -->
+                        <div class="mt-3 p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-xl text-[11px] text-indigo-900 leading-relaxed flex items-start gap-2">
+                            <i class="fa-solid fa-shield-halved text-indigo-600 mt-0.5 shrink-0"></i>
+                            <span><strong>First-Login Security:</strong> The user will be required to change this temporary password to their own secret password immediately upon first login.</span>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="space-y-2 pt-2">
+                        <!-- Primary Image Copy Button -->
+                        <button type="button" id="btnCopySlipImage" onclick="copySlipAsImage()" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-200 transition cursor-pointer">
+                            <i class="fa-solid fa-image text-sm"></i>
+                            <span>Copy Card (Image for Viber/Telegram)</span>
+                        </button>
+                        
+                        <!-- Secondary Actions Row -->
+                        <div class="grid grid-cols-3 gap-2">
+                            <button type="button" onclick="copyFullCredentials(<?= htmlspecialchars(json_encode($slip), ENT_QUOTES) ?>)" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition cursor-pointer" title="Copy formatted text">
+                                <i class="fa-solid fa-file-lines text-slate-500"></i>
+                                <span>Copy Text</span>
+                            </button>
+                            <button type="button" onclick="downloadSlipImage('<?= htmlspecialchars($slip['name'] ?? 'user', ENT_QUOTES) ?>')" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl border border-emerald-200 transition cursor-pointer" title="Save as PNG image">
+                                <i class="fa-solid fa-download text-emerald-600"></i>
+                                <span>Save Image</span>
+                            </button>
+                            <button type="button" onclick="printCredentialSlip()" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition cursor-pointer" title="Print slip">
+                                <i class="fa-solid fa-print text-slate-300"></i>
+                                <span>Print</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="px-6 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                    <span class="text-xs text-slate-400">Share this slip securely with the user</span>
+                    <button type="button" onclick="closeCredentialSlipModal()" class="px-4 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">
+                        Done
+                    </button>
+                </div>
+            </div>
+        </div>
+    <?php endif; ?>
 
     <!-- ════ USER DETAILS MODAL ════ -->
     <div id="userDetailsModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true" aria-labelledby="modalUserName">

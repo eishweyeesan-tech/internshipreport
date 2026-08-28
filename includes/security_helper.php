@@ -60,3 +60,36 @@ if (!function_exists('validate_gmail_address')) {
         return null;
     }
 }
+
+if (!function_exists('generate_random_strong_password')) {
+    /**
+     * Generate a cryptographically secure, readable temporary password
+     * Contains at least 1 uppercase, 1 lowercase, 1 digit, and 1 special symbol.
+     *
+     * @param int $length
+     * @return string
+     */
+    function generate_random_strong_password($length = 8) {
+        if ($length < 6) $length = 8;
+        $upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        $lower = 'abcdefghjkmnpqrstuvwxyz';
+        $digits = '23456789';
+        $symbols = '@#$%&*!';
+        
+        // Ensure at least one character from each required class
+        $pw = [
+            $upper[random_int(0, strlen($upper) - 1)],
+            $lower[random_int(0, strlen($lower) - 1)],
+            $digits[random_int(0, strlen($digits) - 1)],
+            $symbols[random_int(0, strlen($symbols) - 1)]
+        ];
+        
+        $all = $upper . $lower . $digits . $symbols;
+        for ($i = count($pw); $i < $length; $i++) {
+            $pw[] = $all[random_int(0, strlen($all) - 1)];
+        }
+        
+        shuffle($pw);
+        return implode('', $pw);
+    }
+}
