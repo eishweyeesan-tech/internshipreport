@@ -113,12 +113,6 @@ try {
     $ins->execute();
     $new_id = $ins->insert_id;
 
-    if ($set_as_current) {
-        $setting_stmt = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('current_academic_year', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-        $setting_stmt->bind_param("s", $label);
-        $setting_stmt->execute();
-    }
-
     $db->commit();
 
     echo json_encode([

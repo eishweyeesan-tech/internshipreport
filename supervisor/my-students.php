@@ -450,6 +450,22 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
     </script>
     <script src="../assets/js/main.js"></script>
     <script src="../assets/js/notifications.js"></script>
+    <style>
+        /* Hide scrollbar for Chrome, Safari, Edge, Firefox */
+        html, body, main {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar,
+        main::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+        }
+        #studentsTableViewContainer { min-height: 400px; }
+        .status-chip { transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease; }
+    </style>
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
@@ -482,74 +498,36 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                         </div>
                     <?php endif; ?>
 
-                    <!-- ═══ 4 PERFORMANCE & METRICS CARDS ═══ -->
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        <!-- 1. Total Assigned -->
-                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md transition">
-                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-700 text-white flex items-center justify-center text-xl shadow-md shadow-teal-700/20 shrink-0">👥</div>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Interns</p>
-                                <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $total_assigned ?></p>
-                                <p class="text-[11px] text-teal-700 font-bold mt-0.5">Active under supervision</p>
-                            </div>
-                        </div>
-
-                        <!-- 2. Awaiting Review -->
-                        <div onclick="filterByPendingReports()" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md transition cursor-pointer group">
-                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center text-xl shadow-md shadow-amber-600/20 shrink-0 group-hover:scale-105 transition-transform">⏳</div>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Awaiting Review</p>
-                                <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $pending_reviews ?></p>
-                                <p class="text-[11px] text-amber-700 font-bold mt-0.5">Ready for grading →</p>
-                            </div>
-                        </div>
-
-                        <!-- 3. Behind Schedule -->
-                        <div onclick="filterByBehindSchedule()" class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md transition cursor-pointer group">
-                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white flex items-center justify-center text-xl shadow-md shadow-rose-600/20 shrink-0 group-hover:scale-105 transition-transform">⚠️</div>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Behind Schedule</p>
-                                <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $status_counts['red'] ?></p>
-                                <p class="text-[11px] text-rose-700 font-bold mt-0.5"><?= $status_counts['red'] > 0 ? 'Requires attention →' : 'All on track ✓' ?></p>
-                            </div>
-                        </div>
-
-                        <!-- 4. Average Internship Progress -->
-                        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 sm:p-5 flex items-center gap-3.5 hover:shadow-md transition">
-                            <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center text-xl shadow-md shadow-indigo-600/20 shrink-0">📈</div>
-                            <div class="min-w-0">
-                                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Avg Progress</p>
-                                <p class="text-xl sm:text-2xl font-black text-slate-800 mt-0.5"><?= $average_progress_rate ?>%</p>
-                                <p class="text-[11px] text-indigo-700 font-bold mt-0.5">Avg Attendance: <?= $average_attendance_rate ?>%</p>
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- ═══ CONTROLS CARD: FILTERS, LIVE SEARCH & ACADEMIC YEAR ═══ -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 lg:p-5 space-y-4">
-                        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 lg:p-5 space-y-4">
+                        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
 
                             <!-- Status Filter Chips -->
                             <div class="flex items-center gap-1.5 flex-wrap" id="statusChipsContainer">
-                                <button type="button" data-status="" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === '' ? 'bg-slate-800 text-white border-slate-800 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">
+                                <button type="button" data-status="" class="status-chip min-h-[32px] inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer shrink-0 <?= $filter_status === '' ? 'bg-slate-800 text-white border-slate-800 shadow-xs' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50' ?>">
                                     All <span class="ml-1 opacity-75">(<?= $status_counts['all'] ?>)</span>
                                 </button>
-                                <button type="button" data-status="red" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'red' ? 'bg-red-500 text-white border-red-500 shadow-xs' : 'bg-white text-red-600 border-red-200 hover:bg-red-50' ?>">
+                                <?php if ($pending_reviews > 0): ?>
+                                <button type="button" data-status="pending" class="status-chip min-h-[32px] inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer shrink-0 <?= $filter_status === 'pending' ? 'bg-amber-600 text-white border-amber-600 shadow-xs' : 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50' ?>">
+                                    ⏳ Awaiting Review (<?= $pending_reviews ?>)
+                                </button>
+                                <?php endif; ?>
+                                <button type="button" data-status="red" class="status-chip min-h-[32px] inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer shrink-0 <?= $filter_status === 'red' ? 'bg-red-500 text-white border-red-500 shadow-xs' : 'bg-white text-red-600 border-red-200 hover:bg-red-50' ?>">
                                     🔴 Behind Schedule <?= $status_counts['red'] > 0 ? '(' . $status_counts['red'] . ')' : '' ?>
                                 </button>
-                                <button type="button" data-status="amber" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'amber' ? 'bg-amber-500 text-white border-amber-500 shadow-xs' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50' ?>">
+                                <button type="button" data-status="amber" class="status-chip min-h-[32px] inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer shrink-0 <?= $filter_status === 'amber' ? 'bg-amber-500 text-white border-amber-500 shadow-xs' : 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50' ?>">
                                     🟡 In Progress (<?= $status_counts['amber'] ?>)
                                 </button>
-                                <button type="button" data-status="green" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'green' ? 'bg-emerald-500 text-white border-emerald-500 shadow-xs' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50' ?>">
+                                <button type="button" data-status="green" class="status-chip min-h-[32px] inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer shrink-0 <?= $filter_status === 'green' ? 'bg-emerald-500 text-white border-emerald-500 shadow-xs' : 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50' ?>">
                                     🟢 Complete (<?= $status_counts['green'] ?>)
                                 </button>
-                                <button type="button" data-status="none" class="status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer <?= $filter_status === 'none' ? 'bg-slate-600 text-white border-slate-600 shadow-xs' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50' ?>">
+                                <button type="button" data-status="none" class="status-chip min-h-[32px] inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer shrink-0 <?= $filter_status === 'none' ? 'bg-slate-600 text-white border-slate-600 shadow-xs' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50' ?>">
                                     ⚪ Not Started (<?= $status_counts['none'] ?>)
                                 </button>
                             </div>
 
                             <!-- Right Filters: Search, Academic Year -->
-                            <div class="flex items-center gap-2.5 flex-wrap">
+                            <div class="flex items-center gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
 
                                 <!-- Live Search Input -->
                                 <div class="relative w-full sm:w-64">
@@ -595,12 +573,11 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                     <!-- ═══ STUDENTS TABLE VIEW ═══ -->
                     <div id="studentsTableViewContainer" class="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden w-full">
                         <div class="overflow-x-auto w-full">
-                            <table class="w-full text-left text-xs sm:text-sm min-w-[900px]" id="studentsTable">
+                            <table class="w-full text-left text-xs sm:text-sm min-w-[850px]" id="studentsTable">
                                 <thead>
                                     <tr class="bg-slate-50/90 border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[11px]">
                                         <th class="px-4 py-3.5 text-left min-w-[200px]">Student</th>
                                         <th class="px-3 py-3.5 text-left whitespace-nowrap min-w-[90px]">Roll No.</th>
-                                        <th class="px-3 py-3.5 text-left whitespace-nowrap min-w-[110px]">Academic Year</th>
                                         <th class="px-3 py-3.5 text-left min-w-[200px]">Company & Instructor</th>
                                         <th class="px-3 py-3.5 text-left min-w-[130px]">Progress</th>
                                         <th class="px-3 py-3.5 text-center whitespace-nowrap min-w-[80px]">Reports</th>
@@ -612,14 +589,21 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                                 <tbody class="divide-y divide-slate-100" id="studentsTableBody">
                                     <?php if (empty($all_students)): ?>
                                         <tr id="initialEmptyRow">
-                                            <td colspan="8" class="p-16 text-center">
+                                            <td colspan="7" class="p-16 text-center">
                                                 <div class="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl mx-auto mb-4">👥</div>
                                                 <p class="text-base font-bold text-slate-700">No students found</p>
                                                 <p class="text-sm text-slate-400 mt-1">No interns are currently assigned to your supervision.</p>
                                             </td>
                                         </tr>
                                     <?php else: ?>
-                                        <?php foreach ($all_students as $s):
+                                        <?php
+                                        $current_batch_year = null;
+                                        foreach ($all_students as $s):
+                                            $s_ay = $s['academic_year'] ?: 'Unassigned Year';
+                                            $is_new_batch = ($s_ay !== $current_batch_year);
+                                            if ($is_new_batch) {
+                                                $current_batch_year = $s_ay;
+                                            }
                                             $uid = (int) $s['uid'];
                                             $status = $progress_status[$uid] ?? 'none';
                                             $label = progress_status_label($status);
@@ -643,6 +627,17 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                                             $is_warned = (bool) ($s['is_warned'] ?? 0);
                                             $pending_week = $student_pending[$uid] ?? null;
                                         ?>
+                                            <?php if ($is_new_batch): ?>
+                                                <tr class="academic-year-header-row bg-slate-100/90 border-y border-slate-200" data-group-ay="<?= htmlspecialchars($s_ay) ?>">
+                                                    <td colspan="7" class="px-4 py-2.5 text-xs font-bold text-slate-700">
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="p-1 bg-indigo-100 text-indigo-700 rounded text-xs leading-none">🎓</span>
+                                                            <span class="text-slate-500 uppercase tracking-wider text-[11px] font-bold">Academic Batch:</span>
+                                                            <span class="font-mono font-bold text-indigo-700 bg-white px-2.5 py-0.5 rounded-md border border-indigo-200 shadow-xs"><?= htmlspecialchars($s_ay) ?></span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            <?php endif; ?>
                                             <tr class="student-item student-row hover:bg-slate-50/70 transition-colors duration-150"
                                                 data-uid="<?= $uid ?>"
                                                 data-name="<?= htmlspecialchars(strtolower($name), ENT_QUOTES, 'UTF-8') ?>"
@@ -704,14 +699,7 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                                                     </span>
                                                 </td>
 
-                                                <!-- 3. Academic Year -->
-                                                <td class="px-3 py-3 whitespace-nowrap">
-                                                    <span class="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200/60 whitespace-nowrap">
-                                                        <?= htmlspecialchars($ay) ?>
-                                                    </span>
-                                                </td>
-
-                                                <!-- 4. Company & Instructor -->
+                                                <!-- 3. Company & Instructor -->
                                                 <td class="px-3 py-3 align-middle">
                                                     <div class="text-xs text-slate-800 font-semibold leading-snug break-words" title="<?= htmlspecialchars($s['company_name'] ?? '') ?>">
                                                         🏢 <?= htmlspecialchars($s['company_name'] ?: '—') ?>
@@ -811,7 +799,7 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
 
                                     <!-- Filter Empty State Row -->
                                     <tr id="filterNoResultsRow" class="hidden">
-                                        <td colspan="8" class="p-14 text-center">
+                                        <td colspan="7" class="p-14 text-center">
                                             <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mx-auto mb-3">🔍</div>
                                             <p class="text-sm font-bold text-slate-700">No matching students found</p>
                                             <p class="text-xs text-slate-400 mt-1" id="filterNoResultsMsg">Try adjusting your search terms or academic year filter.</p>
@@ -1014,7 +1002,7 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                         email.includes(query);
 
                     const matchesYear = (selectedYear === 'all' || !selectedYear) || (rowYear === selectedYear);
-                    const matchesStatus = !currentStatus || (rowStat === currentStatus);
+                    const matchesStatus = !currentStatus || (currentStatus === 'pending' ? parseInt(row.getAttribute('data-pending-week') || 0) > 0 : rowStat === currentStatus);
 
                     if (matchesSearch && matchesYear && matchesStatus) {
                         row.style.display = '';
@@ -1022,6 +1010,22 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                     } else {
                         row.style.display = 'none';
                     }
+                });
+
+                // Show/hide academic year header rows based on visible students in that batch
+                const ayHeaders = document.querySelectorAll('.academic-year-header-row');
+                ayHeaders.forEach(function(header) {
+                    const groupAy = header.getAttribute('data-group-ay') || '';
+                    let hasVisibleStudents = false;
+                    studentRows.forEach(function(row) {
+                        if (row.style.display !== 'none') {
+                            const rowAy = row.getAttribute('data-academic-year') || 'Unassigned Year';
+                            if (rowAy === groupAy) {
+                                hasVisibleStudents = true;
+                            }
+                        }
+                    });
+                    header.style.display = hasVisibleStudents ? '' : 'none';
                 });
 
                 // Update Dynamic Count Text
@@ -1033,6 +1037,7 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                     }
                     if (currentStatus) {
                         const statusLabels = {
+                            'pending': 'Awaiting Review',
                             'red': 'Behind Schedule',
                             'amber': 'In Progress',
                             'green': 'Complete',
@@ -1108,20 +1113,23 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
 
                     statusChips.forEach(function(c) {
                         const s = c.getAttribute('data-status') || '';
-                        c.className = 'status-chip px-3 py-1.5 text-xs font-bold rounded-xl border transition-all duration-200 cursor-pointer ';
+                        let cls = 'status-chip min-h-[32px] inline-flex items-center justify-center px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer shrink-0 ';
                         if (s === currentStatus) {
-                            if (s === '') c.className += 'bg-slate-800 text-white border-slate-800 shadow-xs';
-                            else if (s === 'red') c.className += 'bg-red-500 text-white border-red-500 shadow-xs';
-                            else if (s === 'amber') c.className += 'bg-amber-500 text-white border-amber-500 shadow-xs';
-                            else if (s === 'green') c.className += 'bg-emerald-500 text-white border-emerald-500 shadow-xs';
-                            else if (s === 'none') c.className += 'bg-slate-600 text-white border-slate-600 shadow-xs';
+                            if (s === '') cls += 'bg-slate-800 text-white border-slate-800 shadow-xs';
+                            else if (s === 'pending') cls += 'bg-amber-600 text-white border-amber-600 shadow-xs';
+                            else if (s === 'red') cls += 'bg-red-500 text-white border-red-500 shadow-xs';
+                            else if (s === 'amber') cls += 'bg-amber-500 text-white border-amber-500 shadow-xs';
+                            else if (s === 'green') cls += 'bg-emerald-500 text-white border-emerald-500 shadow-xs';
+                            else if (s === 'none') cls += 'bg-slate-600 text-white border-slate-600 shadow-xs';
                         } else {
-                            if (s === '') c.className += 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-                            else if (s === 'red') c.className += 'bg-white text-red-600 border-red-200 hover:bg-red-50';
-                            else if (s === 'amber') c.className += 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50';
-                            else if (s === 'green') c.className += 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50';
-                            else if (s === 'none') c.className += 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50';
+                            if (s === '') cls += 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+                            else if (s === 'pending') cls += 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50';
+                            else if (s === 'red') cls += 'bg-white text-red-600 border-red-200 hover:bg-red-50';
+                            else if (s === 'amber') cls += 'bg-white text-amber-600 border-amber-200 hover:bg-amber-50';
+                            else if (s === 'green') cls += 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50';
+                            else if (s === 'none') cls += 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50';
                         }
+                        c.className = cls;
                     });
 
                     applyFilters();
@@ -1136,21 +1144,26 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
          * Filter shortcut helpers from KPI banner
          */
         function filterByPendingReports() {
-            const studentRows = document.querySelectorAll('.student-row');
-            let visibleCount = 0;
-            studentRows.forEach(function(row) {
-                const pendingWeek = parseInt(row.getAttribute('data-pending-week') || 0);
-                if (pendingWeek > 0) {
-                    row.style.display = '';
-                    visibleCount++;
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-            const countNumberEl = document.getElementById('visibleCountNumber');
-            const countTextEl = document.getElementById('dynamicResultCount');
-            if (countNumberEl) countNumberEl.textContent = visibleCount;
-            if (countTextEl) countTextEl.innerHTML = `Showing <span class="font-bold text-slate-800">${visibleCount}</span> student${visibleCount === 1 ? '' : 's'} (Awaiting Review)`;
+            const pendingChip = document.querySelector('.status-chip[data-status="pending"]');
+            if (pendingChip) {
+                pendingChip.click();
+            } else {
+                const studentRows = document.querySelectorAll('.student-row');
+                let visibleCount = 0;
+                studentRows.forEach(function(row) {
+                    const pendingWeek = parseInt(row.getAttribute('data-pending-week') || 0);
+                    if (pendingWeek > 0) {
+                        row.style.display = '';
+                        visibleCount++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+                const countNumberEl = document.getElementById('visibleCountNumber');
+                const countTextEl = document.getElementById('dynamicResultCount');
+                if (countNumberEl) countNumberEl.textContent = visibleCount;
+                if (countTextEl) countTextEl.innerHTML = `Showing <span class="font-bold text-slate-800">${visibleCount}</span> student${visibleCount === 1 ? '' : 's'} (Awaiting Review)`;
+            }
         }
 
         function filterByBehindSchedule() {

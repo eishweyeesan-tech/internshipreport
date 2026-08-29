@@ -2113,7 +2113,7 @@ usort($supervisor_workloads, function ($a, $b) {
         function filterByAcademicYear(year) {
             const url = new URL(window.location.href);
             if (!year || year === 'all') {
-                url.searchParams.delete('year');
+                url.searchParams.set('year', 'all');
             } else {
                 url.searchParams.set('year', year);
             }
@@ -2971,6 +2971,7 @@ usort($supervisor_workloads, function ($a, $b) {
                 <input type="hidden" name="add_student" value="1">
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Full Name -->
                     <div>
                         <label for="modal_s_name" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                             Full Name <span class="text-rose-500">*</span>
@@ -2989,6 +2990,7 @@ usort($supervisor_workloads, function ($a, $b) {
                         </div>
                     </div>
 
+                    <!-- Roll Number -->
                     <div>
                         <label for="modal_s_roll" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                             Roll Number <span class="text-rose-500">*</span>
@@ -3007,6 +3009,7 @@ usort($supervisor_workloads, function ($a, $b) {
                         </div>
                     </div>
 
+                    <!-- Major -->
                     <div>
                         <label for="modal_s_major" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                             Major
@@ -3018,9 +3021,10 @@ usort($supervisor_workloads, function ($a, $b) {
                         </select>
                     </div>
 
+                    <!-- Gmail Address -->
                     <div>
                         <label for="modal_s_email" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Gmail / Email Address <span class="text-rose-500">*</span>
+                            Gmail Address <span class="text-rose-500">*</span>
                         </label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
@@ -3036,58 +3040,7 @@ usort($supervisor_workloads, function ($a, $b) {
                         </div>
                     </div>
 
-                    <div>
-                        <label for="modal_s_company_select" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Partner Company
-                        </label>
-                        <select name="s_company_id" id="modal_s_company_select" onchange="autoFillCompanyInstructor(this)" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
-                            <option value="">— Select Company —</option>
-                            <?php foreach ($companies as $c): ?>
-                                <option value="<?= $c['id'] ?>" data-instructor="<?= htmlspecialchars($c['contact_person'] ?? '', ENT_QUOTES) ?>" <?= (isset($_POST['s_company_id']) && (int)$_POST['s_company_id'] === (int)$c['id']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($c['company_name']) ?><?= !empty($c['contact_person']) ? ' (Contact: ' . htmlspecialchars($c['contact_person']) . ')' : '' ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label for="modal_s_supervisor_id" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            University Supervisor
-                        </label>
-                        <select name="s_supervisor_id" id="modal_s_supervisor_id" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
-                            <option value="">— Select Supervisor —</option>
-                            <?php foreach ($supervisors as $sup): ?>
-                                <option value="<?= $sup['id'] ?>" <?= (isset($_POST['s_supervisor_id']) && (int)$_POST['s_supervisor_id'] === (int)$sup['id']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($sup['username']) ?> (<?= htmlspecialchars($sup['email']) ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label for="modal_s_instructor_input" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Company Instructor Name
-                        </label>
-                        <input type="text"
-                            id="modal_s_instructor_input"
-                            name="s_instructor"
-                            placeholder="e.g. U Tin Aung"
-                            value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_instructor'] ?? '') : '' ?>"
-                            class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                    </div>
-
-                    <div>
-                        <label for="modal_s_instructor_email" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Company Instructor Email
-                        </label>
-                        <input type="email"
-                            id="modal_s_instructor_email"
-                            name="s_instructor_email"
-                            placeholder="instructor@gmail.com"
-                            value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_instructor_email'] ?? '') : '' ?>"
-                            class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                    </div>
-
+                    <!-- Academic Year -->
                     <div>
                         <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                             Academic Year
@@ -3099,29 +3052,37 @@ usort($supervisor_workloads, function ($a, $b) {
                             class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-indigo-700 font-mono focus:outline-none cursor-not-allowed">
                     </div>
 
-                    <div class="grid grid-cols-2 gap-2">
-                        <div>
-                            <label for="modal_s_start_date" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                                Start Date
-                            </label>
-                            <input type="date"
-                                id="modal_s_start_date"
-                                name="s_start_date"
-                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_start_date'] ?? '') : '' ?>"
-                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-2.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                        </div>
-                        <div>
-                            <label for="modal_s_end_date" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                                End Date
-                            </label>
-                            <input type="date"
-                                id="modal_s_end_date"
-                                name="s_end_date"
-                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_end_date'] ?? '') : '' ?>"
-                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-2.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                        </div>
+                    <!-- University Supervisor -->
+                    <div>
+                        <label for="modal_s_supervisor_id" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                            University Supervisor <span class="text-slate-400 font-normal text-[10px]">(Optional)</span>
+                        </label>
+                        <select name="s_supervisor_id" id="modal_s_supervisor_id" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
+                            <option value="">— Select Supervisor —</option>
+                            <?php foreach ($supervisors as $sup): ?>
+                                <option value="<?= $sup['id'] ?>" <?= (isset($_POST['s_supervisor_id']) && (int)$_POST['s_supervisor_id'] === (int)$sup['id']) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($sup['username']) ?> (<?= htmlspecialchars($sup['email']) ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
+                    <!-- Partner Company (Optional) -->
+                    <div class="sm:col-span-2">
+                        <label for="modal_s_company_select" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                            Partner Company <span class="text-slate-400 font-normal text-[10px]">(Optional — Can be assigned later)</span>
+                        </label>
+                        <select name="s_company_id" id="modal_s_company_select" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
+                            <option value="">— Unassigned (Student / Supervisor can assign later) —</option>
+                            <?php foreach ($companies as $c): ?>
+                                <option value="<?= $c['id'] ?>" <?= (isset($_POST['s_company_id']) && (int)$_POST['s_company_id'] === (int)$c['id']) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($c['company_name']) ?><?= !empty($c['contact_person']) ? ' (Contact: ' . htmlspecialchars($c['contact_person']) . ')' : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <!-- Temporary Password -->
                     <div class="sm:col-span-2 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-100">
                         <div class="flex items-center justify-between mb-1.5">
                             <label for="modal_s_password" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -3142,7 +3103,13 @@ usort($supervisor_workloads, function ($a, $b) {
                                 value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_password'] ?? '') : '' ?>"
                                 class="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
                         </div>
-                        <p class="text-[11px] text-slate-500 mt-1">If left blank, the system will automatically create a unique random password for manual delivery.</p>
+                        <p class="text-[11px] text-slate-500 mt-1">If left blank, the system will automatically create a unique random password for manual delivery (Access Slip).</p>
+                    </div>
+
+                    <!-- Info Alert -->
+                    <div class="sm:col-span-2 bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-start gap-2.5 text-slate-500 text-xs leading-relaxed">
+                        <i class="fa-solid fa-circle-info text-indigo-500 mt-0.5 shrink-0"></i>
+                        <span>Company instructor contact details and internship dates can be completed by the student in their <strong>Student Profile</strong> upon first login.</span>
                     </div>
                 </div>
 

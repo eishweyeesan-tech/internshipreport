@@ -10,8 +10,25 @@ $db            = $mysqli ?? $conn;
 
 // Target student ID
 $target_student_id = isset($_GET['student_id']) ? (int)$_GET['student_id'] : (isset($_GET['uid']) ? (int)$_GET['uid'] : 0);
-if ($target_student_id <= 0 || $auth_role === 'student') {
-    $target_student_id = $auth_user_id;
+if ($target_student_id <= 0) {
+    if ($auth_role === 'student') {
+        $target_student_id = $auth_user_id;
+    } else {
+        // Fallback for supervisor/admin if accessed without student_id
+        if ($auth_role === 'supervisor') {
+            $f_stmt = $db->prepare("SELECT user_id FROM student_profiles WHERE supervisor_id = ? ORDER BY id ASC LIMIT 1");
+            $f_stmt->bind_param("i", $auth_user_id);
+            $f_stmt->execute();
+            $f_res = $f_stmt->get_result();
+            $target_student_id = ($f_res && $f_row = $f_res->fetch_row()) ? (int)$f_row[0] : 0;
+        } else {
+            $f_stmt = $db->query("SELECT user_id FROM student_profiles ORDER BY id ASC LIMIT 1");
+            $target_student_id = ($f_stmt && $f_row = $f_stmt->fetch_row()) ? (int)$f_row[0] : 0;
+        }
+        if ($target_student_id <= 0) {
+            $target_student_id = $auth_user_id;
+        }
+    }
 }
 
 // Access authorization for supervisors
@@ -69,11 +86,11 @@ if ($intern_start) {
 }
 
 // Selected Week (Default to Week 1 or active week)
+$is_all_weeks = isset($_GET['week']) && $_GET['week'] === 'all';
 $selected_week = isset($_GET['week']) && $_GET['week'] !== 'all' ? (int)$_GET['week'] : 1;
 if ($selected_week < 1 || (!empty($weeks) && !isset($weeks[$selected_week]))) {
     $selected_week = 1;
 }
-$is_all_weeks = isset($_GET['week']) && $_GET['week'] === 'all';
 
 $current_range = $weeks[$selected_week] ?? null;
 $week_start    = $current_range['start'] ?? '';
@@ -91,31 +108,67 @@ $log_stmt->execute();
 $logs_res = $log_stmt->get_result();
 $daily_logs = $logs_res ? $logs_res->fetch_all(MYSQLI_ASSOC) : [];
 
-// Fetch Weekly Reflection
-$ref_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
-$ref_stmt->bind_param("ii", $internship_id, $selected_week);
-$ref_stmt->execute();
-$ref_res = $ref_stmt->get_result();
-$weekly_reflection = $ref_res ? $ref_res->fetch_assoc() : null;
+// Fetch Weekly Reflection(s)
+if ($is_all_weeks) {
+    $ref_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? ORDER BY week_number ASC");
+    $ref_stmt->bind_param("i", $internship_id);
+    $ref_stmt->execute();
+    $ref_res = $ref_stmt->get_result();
+    $all_weekly_reflections = $ref_res ? $ref_res->fetch_all(MYSQLI_ASSOC) : [];
+    $weekly_reflection = $all_weekly_reflections[0] ?? null;
+} else {
+    $ref_stmt = $db->prepare("SELECT * FROM weekly_reflections WHERE internship_id = ? AND week_number = ?");
+    $ref_stmt->bind_param("ii", $internship_id, $selected_week);
+    $ref_stmt->execute();
+    $ref_res = $ref_stmt->get_result();
+    $weekly_reflection = $ref_res ? $ref_res->fetch_assoc() : null;
+    $all_weekly_reflections = $weekly_reflection ? [$weekly_reflection] : [];
+}
 
 // Fetch Evaluation / Signatures (Company Instructor)
-$eval_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
-$eval_stmt->bind_param("ii", $internship_id, $selected_week);
-$eval_stmt->execute();
-$eval_res = $eval_stmt->get_result();
-$evaluation = $eval_res ? $eval_res->fetch_assoc() : null;
+if ($is_all_weeks) {
+    $eval_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? ORDER BY week_number ASC");
+    $eval_stmt->bind_param("i", $internship_id);
+    $eval_stmt->execute();
+    $eval_res = $eval_stmt->get_result();
+    $all_evaluations = $eval_res ? $eval_res->fetch_all(MYSQLI_ASSOC) : [];
+    $evaluation = !empty($all_evaluations) ? end($all_evaluations) : null;
+} else {
+    $eval_stmt = $db->prepare("SELECT * FROM report_evaluations WHERE student_id = ? AND week_number = ?");
+    $eval_stmt->bind_param("ii", $internship_id, $selected_week);
+    $eval_stmt->execute();
+    $eval_res = $eval_stmt->get_result();
+    $evaluation = $eval_res ? $eval_res->fetch_assoc() : null;
+    $all_evaluations = $evaluation ? [$evaluation] : [];
+}
 
 // Fetch Supervisor Weekly Evaluation / Reflection
-$sup_eval_stmt = $db->prepare("
-    SELECT swe.*, u.username AS supervisor_name 
-    FROM supervisor_weekly_evaluations swe 
-    LEFT JOIN users u ON u.id = swe.supervisor_id 
-    WHERE swe.student_id = ? AND swe.week_number = ?
-");
-$sup_eval_stmt->bind_param("ii", $internship_id, $selected_week);
-$sup_eval_stmt->execute();
-$sup_eval_res = $sup_eval_stmt->get_result();
-$supervisor_evaluation = $sup_eval_res ? $sup_eval_res->fetch_assoc() : null;
+if ($is_all_weeks) {
+    $sup_eval_stmt = $db->prepare("
+        SELECT swe.*, u.username AS supervisor_name 
+        FROM supervisor_weekly_evaluations swe 
+        LEFT JOIN users u ON u.id = swe.supervisor_id 
+        WHERE swe.student_id = ?
+        ORDER BY swe.week_number ASC
+    ");
+    $sup_eval_stmt->bind_param("i", $internship_id);
+    $sup_eval_stmt->execute();
+    $sup_eval_res = $sup_eval_stmt->get_result();
+    $all_sup_evaluations = $sup_eval_res ? $sup_eval_res->fetch_all(MYSQLI_ASSOC) : [];
+    $supervisor_evaluation = !empty($all_sup_evaluations) ? end($all_sup_evaluations) : null;
+} else {
+    $sup_eval_stmt = $db->prepare("
+        SELECT swe.*, u.username AS supervisor_name 
+        FROM supervisor_weekly_evaluations swe 
+        LEFT JOIN users u ON u.id = swe.supervisor_id 
+        WHERE swe.student_id = ? AND swe.week_number = ?
+    ");
+    $sup_eval_stmt->bind_param("ii", $internship_id, $selected_week);
+    $sup_eval_stmt->execute();
+    $sup_eval_res = $sup_eval_stmt->get_result();
+    $supervisor_evaluation = $sup_eval_res ? $sup_eval_res->fetch_assoc() : null;
+    $all_sup_evaluations = $supervisor_evaluation ? [$supervisor_evaluation] : [];
+}
 
 // Calculate Summary Metrics
 $total_logged_days = count($daily_logs);
@@ -136,7 +189,7 @@ foreach ($daily_logs as $log) {
 }
 $total_hours_formatted = floor($total_minutes / 60) . ' hrs ' . ($total_minutes % 60) . ' mins';
 
-$doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) . '-W' . $selected_week;
+$doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) . '-' . ($is_all_weeks ? 'ALL' : 'W' . $selected_week);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -214,10 +267,25 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
 
 <body class="p-4 sm:p-8 min-h-screen">
 
+    <?php
+    $cur_query = $_GET;
+    unset($cur_query['week']);
+    $preserved_query = http_build_query($cur_query);
+    $week_switch_prefix = $preserved_query ? 'print_report.php?' . $preserved_query . '&week=' : 'print_report.php?week=';
+
+    $back_url = 'log-history.php';
+    if ($auth_role === 'supervisor') {
+        $back_url = '../supervisor/supervisor-review.php?student_id=' . $user_id . '&week=' . ($selected_week ?: 1);
+    } elseif ($auth_role === 'admin') {
+        $back_url = '../view_student_history.php?uid=' . $user_id;
+    } else {
+        $back_url = 'log-history.php' . ($selected_week && !$is_all_weeks ? "?mode=weekly&week={$selected_week}" : '');
+    }
+    ?>
     <!-- ═══════════ TOP ACTION TOOLBAR (SCREEN ONLY) ═══════════ -->
     <div class="print-toolbar max-w-5xl mx-auto mb-6 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-2xl p-4 shadow-lg flex items-center justify-between flex-wrap gap-4 sticky top-4 z-50">
         <div class="flex items-center gap-3">
-            <a href="log-history.php<?= $selected_week && !$is_all_weeks ? "?mode=weekly&week={$selected_week}" : '' ?>" class="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
+            <a href="<?= htmlspecialchars($back_url) ?>" class="inline-flex items-center gap-2 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
@@ -226,11 +294,11 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
             <span class="text-slate-300">|</span>
             <div class="flex items-center gap-2">
                 <label class="text-xs font-bold text-slate-500">Select Week:</label>
-                <select onchange="window.location.href='print_report.php?week='+this.value" class="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                <select onchange="window.location.href='<?= $week_switch_prefix ?>' + this.value" class="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                    <option value="all" <?= $is_all_weeks ? 'selected' : '' ?>>All Weeks (Complete History)</option>
                     <?php foreach ($weeks as $wn => $wr): ?>
                         <option value="<?= $wn ?>" <?= $selected_week == $wn && !$is_all_weeks ? 'selected' : '' ?>>Week <?= $wn ?> (<?= (new DateTime($wr['start']))->format('d M') ?> - <?= (new DateTime($wr['end']))->format('d M') ?>)</option>
                     <?php endforeach; ?>
-                    <option value="all" <?= $is_all_weeks ? 'selected' : '' ?>>All Weeks (Complete History)</option>
                 </select>
             </div>
         </div>
@@ -240,7 +308,7 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
-                Print / Save PDF
+                Print
             </button>
         </div>
     </div>
@@ -303,8 +371,8 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                     <p class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 border-b border-slate-200 pb-1">
                         3. Period & Status / ကာလနှင့် အခြေအနေ
                     </p>
-                    <div class="flex justify-between"><span class="text-slate-500">Report Week:</span> <strong class="text-indigo-900 font-bold">Week <?= $selected_week ?></strong></div>
-                    <div class="flex justify-between"><span class="text-slate-500">Week Duration:</span> <strong class="text-slate-800"><?= $week_start ? (new DateTime($week_start))->format('d M') . ' – ' . (new DateTime($week_end))->format('d M Y') : '—' ?></strong></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Report Week:</span> <strong class="text-indigo-900 font-bold"><?= $is_all_weeks ? 'All Weeks (Complete History)' : 'Week ' . $selected_week ?></strong></div>
+                    <div class="flex justify-between"><span class="text-slate-500">Week Duration:</span> <strong class="text-slate-800"><?= $is_all_weeks ? ($intern_start ? (new DateTime($intern_start))->format('d M Y') . ' – ' . (new DateTime($intern_end))->format('d M Y') : '—') : ($week_start ? (new DateTime($week_start))->format('d M') . ' – ' . (new DateTime($week_end))->format('d M Y') : '—') ?></strong></div>
                     <div class="flex justify-between"><span class="text-slate-500">Total Internship:</span> <span class="text-slate-700"><?= $intern_start ? (new DateTime($intern_start))->format('d M Y') . ' – ' . (new DateTime($intern_end))->format('d M Y') : '—' ?></span></div>
                 </div>
 
@@ -339,7 +407,7 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                 <h2 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                     <span>📅</span> Daily Work Logs / နေ့စဉ်လုပ်ငန်းမှတ်တမ်းများ
                 </h2>
-                <span class="text-[10px] font-bold text-slate-400">Week <?= $selected_week ?></span>
+                <span class="text-[10px] font-bold text-slate-400"><?= $is_all_weeks ? 'All Weeks' : 'Week ' . $selected_week ?></span>
             </div>
 
             <div class="overflow-x-auto border border-slate-300 rounded-xl">
@@ -420,26 +488,52 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
 
         <!-- ── SECTION 4: WEEKLY REFLECTION & EVALUATION (AVOID BREAK) ── -->
         <section class="space-y-4 mb-6 avoid-break">
-            <div class="border border-slate-300 rounded-xl p-4 bg-slate-50/50">
-                <h2 class="text-xs font-black uppercase tracking-wider text-slate-800 mb-3 flex items-center gap-1.5">
-                    <span>💡</span> Weekly Reflection / အပတ်စဉ် သုံးသပ်ချက်
-                </h2>
+            <?php if ($is_all_weeks && !empty($all_weekly_reflections)): ?>
+                <div class="space-y-3">
+                    <?php foreach ($all_weekly_reflections as $ref): ?>
+                        <div class="border border-slate-300 rounded-xl p-4 bg-slate-50/50">
+                            <h2 class="text-xs font-black uppercase tracking-wider text-slate-800 mb-2.5 flex items-center gap-1.5">
+                                <span>💡</span> Week <?= (int)$ref['week_number'] ?> Weekly Reflection / အပတ်စဉ် သုံးသပ်ချက်
+                            </h2>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                                <div class="bg-white border border-slate-200 rounded-lg p-3">
+                                    <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">1. What was done? / ဘာလုပ်သလဲ</p>
+                                    <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($ref['what_done'] ?? '—')) ?></p>
+                                </div>
+                                <div class="bg-white border border-slate-200 rounded-lg p-3">
+                                    <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">2. How was it done? / ဘယ်လိုလုပ်ပါသလဲ</p>
+                                    <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($ref['how_done'] ?? '—')) ?></p>
+                                </div>
+                                <div class="bg-white border border-slate-200 rounded-lg p-3">
+                                    <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">3. Why was it done? / ဘာကြောင့်လုပ်ပါသလဲ</p>
+                                    <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($ref['why_done'] ?? '—')) ?></p>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="border border-slate-300 rounded-xl p-4 bg-slate-50/50">
+                    <h2 class="text-xs font-black uppercase tracking-wider text-slate-800 mb-3 flex items-center gap-1.5">
+                        <span>💡</span> <?= $is_all_weeks ? 'Weekly Reflections / အပတ်စဉ် သုံးသပ်ချက်များ' : 'Weekly Reflection / အပတ်စဉ် သုံးသပ်ချက်' ?>
+                    </h2>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                    <div class="bg-white border border-slate-200 rounded-lg p-3">
-                        <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">1. What was done? / ဘာလုပ်သလဲ</p>
-                        <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($weekly_reflection['what_done'] ?? 'Not submitted yet')) ?></p>
-                    </div>
-                    <div class="bg-white border border-slate-200 rounded-lg p-3">
-                        <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">2. How was it done? / ဘယ်လိုလုပ်ပါသလဲ</p>
-                        <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($weekly_reflection['how_done'] ?? 'Not submitted yet')) ?></p>
-                    </div>
-                    <div class="bg-white border border-slate-200 rounded-lg p-3">
-                        <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">3. Why was it done? / ဘာကြောင့်လုပ်ပါသလဲ</p>
-                        <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($weekly_reflection['why_done'] ?? 'Not submitted yet')) ?></p>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                        <div class="bg-white border border-slate-200 rounded-lg p-3">
+                            <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">1. What was done? / ဘာလုပ်သလဲ</p>
+                            <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($weekly_reflection['what_done'] ?? 'Not submitted yet')) ?></p>
+                        </div>
+                        <div class="bg-white border border-slate-200 rounded-lg p-3">
+                            <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">2. How was it done? / ဘယ်လိုလုပ်ပါသလဲ</p>
+                            <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($weekly_reflection['how_done'] ?? 'Not submitted yet')) ?></p>
+                        </div>
+                        <div class="bg-white border border-slate-200 rounded-lg p-3">
+                            <p class="text-[10px] font-bold uppercase text-slate-400 mb-1">3. Why was it done? / ဘာကြောင့်လုပ်ပါသလဲ</p>
+                            <p class="text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($weekly_reflection['why_done'] ?? 'Not submitted yet')) ?></p>
+                        </div>
                     </div>
                 </div>
-            </div>
+            <?php endif; ?>
 
             <!-- Evaluations & Feedback Section (Company Instructor & University Supervisor) -->
             <?php

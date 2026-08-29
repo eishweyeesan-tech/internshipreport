@@ -513,7 +513,7 @@ $grade_labels = [
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
                         <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-blue-50 text-blue-600 rounded">📝</span> Daily Log History (နေ့စဉ် လုပ်ငန်းမှတ်တမ်း)
+                            <span class="p-1 bg-blue-50 text-blue-600 rounded">📝</span> Daily Log History (နေ့စဉ်မှတ်တမ်း)
                         </h2>
                         <span class="text-sm text-slate-400"><?= count($daily_logs) ?> day(s)</span>
                     </div>
@@ -525,7 +525,6 @@ $grade_labels = [
                                         <th class="px-3.5 py-3 text-left whitespace-nowrap">ရက်စွဲ / နေ့</th>
                                         <th class="px-3.5 py-3 text-left whitespace-nowrap">တက်ရောက်မှုအခြေအနေ</th>
                                         <th class="px-3.5 py-3 text-left min-w-[160px]">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
-                                        <th class="px-3.5 py-3 text-left min-w-[200px]">ဆောင်ရွက်မည့် လုပ်ငန်းစဉ်များ</th>
                                         <th class="px-3.5 py-3 text-left min-w-[200px]">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
                                         <th class="px-3.5 py-3 text-left min-w-[120px]">အသုံးပြုသောပစ္စည်းများ</th>
                                         <th class="px-3.5 py-3 text-left min-w-[160px]">လေ့လာသိရှိသော အသိပညာ</th>
@@ -553,9 +552,6 @@ $grade_labels = [
                                                 <?= $is_absent ? '—' : htmlspecialchars($log['task_title'] ?? '—') ?>
                                             </td>
                                             <td class="px-3.5 py-3 text-slate-600 break-words whitespace-normal leading-relaxed">
-                                                <?= $is_absent ? '—' : nl2br(htmlspecialchars($log['task_detail'] ?? '—')) ?>
-                                            </td>
-                                            <td class="px-3.5 py-3 text-slate-600 break-words whitespace-normal leading-relaxed">
                                                 <?= $is_absent ? '—' : nl2br(htmlspecialchars($log['tasks_performed'] ?? '—')) ?>
                                             </td>
                                             <td class="px-3.5 py-3 text-emerald-700 font-mono text-xs break-words whitespace-normal leading-relaxed">
@@ -581,21 +577,21 @@ $grade_labels = [
                 <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div class="px-5 py-3 border-b border-slate-100">
                         <h2 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                            <span class="p-1 bg-emerald-50 text-emerald-600 rounded">📊</span> အပတ်စဉ် သုံးသပ်ချက် (Weekly Reflection)
+                            <span class="p-1 bg-emerald-50 text-emerald-600 rounded">📊</span> Weekly Reflection (အပတ်စဉ် သုံးသပ်ချက်)
                         </h2>
                     </div>
                     <?php if ($reflection): ?>
                         <div class="p-5 space-y-4">
                             <div>
-                                <span class="text-xs font-bold text-slate-600 block mb-1">၁။ ဤအပတ်အတွင်း မည်သည့်လုပ်ငန်းများ လုပ်ဆောင်ခဲ့သနည်း။ (What was done?)</span>
+                                <span class="text-xs font-bold text-slate-600 block mb-1">What was done? <span class="text-slate-400 font-normal">/ ဘာလုပ်သလဲ</span></span>
                                 <p class="text-xs text-slate-800 leading-relaxed bg-slate-50 border border-slate-100 rounded-xl p-3.5 whitespace-normal break-words"><?= nl2br(htmlspecialchars($reflection['what_done'] ?? '')) ?></p>
                             </div>
                             <div>
-                                <span class="text-xs font-bold text-slate-600 block mb-1">၂။ မည်ကဲ့သို့ လုပ်ဆောင်ခဲ့သနည်း။ (How was it done?)</span>
+                                <span class="text-xs font-bold text-slate-600 block mb-1">How was it done? <span class="text-slate-400 font-normal">/ ဘယ်လိုလုပ်ပါသလဲ</span></span>
                                 <p class="text-xs text-slate-800 leading-relaxed bg-slate-50 border border-slate-100 rounded-xl p-3.5 whitespace-normal break-words"><?= nl2br(htmlspecialchars($reflection['how_done'] ?? '')) ?></p>
                             </div>
                             <div>
-                                <span class="text-xs font-bold text-slate-600 block mb-1">၃။ မည်သည့်အတွက်ကြောင့် လုပ်ဆောင်ခဲ့သနည်း။ (ရရှိခဲ့သော အသိပညာ/အတွေ့အကြုံ - Why was it done?)</span>
+                                <span class="text-xs font-bold text-slate-600 block mb-1">Why was it done? <span class="text-slate-400 font-normal">/ ဘာကြောင့်လုပ်ပါသလဲ</span></span>
                                 <p class="text-xs text-slate-800 leading-relaxed bg-slate-50 border border-slate-100 rounded-xl p-3.5 whitespace-normal break-words"><?= nl2br(htmlspecialchars($reflection['why_done'] ?? '')) ?></p>
                             </div>
 
@@ -698,130 +694,156 @@ $grade_labels = [
                         </div>
 
                     <?php else: ?>
-                        <!-- ── Fresh / Update Form ── -->
-                        <form method="POST" enctype="multipart/form-data" class="p-5 space-y-4">
-                            <input type="hidden" name="submit_feedback" value="1">
-                            <p class="text-sm text-slate-400 leading-relaxed">
-                                Rate <strong class="text-slate-600">Week <?= $week_number ?></strong>, provide feedback, and sign to approve.
-                            </p>
-
-                            <!-- Grade -->
+                        <!-- ── Fresh / Interactive Decision Form ── -->
+                        <form method="POST" enctype="multipart/form-data" class="p-5 space-y-4" id="instructorEvaluationForm">
+                            
+                            <!-- Decision Mode Selector Tabs -->
                             <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-2">Performance Grade</label>
-                                <div class="space-y-2">
-                                    <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 transition">
-                                        <input type="radio" name="grade" value="excellent" <?= ($evaluation['grade'] ?? '') === 'excellent' ? 'checked' : '' ?> class="accent-emerald-600">
-                                        <span class="text-xs font-semibold text-slate-700">Excellent</span>
-                                        <span class="text-sm text-slate-400 ml-auto">Outstanding</span>
-                                    </label>
-                                    <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition">
-                                        <input type="radio" name="grade" value="good" <?= ($evaluation['grade'] ?? 'good') === 'good' ? 'checked' : '' ?> class="accent-blue-600">
-                                        <span class="text-xs font-semibold text-slate-700">Good</span>
-                                        <span class="text-sm text-slate-400 ml-auto">Meets expectations</span>
-                                    </label>
-                                    <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-200 transition">
-                                        <input type="radio" name="grade" value="average" <?= ($evaluation['grade'] ?? '') === 'average' ? 'checked' : '' ?> class="accent-amber-600">
-                                        <span class="text-xs font-semibold text-slate-700">Average</span>
-                                        <span class="text-sm text-slate-400 ml-auto">Room to grow</span>
-                                    </label>
-                                    <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-red-50 hover:border-red-200 transition">
-                                        <input type="radio" name="grade" value="needs_improvement" <?= ($evaluation['grade'] ?? '') === 'needs_improvement' ? 'checked' : '' ?> class="accent-red-600">
-                                        <span class="text-xs font-semibold text-slate-700">Needs Improvement</span>
-                                        <span class="text-sm text-slate-400 ml-auto">Requires attention</span>
-                                    </label>
+                                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Select Decision</label>
+                                <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100/90 rounded-2xl border border-slate-200">
+                                    <button type="button" onclick="setDecisionMode('approve')" id="tab-decision-approve"
+                                        class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer bg-white text-emerald-700 shadow-sm border border-emerald-200">
+                                        <span>✅</span>
+                                        <span>Approve</span>
+                                    </button>
+                                    <button type="button" onclick="setDecisionMode('reject')" id="tab-decision-reject"
+                                        class="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer text-slate-600 hover:text-rose-600 hover:bg-white/70">
+                                        <span>❌</span>
+                                        <span>Reject</span>
+                                    </button>
                                 </div>
                             </div>
 
-                            <!-- Comment -->
-                            <div>
-                                <label class="block text-sm font-bold text-slate-500 mb-1">Review Comment</label>
-                                <textarea name="comment" rows="4" required placeholder="Write your detailed feedback…"
-                                    class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 transition resize-none"><?= htmlspecialchars($evaluation['comment'] ?? '') ?></textarea>
-                            </div>
+                            <!-- ════════ APPROVE CONTAINER ════════ -->
+                            <div id="decision-approve-container" class="space-y-4">
+                                <p class="text-xs text-slate-500 leading-relaxed bg-emerald-50/60 border border-emerald-100 rounded-xl p-3">
+                                    Rate <strong class="text-slate-800">Week <?= $week_number ?></strong>, provide feedback, and sign to approve this report.
+                                </p>
 
-                            <!-- ═══ SIGNATURE SECTION ═══ -->
-                            <div class="border-t border-slate-100 pt-4">
-                                <label class="block text-sm font-bold text-slate-500 mb-2">✍️ Instructor Signature</label>
-
-                                <!-- Signature Type Toggle -->
-                                <div class="flex gap-2 mb-3">
-                                    <button type="button" onclick="switchSigType('typed')" id="btn-typed"
-                                        class="flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer
-                                bg-indigo-600 text-white border-indigo-600">
-                                        ✏️ Type Name
-                                    </button>
-                                    <button type="button" onclick="switchSigType('uploaded')" id="btn-uploaded"
-                                        class="flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer
-                                bg-white text-slate-600 border-slate-200 hover:bg-slate-50">
-                                        📷 Upload Image
-                                    </button>
-                                </div>
-
-                                <!-- ── Option 1: Typed Signature ── -->
-                                <div id="sig-typed-fields" class="space-y-3">
-                                    <input type="hidden" name="signature_type" value="typed" id="sig_type_input">
-
-                                    <div>
-                                        <label class="block text-sm font-bold text-slate-400 mb-0.5">Type your full name</label>
-                                        <input type="text" name="typed_name" id="typed_name" placeholder="e.g. U Aung Kyaw"
-                                            oninput="previewTypedSig()"
-                                            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-blue-500 transition">
-                                    </div>
-
-                                    <!-- Live Preview (Single Standard Signature Font) -->
-                                    <div class="bg-white border-2 border-dashed border-slate-200 rounded-xl p-3 text-center">
-                                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Signature Preview</p>
-                                        <p id="sig_preview" class="sig-preview sig-type-great" style="font-family:'Great Vibes',cursive; font-size:28px; color:#1e293b;">—</p>
-                                    </div>
-                                </div>
-
-                                <!-- ── Option 2: Upload Signature ── -->
-                                <div id="sig-upload-fields" class="hidden space-y-2">
-                                    <div class="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center">
-                                        <div class="text-2xl mb-1">📷</div>
-                                        <p class="text-sm text-slate-500 font-semibold mb-2">Upload handwritten signature</p>
-                                        <label class="inline-block px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 cursor-pointer transition">
-                                            Choose JPG/PNG
-                                            <input type="file" name="signature_file" accept=".jpg,.jpeg,.png" class="hidden">
+                                <!-- Grade -->
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Performance Grade / အဆင့်သတ်မှတ်ချက်</label>
+                                    <div class="space-y-2">
+                                        <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-emerald-50 hover:border-emerald-200 transition">
+                                            <input type="radio" name="grade" value="excellent" <?= ($evaluation['grade'] ?? '') === 'excellent' ? 'checked' : '' ?> class="accent-emerald-600">
+                                            <span class="text-xs font-semibold text-slate-700">Excellent</span>
+                                            <span class="text-xs text-slate-400 ml-auto">Outstanding</span>
                                         </label>
-                                        <p class="text-sm text-slate-400 mt-1.5">Max 2MB • JPG or PNG only</p>
+                                        <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-blue-50 hover:border-blue-200 transition">
+                                            <input type="radio" name="grade" value="good" <?= ($evaluation['grade'] ?? 'good') === 'good' ? 'checked' : '' ?> class="accent-blue-600">
+                                            <span class="text-xs font-semibold text-slate-700">Good</span>
+                                            <span class="text-xs text-slate-400 ml-auto">Meets expectations</span>
+                                        </label>
+                                        <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-amber-50 hover:border-amber-200 transition">
+                                            <input type="radio" name="grade" value="average" <?= ($evaluation['grade'] ?? '') === 'average' ? 'checked' : '' ?> class="accent-amber-600">
+                                            <span class="text-xs font-semibold text-slate-700">Average</span>
+                                            <span class="text-xs text-slate-400 ml-auto">Room to grow</span>
+                                        </label>
+                                        <label class="flex items-center gap-2.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-rose-50 hover:border-rose-200 transition">
+                                            <input type="radio" name="grade" value="needs_improvement" <?= ($evaluation['grade'] ?? '') === 'needs_improvement' ? 'checked' : '' ?> class="accent-rose-600">
+                                            <span class="text-xs font-semibold text-slate-700">Needs Improvement</span>
+                                            <span class="text-xs text-slate-400 ml-auto">Requires attention</span>
+                                        </label>
                                     </div>
+                                </div>
+
+                                <!-- Comment -->
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Review Comment / အကဲဖြတ်မှတ်ချက်</label>
+                                    <textarea name="comment" id="review_comment" rows="4" placeholder="Write your detailed feedback and guidance for the student…"
+                                        class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition resize-none"><?= htmlspecialchars($evaluation['comment'] ?? '') ?></textarea>
+                                </div>
+
+                                <!-- Signature Section -->
+                                <div class="border-t border-slate-100 pt-4">
+                                    <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">✍️ Instructor Signature / လက်မှတ်</label>
+
+                                    <!-- Signature Type Toggle -->
+                                    <div class="flex gap-2 mb-3">
+                                        <button type="button" onclick="switchSigType('typed')" id="btn-typed"
+                                            class="flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600">
+                                            ✏️ Type Name
+                                        </button>
+                                        <button type="button" onclick="switchSigType('uploaded')" id="btn-uploaded"
+                                            class="flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50">
+                                            📷 Upload Image
+                                        </button>
+                                    </div>
+
+                                    <!-- Option 1: Typed Signature -->
+                                    <div id="sig-typed-fields" class="space-y-3">
+                                        <input type="hidden" name="signature_type" value="typed" id="sig_type_input">
+
+                                        <div>
+                                            <label class="block text-xs font-bold text-slate-400 mb-1">Type your full name</label>
+                                            <input type="text" name="typed_name" id="typed_name" placeholder="e.g. U Aung Kyaw"
+                                                oninput="previewTypedSig()"
+                                                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-indigo-500 transition">
+                                        </div>
+
+                                        <!-- Live Preview -->
+                                        <div class="bg-white border-2 border-dashed border-slate-200 rounded-xl p-3 text-center">
+                                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Signature Preview</p>
+                                            <p id="sig_preview" class="sig-preview sig-type-great" style="font-family:'Great Vibes',cursive; font-size:28px; color:#1e293b;">—</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Option 2: Upload Signature -->
+                                    <div id="sig-upload-fields" class="hidden space-y-2">
+                                        <div class="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center">
+                                            <div class="text-2xl mb-1">📷</div>
+                                            <p class="text-xs text-slate-500 font-semibold mb-2">Upload handwritten signature</p>
+                                            <label class="inline-block px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer transition shadow-2xs">
+                                                Choose JPG/PNG
+                                                <input type="file" name="signature_file" accept=".jpg,.jpeg,.png" class="hidden">
+                                            </label>
+                                            <p class="text-[10px] text-slate-400 mt-1.5">Max 2MB • JPG or PNG only</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Submit Approve Button -->
+                                <div class="pt-2">
+                                    <button type="submit" name="submit_feedback" id="approve-submit-btn"
+                                        onclick="prepareApproveSubmit()"
+                                        class="w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-md hover:shadow-emerald-500/20 active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-2">
+                                        <span>✅</span>
+                                        <span>Confirm & Sign Approval</span>
+                                    </button>
                                 </div>
                             </div>
 
-                            <!-- ═══ REJECTION REASON (hidden by default) ═══ -->
-                            <div id="reject-section" class="hidden border-t border-red-100 pt-4">
-                                <div class="bg-red-50 rounded-xl p-4 border border-red-200 space-y-3">
+                            <!-- ════════ REJECT CONTAINER ════════ -->
+                            <div id="decision-reject-container" class="hidden space-y-4">
+                                <div class="bg-rose-50/80 rounded-2xl p-4 border border-rose-200 space-y-3">
                                     <div class="flex items-center gap-2">
-                                        <span class="text-red-500 text-sm">⚠️</span>
-                                        <span class="text-sm font-bold text-red-700">Reason for Rejection</span>
+                                        <span class="text-rose-500 text-base">⚠️</span>
+                                        <div>
+                                            <h3 class="text-xs font-bold text-rose-800 uppercase tracking-wider">Reason for Rejection</h3>
+                                            <p class="text-[11px] text-rose-600">ပြန်လည်ပြင်ဆင်ရန် အကြောင်းပြချက်</p>
+                                        </div>
                                     </div>
-                                    <textarea name="reject_reason" id="reject_reason" rows="3" placeholder="Explain why this report needs revision…"
-                                        class="w-full bg-white border border-red-200 rounded-xl px-3 py-2 text-xs text-slate-700 focus:outline-none focus:border-red-400 transition resize-none"></textarea>
-                                    <p class="text-sm text-red-400">This reason will be shown to the student.</p>
+                                    <textarea name="reject_reason" id="reject_reason" rows="5" placeholder="Explain specifically why this report needs revision (e.g. Missing daily logs, incomplete tasks, revise reflection)…"
+                                        class="w-full bg-white border border-rose-300 rounded-xl px-3 py-2 text-xs text-slate-800 placeholder:text-rose-300 focus:outline-none focus:ring-2 focus:ring-rose-400/30 focus:border-rose-500 transition resize-none"></textarea>
+                                    <p class="text-[11px] text-rose-500 font-medium">This message will be sent directly to the student so they can revise and re-submit.</p>
+                                </div>
+
+                                <!-- Submit Reject Button -->
+                                <div class="pt-2">
+                                    <button type="submit" name="reject_report" id="reject-submit-btn"
+                                        onclick="prepareRejectSubmit()"
+                                        class="w-full px-4 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-md hover:shadow-rose-500/20 active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-2">
+                                        <span>❌</span>
+                                        <span>Confirm Rejection & Request Revision</span>
+                                    </button>
                                 </div>
                             </div>
-
-                            <!-- Action Buttons -->
-                            <div class="flex gap-2 pt-1">
-                                <button type="submit" name="submit_feedback" class="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">
-                                    📤 Approve
-                                </button>
-                                <button type="button" onclick="toggleReject()" id="reject-toggle-btn"
-                                    class="flex-1 px-4 py-2.5 bg-white border border-red-200 text-red-600 font-bold text-xs rounded-xl hover:bg-red-50 transition cursor-pointer">
-                                    ❌ Reject
-                                </button>
-                            </div>
-                            <!-- Hidden reject submit (activated when reject mode is on) -->
-                            <button type="submit" name="reject_report" id="reject-submit-btn" class="hidden w-full px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">
-                                ❌ Confirm Rejection
-                            </button>
                         </form>
                     <?php endif; ?>
 
                     <!-- Info Footer -->
                     <div class="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-                        <p class="text-sm text-slate-400 text-center leading-relaxed">
+                        <p class="text-xs text-slate-400 text-center leading-relaxed">
                             Signing sets status to <strong>Approved by Instructor</strong> and forwards to University Supervisor.
                         </p>
                     </div>
@@ -830,10 +852,59 @@ $grade_labels = [
 
         </div>
 
-        <div class="text-center text-sm text-slate-300 py-2">Powered by InternReport</div>
+        <div class="text-center text-xs text-slate-400 py-3">Powered by InternReport</div>
     </div>
 
     <script>
+        // Decision Mode Switcher (Approve vs Reject)
+        function setDecisionMode(mode) {
+            var approveCont = document.getElementById('decision-approve-container');
+            var rejectCont  = document.getElementById('decision-reject-container');
+            var tabApprove  = document.getElementById('tab-decision-approve');
+            var tabReject   = document.getElementById('tab-decision-reject');
+            var reviewComment = document.getElementById('review_comment');
+            var rejectReason  = document.getElementById('reject_reason');
+
+            if (mode === 'approve') {
+                if (approveCont) approveCont.classList.remove('hidden');
+                if (rejectCont) rejectCont.classList.add('hidden');
+                if (tabApprove) tabApprove.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer bg-white text-emerald-700 shadow-sm border border-emerald-200';
+                if (tabReject) tabReject.className  = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer text-slate-600 hover:text-rose-600 hover:bg-white/70';
+                if (rejectReason) {
+                    rejectReason.removeAttribute('required');
+                }
+                if (reviewComment) {
+                    reviewComment.setAttribute('required', 'required');
+                }
+            } else {
+                if (approveCont) approveCont.classList.add('hidden');
+                if (rejectCont) rejectCont.classList.remove('hidden');
+                if (tabReject) tabReject.className  = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer bg-white text-rose-700 shadow-sm border border-rose-200';
+                if (tabApprove) tabApprove.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer text-slate-600 hover:text-emerald-600 hover:bg-white/70';
+                if (reviewComment) {
+                    reviewComment.removeAttribute('required');
+                }
+                if (rejectReason) {
+                    rejectReason.setAttribute('required', 'required');
+                    rejectReason.focus();
+                }
+            }
+        }
+
+        function prepareApproveSubmit() {
+            var rejectReason = document.getElementById('reject_reason');
+            var reviewComment = document.getElementById('review_comment');
+            if (rejectReason) rejectReason.removeAttribute('required');
+            if (reviewComment) reviewComment.setAttribute('required', 'required');
+        }
+
+        function prepareRejectSubmit() {
+            var rejectReason = document.getElementById('reject_reason');
+            var reviewComment = document.getElementById('review_comment');
+            if (reviewComment) reviewComment.removeAttribute('required');
+            if (rejectReason) rejectReason.setAttribute('required', 'required');
+        }
+
         // Toggle signature type buttons styling
         function switchSigType(type) {
             var typed = document.getElementById('sig-typed-fields');
@@ -841,44 +912,19 @@ $grade_labels = [
             var hidden = document.getElementById('sig_type_input');
             var btnT = document.getElementById('btn-typed');
             var btnU = document.getElementById('btn-uploaded');
-            var fontSel = document.getElementById('sig_font_select');
 
             if (type === 'typed') {
-                typed.classList.remove('hidden');
-                upload.classList.add('hidden');
-                hidden.value = 'typed';
-                if (fontSel) fontSel.classList.remove('hidden');
-                btnT.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-                btnU.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+                if (typed) typed.classList.remove('hidden');
+                if (upload) upload.classList.add('hidden');
+                if (hidden) hidden.value = 'typed';
+                if (btnT) btnT.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
+                if (btnU) btnU.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
             } else {
-                typed.classList.add('hidden');
-                upload.classList.remove('hidden');
-                hidden.value = 'uploaded';
-                if (fontSel) fontSel.classList.add('hidden');
-                btnU.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-                btnT.className = 'flex-1 px-2 py-1.5 text-sm font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-            }
-        }
-
-
-
-        // Toggle rejection reason section
-        var rejectActive = false;
-
-        function toggleReject() {
-            var section = document.getElementById('reject-section');
-            var toggleBtn = document.getElementById('reject-toggle-btn');
-            var submitBtn = document.getElementById('reject-submit-btn');
-            rejectActive = !rejectActive;
-            if (rejectActive) {
-                section.classList.remove('hidden');
-                toggleBtn.classList.add('hidden');
-                submitBtn.classList.remove('hidden');
-            } else {
-                section.classList.add('hidden');
-                toggleBtn.classList.remove('hidden');
-                submitBtn.classList.add('hidden');
-                document.getElementById('reject_reason').value = '';
+                if (typed) typed.classList.add('hidden');
+                if (upload) upload.classList.remove('hidden');
+                if (hidden) hidden.value = 'uploaded';
+                if (btnU) btnU.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
+                if (btnT) btnT.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
             }
         }
     </script>

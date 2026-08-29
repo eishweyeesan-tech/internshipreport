@@ -65,7 +65,7 @@ $company_count = (int) ($row[0] ?? 0);
 
 // ── Students grouped by company (assigned students scope) ──────
 $sql = "
-    SELECT u.id AS uid, u.username,
+    SELECT u.id AS uid, u.username, u.profile_pic,
            sp.full_name, sp.student_roll, sp.job_role, sp.company_name,
            sp.instructor_name, sp.instructor_email, sp.instructor_phone,
            c.id AS company_id, c.address, c.contact_person, c.contact_email, c.contact_phone, c.website
@@ -113,6 +113,7 @@ foreach ($company_rows as $row) {
         'uid'              => (int) $row['uid'],
         'full_name'        => $row['full_name'],
         'username'         => $row['username'],
+        'profile_pic'      => $row['profile_pic'] ?? '',
         'student_roll'     => $row['student_roll'],
         'job_role'         => $row['job_role'],
         'instructor_name'  => $row['instructor_name'] ?? '',
@@ -227,89 +228,121 @@ function build_query_url($overrides = [])
                         </div>
                     </div>
 
-                    <!-- ═══ COMPANIES GRID ═══ -->
+                    <!-- ═══ COMPANIES GRID (OPTION 3: UNIFORM CARDS + AVATAR STACK + QUICK MODAL) ═══ -->
                     <?php if (!empty($companies)): ?>
                         <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6" id="companiesGridContainer">
                             <?php foreach ($companies as $company):
                                 $student_count = count($company['students']);
                                 $student_search = implode(' ', array_map(function ($s) {
-                                    return ($s['full_name'] ?: $s['username']) . ' ' . ($s['student_roll'] ?: '') . ' ' . ($s['job_role'] ?: '');
+                                    return ($s['full_name'] ?: $s['username']) . ' ' . ($s['student_roll'] ?: '') . ' ' . ($s['job_role'] ?: '') . ' ' . ($s['instructor_name'] ?? '');
                                 }, $company['students']));
-                                $comp_search = strtolower($company['company_name'] . ' ' . ($company['address'] ?? '') . ' ' . ($company['contact_person'] ?? '') . ' ' . $student_search);
+                                $comp_search = strtolower($company['company_name'] . ' ' . ($company['address'] ?? '') . ' ' . ($company['contact_person'] ?? '') . ' ' . ($company['contact_email'] ?? '') . ' ' . ($company['contact_phone'] ?? '') . ' ' . $student_search);
                             ?>
-                                <div class="company-card bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow duration-300" data-search="<?= htmlspecialchars($comp_search) ?>">
-                                    <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
-                                        <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-md shadow-blue-500/20">
-                                            <?= strtoupper(substr($company['company_name'], 0, 2)) ?>
+                                <div class="company-card bg-white rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden group hover:border-teal-300" data-search="<?= htmlspecialchars($comp_search) ?>">
+                                    <!-- Card Top Section -->
+                                    <div class="p-5 sm:p-6 pb-4">
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div class="flex items-center gap-3.5 min-w-0">
+                                                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 via-teal-600 to-indigo-600 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-md shadow-teal-500/20 group-hover:scale-105 transition-transform">
+                                                    <?= strtoupper(substr($company['company_name'], 0, 2)) ?>
+                                                </div>
+                                                <div class="min-w-0">
+                                                    <h3 class="text-sm font-bold text-slate-800 truncate group-hover:text-teal-700 transition-colors" title="<?= htmlspecialchars($company['company_name']) ?>"><?= htmlspecialchars($company['company_name']) ?></h3>
+                                                    <?php if (!empty($company['website'])): ?>
+                                                        <a href="<?= htmlspecialchars($company['website']) ?>" target="_blank" rel="noopener" class="text-xs text-teal-600 hover:underline font-medium truncate block mt-0.5" title="<?= htmlspecialchars($company['website']) ?>">🔗 <?= htmlspecialchars($company['website']) ?></a>
+                                                    <?php else: ?>
+                                                        <p class="text-xs text-slate-400 font-medium truncate mt-0.5">🏢 Placement Partner</p>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                            <span class="text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-xl border border-teal-200/60 shrink-0">
+                                                <?= $student_count ?> <?= $student_count === 1 ? 'Student' : 'Students' ?>
+                                            </span>
                                         </div>
-                                        <div class="min-w-0 flex-1">
-                                            <h3 class="text-sm font-bold text-slate-800 truncate"><?= htmlspecialchars($company['company_name']) ?></h3>
-                                            <?php if (!empty($company['website'])): ?>
-                                                <a href="<?= htmlspecialchars($company['website']) ?>" target="_blank" rel="noopener" class="text-xs text-blue-600 hover:underline font-medium truncate block"><?= htmlspecialchars($company['website']) ?></a>
-                                            <?php else: ?>
-                                                <p class="text-xs text-slate-400 font-medium truncate">Company placement</p>
+
+                                        <!-- Company Contact Info -->
+                                        <div class="mt-4 pt-3.5 border-t border-slate-100/80 space-y-2 text-xs text-slate-600 min-h-[96px]">
+                                            <?php if (!empty($company['address'])): ?>
+                                                <p class="flex items-start gap-2 text-slate-500" title="<?= htmlspecialchars($company['address']) ?>">
+                                                    <span class="shrink-0 text-slate-400">📍</span>
+                                                    <span class="truncate"><?= htmlspecialchars($company['address']) ?></span>
+                                                </p>
+                                            <?php endif; ?>
+                                            <?php if (!empty($company['contact_person'])): ?>
+                                                <p class="flex items-center gap-2 text-slate-700 font-semibold truncate" title="HR / Contact: <?= htmlspecialchars($company['contact_person']) ?>">
+                                                    <span class="shrink-0 text-slate-400">👤</span>
+                                                    <span class="text-slate-400 font-normal">Contact:</span>
+                                                    <span class="truncate"><?= htmlspecialchars($company['contact_person']) ?></span>
+                                                </p>
+                                            <?php endif; ?>
+                                            <?php if (!empty($company['contact_email'])): ?>
+                                                <p class="flex items-center gap-2 truncate" title="<?= htmlspecialchars($company['contact_email']) ?>">
+                                                    <span class="shrink-0 text-slate-400">✉️</span>
+                                                    <a href="mailto:<?= htmlspecialchars($company['contact_email']) ?>" class="text-teal-600 hover:underline truncate"><?= htmlspecialchars($company['contact_email']) ?></a>
+                                                </p>
+                                            <?php endif; ?>
+                                            <?php if (!empty($company['contact_phone'])): ?>
+                                                <p class="flex items-center gap-2 text-slate-600 truncate font-mono" title="<?= htmlspecialchars($company['contact_phone']) ?>">
+                                                    <span class="shrink-0 text-slate-400">📞</span>
+                                                    <span><?= htmlspecialchars($company['contact_phone']) ?></span>
+                                                </p>
+                                            <?php endif; ?>
+                                            <?php if (empty($company['address']) && empty($company['contact_person']) && empty($company['contact_email']) && empty($company['contact_phone'])): ?>
+                                                <p class="text-xs text-slate-400 font-medium italic">No contact details on file.</p>
                                             <?php endif; ?>
                                         </div>
-                                        <span class="text-sm font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60 shrink-0"><?= $student_count ?> student<?= $student_count !== 1 ? 's' : '' ?></span>
                                     </div>
 
-                                    <div class="px-5 py-4 flex-1 space-y-2.5">
-                                        <?php if (!empty($company['address']) || !empty($company['contact_person']) || !empty($company['contact_email']) || !empty($company['contact_phone'])): ?>
-                                            <div class="space-y-1.5">
-                                                <?php if (!empty($company['address'])): ?>
-                                                    <p class="text-xs text-slate-500 font-medium flex items-start gap-2"><span class="shrink-0">📍</span><span><?= htmlspecialchars($company['address']) ?></span></p>
-                                                <?php endif; ?>
-                                                <?php if (!empty($company['contact_person'])): ?>
-                                                    <p class="text-xs text-slate-600 font-medium flex items-center gap-2"><span class="shrink-0" title="Company Contact / HR">🏢👤</span><span class="text-slate-400">Company Contact:</span><span class="font-bold text-slate-700"><?= htmlspecialchars($company['contact_person']) ?></span></p>
-                                                <?php endif; ?>
-                                                <?php if (!empty($company['contact_email'])): ?>
-                                                    <p class="text-xs text-slate-500 font-medium flex items-center gap-2"><span class="shrink-0">✉️</span><a href="mailto:<?= htmlspecialchars($company['contact_email']) ?>" class="text-blue-600 hover:underline truncate"><?= htmlspecialchars($company['contact_email']) ?></a></p>
-                                                <?php endif; ?>
-                                                <?php if (!empty($company['contact_phone'])): ?>
-                                                    <p class="text-xs text-slate-500 font-medium flex items-center gap-2"><span class="shrink-0">📞</span><span><?= htmlspecialchars($company['contact_phone']) ?></span></p>
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="border-t border-slate-100 pt-2.5"></div>
-                                        <?php else: ?>
-                                            <p class="text-xs text-slate-400 font-medium italic">No contact details on file.</p>
-                                            <div class="border-t border-slate-100 pt-2.5"></div>
-                                        <?php endif; ?>
-
-                                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Assigned Students</p>
-                                        <div class="space-y-2">
-                                            <?php foreach ($company['students'] as $stu): ?>
-                                                <a href="view-student-dashboard.php?id=<?= (int)$stu['uid'] ?>" class="flex items-start gap-2.5 p-2.5 bg-gradient-to-r from-slate-50 to-white border border-slate-100 rounded-xl hover:border-blue-200 hover:shadow-sm transition-all duration-200 group">
-                                                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 text-white flex items-center justify-center text-xs font-black shrink-0 shadow-sm mt-0.5">
-                                                        <?= strtoupper(substr($stu['full_name'] ?: $stu['username'], 0, 1)) ?>
-                                                    </div>
-                                                    <div class="min-w-0 flex-1">
-                                                        <p class="text-xs font-bold text-slate-700 truncate group-hover:text-purple-600 transition-colors duration-150"><?= htmlspecialchars($stu['full_name'] ?: $stu['username']) ?></p>
-                                                        <p class="text-[11px] text-slate-400 font-medium truncate"><?= htmlspecialchars($stu['student_roll'] ?: $stu['username']) ?><?= !empty($stu['job_role']) ? ' · ' . htmlspecialchars($stu['job_role']) : '' ?></p>
-                                                        <?php if (!empty($stu['instructor_name'])): ?>
-                                                            <p class="text-[10px] text-teal-700 font-semibold truncate flex items-center gap-1 mt-1 bg-teal-50/80 px-2 py-0.5 rounded-md border border-teal-100/60 w-fit max-w-full">
-                                                                <span>👨‍🏫 Instructor:</span>
-                                                                <span class="font-bold"><?= htmlspecialchars($stu['instructor_name']) ?></span>
-                                                                <?php if (!empty($stu['instructor_email'])): ?>
-                                                                    <span class="text-slate-400 font-mono font-normal truncate">(<?= htmlspecialchars($stu['instructor_email']) ?>)</span>
-                                                                <?php endif; ?>
-                                                            </p>
-                                                        <?php endif; ?>
-                                                    </div>
-                                                    <span class="text-[11px] font-bold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-150 mt-1">View →</span>
+                                    <!-- Card Footer: Mini Avatar Stack & Quick View Trigger -->
+                                    <div class="p-3.5 sm:px-5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between gap-3">
+                                        <!-- Avatar Stack (Clickable) -->
+                                        <div class="flex items-center -space-x-2 py-0.5">
+                                            <?php 
+                                            $shown_avatars = array_slice($company['students'], 0, 4);
+                                            $more_count = count($company['students']) - 4;
+                                            foreach ($shown_avatars as $stu): 
+                                                $s_name = $stu['full_name'] ?: $stu['username'];
+                                                $s_roll = $stu['student_roll'] ?: '';
+                                                $s_uid  = (int) $stu['uid'];
+                                            ?>
+                                                <a href="view-student-dashboard.php?id=<?= $s_uid ?>"
+                                                   title="View <?= htmlspecialchars($s_name) ?> (<?= htmlspecialchars($s_roll) ?>)'s progress"
+                                                   class="inline-block transition-transform duration-200 hover:scale-125 hover:z-20 relative cursor-pointer">
+                                                    <?php if (!empty($stu['profile_pic'])): ?>
+                                                        <img src="../uploads/avatars/<?= htmlspecialchars($stu['profile_pic']) ?>" alt="<?= htmlspecialchars($s_name) ?>" class="w-8 h-8 rounded-full object-cover ring-2 ring-white shadow-2xs hover:ring-teal-500 transition-all">
+                                                    <?php else: ?>
+                                                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[10px] font-black ring-2 ring-white shadow-2xs hover:ring-teal-500 transition-all">
+                                                            <?= strtoupper(substr($s_name, 0, 1)) ?>
+                                                        </div>
+                                                    <?php endif; ?>
                                                 </a>
                                             <?php endforeach; ?>
+                                            <?php if ($more_count > 0): ?>
+                                                <button type="button"
+                                                        onclick="openCompanyModal(<?= htmlspecialchars(json_encode($company, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>)"
+                                                        title="View all <?= count($company['students']) ?> students"
+                                                        class="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center text-[10px] font-bold ring-2 ring-white shadow-2xs transition-transform duration-200 hover:scale-110 hover:z-20 relative cursor-pointer">
+                                                    +<?= $more_count ?>
+                                                </button>
+                                            <?php endif; ?>
                                         </div>
+
+                                        <!-- View Interns Action Button -->
+                                        <button type="button" onclick="openCompanyModal(<?= htmlspecialchars(json_encode($company, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)) ?>)" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all hover:scale-105 cursor-pointer shrink-0">
+                                            <span>👥 View Interns</span>
+                                            <span>→</span>
+                                        </button>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
                         </div>
                     <?php else: ?>
-                        <div class="bg-white rounded-2xl border border-slate-200/60 shadow-sm p-16 text-center">
+                        <div class="bg-white rounded-3xl border border-slate-200/80 shadow-sm p-16 text-center">
                             <div class="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center text-4xl mx-auto mb-5">🏢</div>
-                            <p class="text-base font-bold text-slate-500">No companies yet</p>
+                            <p class="text-base font-bold text-slate-700">No companies yet</p>
                             <p class="text-sm text-slate-400 mt-1.5"><?= $search ? 'No companies match your search.' : 'Placement companies will appear here once students are assigned to you.' ?></p>
                             <?php if ($search): ?>
-                                <a href="supervisor-companies.php" class="mt-5 inline-block text-xs font-bold text-indigo-600 hover:underline">✕ Clear search</a>
+                                <a href="supervisor-companies.php" class="mt-5 inline-block text-xs font-bold text-teal-600 hover:underline">✕ Clear search</a>
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
@@ -318,6 +351,138 @@ function build_query_url($overrides = [])
             </main>
         </div>
     </div>
+
+    <!-- ═══════════ COMPANY STUDENTS QUICK VIEW MODAL ═══════════ -->
+    <div id="companyStudentsModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity" onclick="closeCompanyModal()"></div>
+
+        <!-- Modal Card -->
+        <div class="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col max-h-[85vh] overflow-hidden z-10">
+            <!-- Modal Header -->
+            <div class="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div id="modalCompAvatar" class="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 via-teal-600 to-indigo-600 text-white flex items-center justify-center text-sm font-black shadow-md shrink-0">
+                        🏢
+                    </div>
+                    <div class="min-w-0">
+                        <h3 id="modalCompName" class="text-base font-black text-slate-800 truncate">Company Name</h3>
+                        <p id="modalCompSubtitle" class="text-xs text-slate-500 font-medium">Assigned Interns</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeCompanyModal()" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-bold transition-colors cursor-pointer" title="Close">
+                    ✕
+                </button>
+            </div>
+
+            <!-- Modal Body (Students List) -->
+            <div class="p-5 sm:p-6 overflow-y-auto space-y-3 flex-1" id="modalStudentsList">
+                <!-- Rendered dynamically by JS -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+                <button type="button" onclick="closeCompanyModal()" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, function(m) {
+                return ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                })[m];
+            });
+        }
+
+        function openCompanyModal(company) {
+            if (!company) return;
+
+            document.getElementById('modalCompName').textContent = company.company_name;
+            document.getElementById('modalCompAvatar').textContent = company.company_name.substring(0, 2).toUpperCase();
+            
+            const totalStudents = company.students ? company.students.length : 0;
+            let subtitle = `${totalStudents} Assigned Intern${totalStudents === 1 ? '' : 's'}`;
+            if (company.address) {
+                subtitle += ` • 📍 ${company.address}`;
+            }
+            document.getElementById('modalCompSubtitle').textContent = subtitle;
+
+            const listEl = document.getElementById('modalStudentsList');
+            listEl.innerHTML = '';
+
+            if (company.students && company.students.length > 0) {
+                company.students.forEach(stu => {
+                    const name = stu.full_name || stu.username;
+                    const roll = stu.student_roll || stu.username;
+                    const role = stu.job_role || 'Intern';
+                    const initial = name.charAt(0).toUpperCase();
+
+                    let avatarHtml = '';
+                    if (stu.profile_pic) {
+                        avatarHtml = `<img src="../uploads/avatars/${escapeHtml(stu.profile_pic)}" alt="${escapeHtml(name)}" class="w-10 h-10 rounded-2xl object-cover ring-1 ring-slate-200 shrink-0">`;
+                    } else {
+                        avatarHtml = `<div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-black shrink-0">${initial}</div>`;
+                    }
+
+                    let instructorHtml = '';
+                    if (stu.instructor_name) {
+                        instructorHtml = `
+                            <div class="mt-2 text-[11px] text-teal-800 font-semibold bg-teal-50/90 px-2.5 py-1 rounded-xl border border-teal-100/80 flex items-center gap-1.5 flex-wrap">
+                                <span>👨‍🏫 Instructor:</span>
+                                <span class="font-bold text-teal-900">${escapeHtml(stu.instructor_name)}</span>
+                                ${stu.instructor_email ? `<span class="text-slate-500 font-mono text-[10px]">(${escapeHtml(stu.instructor_email)})</span>` : ''}
+                                ${stu.instructor_phone ? `<span class="text-slate-500 font-mono text-[10px]">📞 ${escapeHtml(stu.instructor_phone)}</span>` : ''}
+                            </div>
+                        `;
+                    }
+
+                    const itemHtml = `
+                        <div class="p-4 bg-slate-50 hover:bg-slate-100/80 border border-slate-200/80 rounded-2xl transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                            <div class="flex items-start gap-3 min-w-0">
+                                ${avatarHtml}
+                                <div class="min-w-0">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <h4 class="text-xs sm:text-sm font-bold text-slate-800">${escapeHtml(name)}</h4>
+                                        <span class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">${escapeHtml(roll)}</span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-500 font-medium mt-0.5">${escapeHtml(role)}</p>
+                                    ${instructorHtml}
+                                </div>
+                            </div>
+                            <a href="view-student-dashboard.php?id=${stu.uid}" class="inline-flex items-center gap-1 px-3.5 py-2 bg-white hover:bg-teal-50 text-teal-700 hover:text-teal-800 text-xs font-bold rounded-xl border border-slate-200 hover:border-teal-300 shadow-2xs transition shrink-0">
+                                <span>View Progress</span>
+                                <span>→</span>
+                            </a>
+                        </div>
+                    `;
+                    listEl.insertAdjacentHTML('beforeend', itemHtml);
+                });
+            } else {
+                listEl.innerHTML = '<p class="text-center text-xs text-slate-400 py-6">No students assigned to this company.</p>';
+            }
+
+            const modal = document.getElementById('companyStudentsModal');
+            modal.classList.remove('hidden');
+        }
+
+        function closeCompanyModal() {
+            const modal = document.getElementById('companyStudentsModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeCompanyModal();
+        });
+    </script>
     <?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 

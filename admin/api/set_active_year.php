@@ -6,7 +6,6 @@
  * Sets is_current = 1 and status = 'Active' for target year, resets others to is_current = 0 and status = 'Archived'.
  * Automatically batch updates students from previous academic years to status = 'Archived'.
  * Automatically sets students belonging to the new active academic year to status = 'Active'.
- * Updates system_settings key 'current_academic_year'.
  *
  * POST params:
  *   id          – Academic year ID OR
@@ -87,11 +86,6 @@ try {
     $stu_act->bind_param("s", $target['year_label']);
     $stu_act->execute();
     $activated_count = $stu_act->affected_rows;
-
-    // 5. Update system_settings
-    $setting_stmt = $db->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('current_academic_year', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-    $setting_stmt->bind_param("s", $target['year_label']);
-    $setting_stmt->execute();
 
     $db->commit();
 

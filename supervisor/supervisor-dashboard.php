@@ -142,17 +142,6 @@ foreach ($all_students_detail as $sd) {
 
         if ($today_obj < new DateTime($start_date)) {
             $not_started = true;
-        } elseif ($end_date && $today_obj > new DateTime($end_date)) {
-            require_once __DIR__ . '/../config/notify.php';
-            notify_user_once(
-                $db,
-                $sup_id,
-                'Internship Completed',
-                ($sd['full_name'] ?: $sd['username']) . ' has completed their internship (ended ' . $sd['internship_end_date'] . ').',
-                'internship_completed',
-                null,
-                $uid
-            );
         }
     } else {
         $not_started = true;
@@ -222,12 +211,6 @@ foreach ($all_students_detail as $sd) {
     if ($dayOfWeek >= 3 && $log_count === 0) {
         $behind_schedule++;
         $progress_status[$uid] = 'red';
-
-        sendRedBadgeAlert(
-            $db, $sup_id, $sup_name, $sup_email,
-            $uid, $sd['full_name'] ?: $sd['username'],
-            $sd['student_roll'], $sd['company_name']
-        );
     } elseif ($log_count >= 1 && $log_count <= 4) {
         $in_progress++;
         $progress_status[$uid] = 'amber';

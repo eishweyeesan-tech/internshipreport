@@ -24,15 +24,15 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div class="bg-slate-50 rounded-xl p-3.5">
-                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">What was done?</span>
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">What was done? <span class="text-slate-400 font-normal">/ ဘာလုပ်သလဲ</span></span>
                     <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($ref['what_done'] ?? '')) ?></p>
                 </div>
                 <div class="bg-slate-50 rounded-xl p-3.5">
-                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">How was it done?</span>
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">How was it done? <span class="text-slate-400 font-normal">/ ဘယ်လိုလုပ်ပါသလဲ</span></span>
                     <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($ref['how_done'] ?? '')) ?></p>
                 </div>
                 <div class="bg-slate-50 rounded-xl p-3.5">
-                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Why was it done?</span>
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider block mb-1">Why was it done? <span class="text-slate-400 font-normal">/ ဘာကြောင့်လုပ်ပါသလဲ</span></span>
                     <p class="text-sm text-gray-700 leading-normal"><?= nl2br(htmlspecialchars($ref['why_done'] ?? '')) ?></p>
                 </div>
             </div>

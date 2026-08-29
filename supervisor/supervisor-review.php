@@ -168,6 +168,23 @@ $total_absent = (int) ($row[0] ?? 0);
 
 $total_logs = $total_present + $total_absent;
 
+// ── Overall Attendance Rate (75% Threshold Target) ───────────────
+$intern_start = $student['internship_start_date'] ?? null;
+$intern_end   = !empty($student['internship_end_date']) ? $student['internship_end_date'] : null;
+$total_expected_days = 0;
+if ($intern_start && $intern_end) {
+    $att_cursor = new DateTime($intern_start);
+    $att_end_dt = new DateTime($intern_end);
+    while ($att_cursor <= $att_end_dt) {
+        if ((int) $att_cursor->format('N') <= 5) $total_expected_days++;
+        $att_cursor->modify('+1 day');
+    }
+}
+if ($total_expected_days < 1) {
+    $total_expected_days = max(1, $total_weeks * 5);
+}
+$overall_attendance_rate = round(($total_present / max(1, $total_expected_days)) * 100);
+
 // ── Attendance Details for Tooltips ────────────────────────────────
 $pd_stmt = $db->prepare("SELECT log_date FROM daily_logs WHERE internship_id = ? AND attendance_status = 'present' ORDER BY log_date ASC");
 $pd_stmt->bind_param("i", $student_id);
@@ -577,7 +594,23 @@ foreach ($all_weeks_grades as $wg) {
                             </div>
 
                             <!-- Right: Attendance Counters with Tooltips -->
-                            <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-3 flex-wrap">
+                                <!-- Attendance Rate (75% Target) -->
+                                <div class="flex items-center gap-2 px-3.5 py-2 <?= $overall_attendance_rate >= 75 ? 'bg-emerald-50/80 border-emerald-200/80' : 'bg-amber-50/80 border-amber-200/80' ?> border rounded-xl shadow-xs">
+                                    <div class="w-8 h-8 rounded-lg <?= $overall_attendance_rate >= 75 ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600' ?> flex items-center justify-center text-xs font-bold shrink-0">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-base font-black <?= $overall_attendance_rate >= 75 ? 'text-emerald-700' : 'text-amber-700' ?>"><?= $overall_attendance_rate ?>%</span>
+                                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border <?= $overall_attendance_rate >= 75 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200' ?>">
+                                                <?= $overall_attendance_rate >= 75 ? 'Good' : 'Needs Attention' ?>
+                                            </span>
+                                        </div>
+                                        <p class="text-[10px] text-slate-500 font-medium"><?= $total_present ?> / <?= $total_expected_days ?> days attended</p>
+                                    </div>
+                                </div>
+
                                 <!-- Present Tooltip -->
                                 <div class="relative group">
                                     <div class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-50 to-emerald-100/50 border border-emerald-200/60 rounded-xl cursor-pointer hover:shadow-md transition-all duration-200">

@@ -58,13 +58,6 @@ CREATE TABLE IF NOT EXISTS academic_years (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- System settings
-CREATE TABLE IF NOT EXISTS system_settings (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    setting_key VARCHAR(100) NOT NULL UNIQUE,
-    setting_value TEXT NOT NULL,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
 -- ============================================================
@@ -217,9 +210,6 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- SEED DATA
 -- ============================================================
 
--- Default system settings
-INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES
-('current_academic_year', '2023-2024');
 
 -- Default academic years
 INSERT IGNORE INTO academic_years (year_label, start_date, end_date, is_current, status) VALUES

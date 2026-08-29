@@ -587,11 +587,6 @@ function build_query_url($overrides = []) {
                                     <?php endforeach; ?>
                                 </select>
                             </div>
-
-                            <!-- Reset filters button -->
-                            <button type="button" onclick="resetReportFilters()" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer">
-                                ✕ Reset
-                            </button>
                         </div>
                     </div>
 
@@ -622,13 +617,31 @@ function build_query_url($overrides = []) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-100" id="studentsTableBody">
-                                <?php foreach ($filtered_students as $sd):
+                                <?php
+                                $current_batch_year = null;
+                                foreach ($filtered_students as $sd):
+                                    $s_ay = $sd['academic_year'] ?: 'Unassigned Year';
+                                    $is_new_batch = ($s_ay !== $current_batch_year);
+                                    if ($is_new_batch) {
+                                        $current_batch_year = $s_ay;
+                                    }
                                     $uid = $sd['uid'];
                                     $st = $sd['profile'];
                                     $has_ready = !empty($sd['ready_weeks']);
                                     $earliest_ready_week = $has_ready ? min($sd['ready_weeks']) : 1;
                                     $search_terms = strtolower($sd['name'] . ' ' . $sd['roll'] . ' ' . $sd['company'] . ' ' . $sd['instructor'] . ' ' . $sd['email']);
                                 ?>
+                                <?php if ($is_new_batch): ?>
+                                    <tr class="academic-year-header-row bg-slate-100/90 border-y border-slate-200" data-group-ay="<?= htmlspecialchars($s_ay) ?>">
+                                        <td colspan="6" class="px-5 py-2.5 text-xs font-bold text-slate-700">
+                                            <div class="flex items-center gap-2">
+                                                <span class="p-1 bg-indigo-100 text-indigo-700 rounded text-xs leading-none">🎓</span>
+                                                <span class="text-slate-500 uppercase tracking-wider text-[11px] font-bold">Academic Batch:</span>
+                                                <span class="font-mono font-bold text-indigo-700 bg-white px-2.5 py-0.5 rounded-md border border-indigo-200 shadow-xs"><?= htmlspecialchars($s_ay) ?></span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endif; ?>
                                 <tr class="student-report-row hover:bg-slate-50/70 transition-colors duration-150 group"
                                     data-search="<?= htmlspecialchars($search_terms) ?>"
                                     data-company="<?= htmlspecialchars(strtolower($sd['company'] ?? '')) ?>"
@@ -652,9 +665,11 @@ function build_query_url($overrides = []) {
                                                     <span class="text-[11px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">
                                                         <?= htmlspecialchars($sd['roll']) ?>
                                                     </span>
-                                                    <span class="text-[11px] text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded font-semibold border border-indigo-100">
-                                                        <?= htmlspecialchars($sd['academic_year']) ?>
-                                                    </span>
+                                                    <?php if (!empty($sd['major'])): ?>
+                                                        <span class="text-[11px] text-slate-500 font-medium bg-slate-50 px-1.5 py-0.2 rounded border border-slate-200/60">
+                                                            <?= htmlspecialchars($sd['major']) ?>
+                                                        </span>
+                                                    <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -685,11 +700,11 @@ function build_query_url($overrides = []) {
                                         <?php endif; ?>
                                     </td>
 
-                                    <!-- 3. Visual Weekly Status Matrix (W1 .. W12/13) -->
-                                    <td class="px-4 py-4">
+                                    <!-- 3. Visual Weekly Status Matrix (Option 2: Segmented Progress Bar) -->
+                                    <td class="px-4 py-4 min-w-[280px]">
                                         <div class="space-y-1.5">
-                                            <!-- Interactive Week Badges -->
-                                            <div class="flex items-center gap-1 flex-wrap">
+                                            <!-- Segmented Bar Track -->
+                                            <div class="flex items-center gap-1 w-full bg-slate-50/90 p-1 rounded-xl border border-slate-200/80 shadow-2xs">
                                                 <?php foreach ($sd['week_matrix'] as $wn => $wm):
                                                     $st_type = $wm['status'];
                                                     $is_graded = ($st_type === 'graded');
@@ -697,46 +712,50 @@ function build_query_url($overrides = []) {
                                                     $is_waiting = ($st_type === 'waiting');
                                                     $grade_letter = $wm['sup_eval']['weekly_grade'] ?? '';
 
-                                                    // Badge colors
+                                                    // Segment styles
                                                     if ($is_graded) {
-                                                        $badge_cls = 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100';
-                                                        $badge_text = 'W' . $wn . ($grade_letter ? ':' . $grade_letter : '✓');
+                                                        $seg_cls = 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-2xs';
+                                                        $seg_text = $grade_letter ?: '✓';
                                                     } elseif ($is_ready) {
-                                                        $badge_cls = 'bg-blue-600 text-white border-blue-600 shadow-xs shadow-blue-500/30 animate-pulse hover:bg-blue-700';
-                                                        $badge_text = 'W' . $wn . ' ⚡';
+                                                        $seg_cls = 'bg-blue-600 hover:bg-blue-700 text-white animate-pulse shadow-xs shadow-blue-500/40 ring-2 ring-blue-300';
+                                                        $seg_text = '⚡';
                                                     } elseif ($is_waiting) {
-                                                        $badge_cls = 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100';
-                                                        $badge_text = 'W' . $wn . ' ⏳';
+                                                        $seg_cls = 'bg-amber-400 hover:bg-amber-500 text-slate-900 shadow-2xs';
+                                                        $seg_text = '⏳';
                                                     } elseif ($st_type === 'rejected') {
-                                                        $badge_cls = 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100';
-                                                        $badge_text = 'W' . $wn . ' ✕';
+                                                        $seg_cls = 'bg-rose-500 hover:bg-rose-600 text-white shadow-2xs';
+                                                        $seg_text = '✕';
                                                     } else {
-                                                        $badge_cls = 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200/70';
-                                                        $badge_text = 'W' . $wn;
+                                                        $seg_cls = 'bg-white hover:bg-slate-200 text-slate-400 border border-slate-200/70';
+                                                        $seg_text = $wn;
                                                     }
                                                 ?>
                                                 <a href="supervisor-review.php?student_id=<?= $uid ?>&week=<?= $wn ?>"
-                                                   title="Week <?= $wn ?>: <?= htmlspecialchars($wm['status_label']) ?><?= !empty($wm['duration']) ? ' (' . $wm['duration'] . ')' : '' ?>"
-                                                   class="inline-flex items-center justify-center px-2 py-1 rounded-lg text-[11px] font-bold border transition-all duration-150 <?= $badge_cls ?>">
-                                                    <?= $badge_text ?>
+                                                   title="Week <?= $wn ?>: <?= htmlspecialchars($wm['status_label']) ?><?= !empty($wm['duration']) ? ' (' . $wm['duration'] . ')' : '' ?><?= $grade_letter ? ' • Grade: ' . $grade_letter : '' ?>"
+                                                   class="flex-1 h-6 rounded-md flex items-center justify-center text-[10px] font-black transition-all duration-150 hover:scale-110 hover:z-10 <?= $seg_cls ?>">
+                                                    <?= $seg_text ?>
                                                 </a>
                                                 <?php endforeach; ?>
                                             </div>
 
-                                            <!-- Matrix Legend sub-indicator -->
-                                            <div class="flex items-center gap-3 text-[10px] text-slate-400 font-medium">
-                                                <span class="flex items-center gap-1">
-                                                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span> <?= $sd['graded_weeks'] ?> Graded
+                                            <!-- Matrix Summary Sub-indicator -->
+                                            <div class="flex items-center justify-between text-[11px] text-slate-500 font-medium px-0.5">
+                                                <span class="flex items-center gap-1.5 font-bold text-emerald-700">
+                                                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                                    <span><?= $sd['graded_weeks'] ?>/<?= $sd['total_weeks'] ?> Graded</span>
                                                 </span>
                                                 <?php if (!empty($sd['ready_weeks'])): ?>
-                                                <span class="flex items-center gap-1 text-blue-600 font-bold">
-                                                    <span class="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span> <?= count($sd['ready_weeks']) ?> Ready to Review
+                                                <span class="inline-flex items-center gap-1 text-blue-700 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-[10px]">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                                                    <span><?= count($sd['ready_weeks']) ?> Ready</span>
                                                 </span>
-                                                <?php endif; ?>
-                                                <?php if (!empty($sd['waiting_weeks'])): ?>
-                                                <span class="flex items-center gap-1 text-amber-600 font-semibold">
-                                                    <span class="w-2 h-2 rounded-full bg-amber-500"></span> <?= count($sd['waiting_weeks']) ?> in Company Review
+                                                <?php elseif (!empty($sd['waiting_weeks'])): ?>
+                                                <span class="inline-flex items-center gap-1 text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
+                                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                                    <span><?= count($sd['waiting_weeks']) ?> in Company</span>
                                                 </span>
+                                                <?php else: ?>
+                                                <span class="text-slate-400 text-[10px]">W1–W<?= $sd['total_weeks'] ?> Track</span>
                                                 <?php endif; ?>
                                             </div>
                                         </div>
@@ -891,7 +910,7 @@ function build_query_url($overrides = []) {
         <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between flex-wrap gap-2">
             <a id="modalPrintAllBtn" href="#" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs transition">
                 <i class="fa-solid fa-print"></i>
-                <span>Print Complete 12-Week Official Report</span>
+                <span>Print</span>
             </a>
             <div class="flex items-center gap-2">
                 <a id="modalFullDashboardBtn" href="#" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
@@ -931,6 +950,22 @@ function applyReportFilters() {
         } else {
             row.style.display = 'none';
         }
+    });
+
+    // Toggle Academic Batch header rows
+    const ayHeaders = document.querySelectorAll('.academic-year-header-row');
+    ayHeaders.forEach(function(header) {
+        const groupAy = (header.getAttribute('data-group-ay') || '').toLowerCase();
+        let hasVisible = false;
+        rows.forEach(function(row) {
+            if (row.style.display !== 'none') {
+                const rowYear = (row.getAttribute('data-year') || '').toLowerCase();
+                if (rowYear === groupAy) {
+                    hasVisible = true;
+                }
+            }
+        });
+        header.style.display = hasVisible ? '' : 'none';
     });
 }
 

@@ -218,6 +218,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
             }
         }
     </script>
+    <style>
+        html, body, main {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        html::-webkit-scrollbar,
+        body::-webkit-scrollbar,
+        main::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
+        }
+    </style>
 </head>
 
 <body class="bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 font-inter antialiased">
@@ -239,179 +252,157 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
             <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8">
                 <div class="max-w-4xl w-full mx-auto space-y-6">
 
-
+                    <!-- Flash Alerts -->
                     <?php if ($msg): ?>
-                        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                            <span>✅</span> <?= htmlspecialchars($msg) ?>
+                        <div class="bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-bold px-4 py-3.5 rounded-2xl flex items-center justify-between shadow-xs">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-7 h-7 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-xs font-bold shrink-0">✓</span>
+                                <span><?= htmlspecialchars($msg) ?></span>
+                            </div>
+                            <button type="button" onclick="this.parentElement.remove()" class="text-emerald-500 hover:text-emerald-800 text-xs font-bold p-1 cursor-pointer">✕</button>
                         </div>
                     <?php endif; ?>
                     <?php if ($err): ?>
-                        <div class="bg-red-50 border border-red-200 text-red-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                            <span>❌</span> <?= htmlspecialchars($err) ?>
-                        </div>
-                    <?php endif; ?>
-
-                    <!-- Avatar Header -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex items-center gap-5">
-                        <div class="relative w-16 h-16 shrink-0">
-                            <?php if ($profile_pic): ?>
-                                <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-16 h-16 rounded-full object-cover">
-                            <?php else: ?>
-                                <div class="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl font-bold">
-                                    <?= strtoupper($sup['username'][0]) ?>
-                                </div>
-                            <?php endif; ?>
-                            <div class="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200" title="Change avatar">
-                                <svg class="w-2.5 h-2.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                </svg>
+                        <div class="bg-rose-50 border border-rose-200/80 text-rose-800 text-xs font-bold px-4 py-3.5 rounded-2xl flex items-center justify-between shadow-xs">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-7 h-7 rounded-xl bg-rose-500 text-white flex items-center justify-center text-xs font-bold shrink-0">✕</span>
+                                <span><?= htmlspecialchars($err) ?></span>
                             </div>
+                            <button type="button" onclick="this.parentElement.remove()" class="text-rose-500 hover:text-rose-800 text-xs font-bold p-1 cursor-pointer">✕</button>
                         </div>
-                        <div>
-                            <h2 class="text-base font-black text-slate-800"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></h2>
-                            <p class="text-xs text-slate-400 mt-0.5"><?= htmlspecialchars($sup['email']) ?></p>
-                            <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200/60 mt-1.5 inline-block">👨‍🏫 University Supervisor</span>
-                        </div>
-                    </div>
-
+                    <?php endif; ?>
                     <?php if ($avatar_msg): ?>
-                        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-xl flex items-center gap-2">
-                            <span>✅</span> <?= htmlspecialchars($avatar_msg) ?>
+                        <div class="bg-teal-50 border border-teal-200/80 text-teal-800 text-xs font-bold px-4 py-3.5 rounded-2xl flex items-center justify-between shadow-xs">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-7 h-7 rounded-xl bg-teal-500 text-white flex items-center justify-center text-xs font-bold shrink-0">📷</span>
+                                <span><?= htmlspecialchars($avatar_msg) ?></span>
+                            </div>
+                            <button type="button" onclick="this.parentElement.remove()" class="text-teal-500 hover:text-teal-800 text-xs font-bold p-1 cursor-pointer">✕</button>
                         </div>
                     <?php endif; ?>
 
-                    <!-- ════ PROFILE PICTURE UPLOAD ════ -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="px-5 py-3 border-b border-slate-100">
-                            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                <span class="p-1 bg-violet-50 text-violet-600 rounded">📷</span> Profile Picture
-                            </h3>
-                        </div>
-                        <form method="POST" enctype="multipart/form-data" class="p-5">
-                            <input type="hidden" name="update_avatar" value="1">
-                            <div class="flex items-center gap-5">
+                    <!-- ════ HERO SUPERVISOR PROFILE BANNER ════ -->
+                    <div class="bg-gradient-to-r from-teal-700 via-teal-800 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-md relative overflow-hidden">
+                        <!-- Decorative glow circle -->
+                        <div class="absolute -top-16 -right-16 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                        <div class="absolute -bottom-16 -left-16 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                        <div class="relative z-10 flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
+                            <div class="relative group shrink-0">
                                 <?php if ($profile_pic): ?>
-                                    <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Current avatar" class="w-14 h-14 rounded-full object-cover border border-slate-200">
+                                    <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Avatar" class="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl object-cover ring-4 ring-white/20 shadow-xl">
                                 <?php else: ?>
-                                    <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold border border-slate-200">
+                                    <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-br from-teal-400 to-emerald-600 text-white flex items-center justify-center text-3xl font-black ring-4 ring-white/20 shadow-xl">
                                         <?= strtoupper(substr(format_supervisor_name($sup_name), 0, 1)) ?>
                                     </div>
                                 <?php endif; ?>
-                                <div class="flex-1">
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Upload New Picture</label>
-                                    <input type="file" name="avatar" accept="image/jpeg,image/png" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 file:cursor-pointer">
-                                    <p class="text-[11px] text-slate-400 mt-1">JPG, JPEG, or PNG. Max 2MB.</p>
+                                <a href="#avatar-upload-card" class="absolute -bottom-1.5 -right-1.5 w-8 h-8 rounded-xl bg-teal-500 hover:bg-teal-400 text-white flex items-center justify-center shadow-lg border-2 border-slate-900 transition-transform hover:scale-110" title="Change Avatar">
+                                    📷
+                                </a>
+                            </div>
+
+                            <div class="min-w-0 flex-1 space-y-2.5">
+                                <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                                    <h2 class="text-xl sm:text-2xl font-black tracking-tight text-white"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></h2>
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                                        ✓ Verified Supervisor
+                                    </span>
+                                </div>
+                                <p class="text-xs sm:text-sm text-teal-100/90 font-medium flex items-center justify-center sm:justify-start gap-1.5">
+                                    <span>✉️</span> <?= htmlspecialchars($sup['email']) ?>
+                                    <?php if (!empty($sup['phone'])): ?>
+                                        <span class="text-teal-400">•</span>
+                                        <span>📞 <?= htmlspecialchars($sup['phone']) ?></span>
+                                    <?php endif; ?>
+                                </p>
+
+                                <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                                    <span class="px-3 py-1 rounded-xl text-xs font-semibold bg-white/10 text-teal-50 border border-white/10 backdrop-blur-xs">
+                                        👨‍🏫 <?= htmlspecialchars($sup['position'] ?? '') ?: 'Faculty Supervisor' ?>
+                                    </span>
+                                    <span class="px-3 py-1 rounded-xl text-xs font-semibold bg-white/10 text-teal-50 border border-white/10 backdrop-blur-xs">
+                                        🏛️ <?= htmlspecialchars($sup['department'] ?? '') ?: 'Faculty of Computer Science' ?>
+                                    </span>
+                                </div>
+
+                                <div class="pt-3 border-t border-white/10 flex flex-wrap items-center justify-center sm:justify-start gap-3 sm:gap-6 text-xs text-teal-100">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-emerald-300 font-black text-sm"><?= $total_assigned ?></span>
+                                        <span>Assigned Interns</span>
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                        <span>Status: Active</span>
+                                    </div>
+                                    <?php if ($last_login_at): ?>
+                                    <div class="flex items-center gap-1.5 text-teal-200/80 text-[11px]">
+                                        <span>🕒 Last Active: <?= date('d M Y, h:i A', strtotime($last_login_at)) ?></span>
+                                    </div>
+                                    <?php endif; ?>
                                 </div>
                             </div>
-                            <div class="flex justify-start pt-3">
-                                <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">📷 Upload Picture</button>
+                        </div>
+                    </div>
+
+                    <!-- ════ CARD 1: PROFILE PICTURE UPLOAD ════ -->
+                    <div id="avatar-upload-card" class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center text-xs">📷</span>
+                                Profile Picture
+                            </h3>
+                            <span class="text-[11px] font-bold text-slate-400">JPG, JPEG, PNG (Max 2MB)</span>
+                        </div>
+                        <form method="POST" enctype="multipart/form-data" class="p-6">
+                            <input type="hidden" name="update_avatar" value="1">
+                            <div class="flex flex-col sm:flex-row items-center gap-6">
+                                <?php if ($profile_pic): ?>
+                                    <img src="../uploads/avatars/<?= htmlspecialchars($profile_pic) ?>" alt="Current avatar" class="w-20 h-20 rounded-2xl object-cover border-2 border-slate-200 shadow-xs shrink-0">
+                                <?php else: ?>
+                                    <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-teal-50 to-teal-100 text-teal-700 flex items-center justify-center text-2xl font-black border border-teal-200 shadow-xs shrink-0">
+                                        <?= strtoupper(substr(format_supervisor_name($sup_name), 0, 1)) ?>
+                                    </div>
+                                <?php endif; ?>
+                                <div class="flex-1 w-full space-y-2">
+                                    <label class="block text-xs font-bold text-slate-700">Choose a new photo</label>
+                                    <input type="file" name="avatar" accept="image/jpeg,image/png" class="w-full bg-slate-50 hover:bg-slate-100/70 border border-slate-200 rounded-2xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-teal-500 transition file:mr-3 file:py-1.5 file:px-3.5 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100 file:cursor-pointer">
+                                </div>
+                                <div class="shrink-0 w-full sm:w-auto">
+                                    <button type="submit" class="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-2xl shadow-sm transition-all hover:scale-[1.02] cursor-pointer">
+                                        <span>📷</span>
+                                        <span>Upload Photo</span>
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
 
-                    <!-- ════ SUPERVISOR INFORMATION ════ -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="px-5 py-3 border-b border-slate-100">
-                            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                <span class="p-1 bg-indigo-50 text-indigo-600 rounded">🧑‍💼</span> Supervisor Information
+                    <!-- ════ CARD 2: EDIT PROFILE INFORMATION ════ -->
+                    <div class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-xs">👤</span>
+                                Edit Personal &amp; Faculty Information
                             </h3>
                         </div>
-                        <div class="p-5">
-                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                                <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Supervisor Name</p>
-                                    <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars(format_supervisor_name($sup['username'])) ?></p>
-                                </div>
-
-                                <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Email Address</p>
-                                    <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5 break-all"><?= htmlspecialchars($sup['email']) ?></p>
-                                </div>
-                                <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Phone Number</p>
-                                    <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['phone'] ?? '') ?: '—' ?></p>
-                                </div>
-                                <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Department</p>
-                                    <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['department'] ?? '') ?: '—' ?></p>
-                                </div>
-                                <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Position / Job Title</p>
-                                    <p class="text-xs sm:text-sm font-bold text-slate-800 mt-0.5"><?= htmlspecialchars($sup['position'] ?? '') ?: '—' ?></p>
-                                </div>
-                                <div class="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">System Role</p>
-                                    <p class="text-xs sm:text-sm font-bold text-emerald-700 mt-0.5">👨‍🏫 University Supervisor</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- ════ SECURITY & LAST LOGIN ════ -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-                            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                <span class="p-1 bg-emerald-50 text-emerald-600 rounded">🛡️</span> Security &amp; Password Status
-                            </h3>
-                            <a href="#security-section" class="text-xs font-bold text-amber-600 hover:text-amber-700 transition">Change Password →</a>
-                        </div>
-                        <div class="p-5">
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div class="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <span class="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0"></span>
-                                    <div>
-                                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Account Status</p>
-                                        <p class="text-xs sm:text-sm font-bold text-emerald-600">Active</p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <span class="text-base shrink-0">🔑</span>
-                                    <div>
-                                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Password</p>
-                                        <p class="text-xs sm:text-sm font-bold text-slate-700 tracking-widest">••••••••••</p>
-                                    </div>
-                                </div>
-                                <div class="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
-                                    <span class="w-2.5 h-2.5 bg-blue-500 rounded-full shrink-0"></span>
-                                    <div>
-                                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Last Login</p>
-                                        <?php if ($last_login_at): ?>
-                                            <p class="text-xs sm:text-sm font-bold text-slate-700"><?= date('d M Y, h:i A', strtotime($last_login_at)) ?></p>
-                                        <?php else: ?>
-                                            <p class="text-xs font-semibold text-slate-400">No login recorded</p>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Section 1: Account Info -->
-                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="px-5 py-3 border-b border-slate-100">
-                            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                <span class="p-1 bg-blue-50 text-blue-600 rounded">👤</span> Edit Account Information
-                            </h3>
-                        </div>
-                        <form method="POST" class="p-5 space-y-4">
+                        <form method="POST" class="p-6 space-y-5">
                             <input type="hidden" name="update_profile" value="1">
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Supervisor Name</label>
-                                    <input type="text" name="new_name" value="<?= htmlspecialchars($sup['username']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Supervisor Full Name *</label>
+                                    <input type="text" name="new_name" value="<?= htmlspecialchars($sup['username']) ?>" required class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-2xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Email Address</label>
-                                    <input type="email" name="new_email" value="<?= htmlspecialchars($sup['email']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Email Address *</label>
+                                    <input type="email" name="new_email" value="<?= htmlspecialchars($sup['email']) ?>" required class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-2xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Phone Number</label>
-                                    <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09-123456789" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789 or +959 123 456 789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition">
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Phone Number</label>
+                                    <input type="text" name="phone" value="<?= htmlspecialchars($sup['phone'] ?? '') ?>" placeholder="e.g. 09450099111" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-2xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Department</label>
-                                    <select name="department" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition cursor-pointer">
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Department</label>
+                                    <select name="department" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-2xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all cursor-pointer">
                                         <option value="">— Select Department —</option>
                                         <option value="Faculty of Computer Science (FCS)" <?= (($sup['department'] ?? '') === 'Faculty of Computer Science (FCS)') ? 'selected' : '' ?>>Faculty of Computer Science (FCS)</option>
                                         <option value="Faculty of Information Science (FIS)" <?= (($sup['department'] ?? '') === 'Faculty of Information Science (FIS)') ? 'selected' : '' ?>>Faculty of Information Science (FIS)</option>
@@ -420,8 +411,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Rank / Position</label>
-                                    <select name="position" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition cursor-pointer">
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Rank / Academic Position</label>
+                                    <select name="position" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-2xl px-3.5 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all cursor-pointer">
                                         <option value="">— Select Rank —</option>
                                         <option value="Professor" <?= (($sup['position'] ?? '') === 'Professor') ? 'selected' : '' ?>>Professor</option>
                                         <option value="Associate Professor" <?= (($sup['position'] ?? '') === 'Associate Professor') ? 'selected' : '' ?>>Associate Professor</option>
@@ -431,37 +422,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     </select>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">System Role</label>
-                                    <div class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-500 font-semibold cursor-default select-none">
-                                        👨‍🏫 University Supervisor
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">System Role</label>
+                                    <div class="w-full bg-slate-100/80 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs text-teal-800 font-bold flex items-center gap-2 select-none">
+                                        <span>👨‍🏫</span> University Supervisor
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex justify-start pt-1">
-                                <button type="submit" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">💾 Save Profile</button>
+                            <div class="flex justify-end pt-2">
+                                <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-2xl shadow-sm transition-all hover:scale-[1.02] cursor-pointer">
+                                    <span>💾</span>
+                                    <span>Save Profile</span>
+                                </button>
                             </div>
                         </form>
                     </div>
 
-                    <!-- Section 2: Change Password -->
-                    <div id="security-section" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div class="px-5 py-3 border-b border-slate-100">
-                            <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                <span class="p-1 bg-amber-50 text-amber-600 rounded">🔑</span> Security &amp; Password
+                    <!-- ════ CARD 3: SECURITY & CHANGE PASSWORD ════ -->
+                    <div id="security-section" class="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                            <h3 class="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <span class="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-xs">🔑</span>
+                                Security &amp; Password
                             </h3>
+                            <span class="text-[11px] font-bold text-slate-400">Min 6 characters</span>
                         </div>
-                        <form method="POST" class="p-5 space-y-4">
+                        <form method="POST" class="p-6 space-y-5">
                             <input type="hidden" name="change_password" value="1">
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Current Password</label>
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Current Password *</label>
                                     <div class="relative">
-                                        <input type="password" id="sup_current_password" name="current_password" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition placeholder:tracking-widest">
-                                        <button type="button" onclick="togglePasswordVisibility('sup_current_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
+                                        <input type="password" id="sup_current_password" name="current_password" required placeholder="••••••••" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-amber-500 rounded-2xl pl-3.5 pr-10 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:tracking-widest">
+                                        <button type="button" onclick="togglePasswordVisibility('sup_current_password', this)" title="Show password" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
                                             <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
                                             </svg>
-                                            <svg class="eye-open w-4 h-4 text-blue-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <svg class="eye-open w-4 h-4 text-amber-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
@@ -469,30 +465,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     </div>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">New Password</label>
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">New Password *</label>
                                     <div class="relative">
-                                        <input type="password" id="sup_new_password" name="new_password" required minlength="6" placeholder="••••••••" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition placeholder:tracking-widest">
-                                        <button type="button" onclick="togglePasswordVisibility('sup_new_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
+                                        <input type="password" id="sup_new_password" name="new_password" required minlength="6" placeholder="••••••••" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-amber-500 rounded-2xl pl-3.5 pr-10 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:tracking-widest">
+                                        <button type="button" onclick="togglePasswordVisibility('sup_new_password', this)" title="Show password" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
                                             <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
                                             </svg>
-                                            <svg class="eye-open w-4 h-4 text-blue-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <svg class="eye-open w-4 h-4 text-amber-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
                                         </button>
                                     </div>
-                                    <p class="text-[11px] text-slate-400 mt-0.5">Min 6 characters</p>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-bold text-slate-500 mb-1">Confirm New Password</label>
+                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">Confirm New Password *</label>
                                     <div class="relative">
-                                        <input type="password" id="sup_confirm_password" name="confirm_password" required placeholder="••••••••" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs text-slate-800 focus:outline-none focus:border-blue-500 transition placeholder:tracking-widest">
-                                        <button type="button" onclick="togglePasswordVisibility('sup_confirm_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
+                                        <input type="password" id="sup_confirm_password" name="confirm_password" required placeholder="••••••••" class="w-full bg-slate-50 hover:bg-slate-100/60 focus:bg-white border border-slate-200 focus:border-amber-500 rounded-2xl pl-3.5 pr-10 py-2.5 text-xs text-slate-800 font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:tracking-widest">
+                                        <button type="button" onclick="togglePasswordVisibility('sup_confirm_password', this)" title="Show password" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
                                             <svg class="eye-slash w-4 h-4 text-slate-400 hover:text-slate-600 transition-colors" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
                                             </svg>
-                                            <svg class="eye-open w-4 h-4 text-blue-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                                            <svg class="eye-open w-4 h-4 text-amber-600 transition-colors hidden" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
@@ -500,8 +495,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     </div>
                                 </div>
                             </div>
-                            <div class="flex justify-start pt-1">
-                                <button type="submit" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer">🔒 Update Password</button>
+                            <div class="flex justify-end pt-2">
+                                <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-2xl shadow-sm transition-all hover:scale-[1.02] cursor-pointer">
+                                    <span>🔒</span>
+                                    <span>Update Password</span>
+                                </button>
                             </div>
                         </form>
                     </div>
@@ -533,97 +531,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
     <script src="../assets/js/main.js"></script>
     <script src="../assets/js/notifications.js"></script>
     <?php include __DIR__ . '/includes/notification_delete.php'; ?>
-</body>
-
-</html>
-<div>
-    <p class="text-[10px] font-crest font-bold text-slate-400 uppercase">Supervisor Account Status</p>
-    <p class="text-xs font-serif font-bold text-emerald-800">Active Faculty Member</p>
-</div>
-</div>
-<div class="flex items-center gap-3 p-3.5 bg-[#fcfbf9] rounded-xl border border-[#e7e2d7]">
-    <span class="w-3 h-3 bg-[#002147] rounded-full shrink-0 shadow-xs"></span>
-    <div>
-        <p class="text-[10px] font-crest font-bold text-slate-400 uppercase">Last Login Record</p>
-        <p class="text-xs font-mono font-bold text-slate-700"><?= $last_login_at ? date('d M Y, h:i A', strtotime($last_login_at)) : 'Current Session' ?></p>
-    </div>
-</div>
-</div>
-
-<!-- Password Form -->
-<form method="POST" class="pt-3 space-y-4 border-t border-[#e2d9c8]">
-    <input type="hidden" name="change_password" value="1">
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div>
-            <label class="block text-xs font-serif font-bold text-[#002147] uppercase tracking-wider mb-1.5">Current Password</label>
-            <div class="relative">
-                <input type="password" id="sup_current_password" name="current_password" required placeholder="••••••••" class="w-full bg-white border border-[#e2d9c8] rounded-xl pl-3.5 pr-9 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/30 focus:border-[#c5a059] transition">
-                <button type="button" onclick="togglePasswordVisibility('sup_current_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
-                    <i class="eye-slash fa-regular fa-eye-slash text-xs"></i>
-                    <i class="eye-open fa-regular fa-eye text-xs hidden text-[#b8860b]"></i>
-                </button>
-            </div>
-        </div>
-        <div>
-            <label class="block text-xs font-serif font-bold text-[#002147] uppercase tracking-wider mb-1.5">New Password</label>
-            <div class="relative">
-                <input type="password" id="sup_new_password" name="new_password" required minlength="6" placeholder="Min 6 characters" class="w-full bg-white border border-[#e2d9c8] rounded-xl pl-3.5 pr-9 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/30 focus:border-[#c5a059] transition">
-                <button type="button" onclick="togglePasswordVisibility('sup_new_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
-                    <i class="eye-slash fa-regular fa-eye-slash text-xs"></i>
-                    <i class="eye-open fa-regular fa-eye text-xs hidden text-[#b8860b]"></i>
-                </button>
-            </div>
-        </div>
-        <div>
-            <label class="block text-xs font-serif font-bold text-[#002147] uppercase tracking-wider mb-1.5">Confirm New Password</label>
-            <div class="relative">
-                <input type="password" id="sup_confirm_password" name="confirm_password" required placeholder="Repeat new password" class="w-full bg-white border border-[#e2d9c8] rounded-xl pl-3.5 pr-9 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c5a059]/30 focus:border-[#c5a059] transition">
-                <button type="button" onclick="togglePasswordVisibility('sup_confirm_password', this)" title="Show password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
-                    <i class="eye-slash fa-regular fa-eye-slash text-xs"></i>
-                    <i class="eye-open fa-regular fa-eye text-xs hidden text-[#b8860b]"></i>
-                </button>
-            </div>
-        </div>
-    </div>
-    <div class="flex justify-end pt-2">
-        <button type="submit" class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#c5a059] hover:bg-[#b8860b] text-[#002147] font-serif font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer">
-            <i class="fa-solid fa-key text-xs"></i>
-            <span>Update Password</span>
-        </button>
-    </div>
-</form>
-</div>
-</div>
-
-</div>
-
-</div>
-
-</div>
-</main>
-</div>
-</div>
-
-<script>
-    function togglePasswordVisibility(inputId, btn) {
-        var input = document.getElementById(inputId);
-        if (!input) return;
-        var eyeSlash = btn.querySelector('.eye-slash');
-        var eyeOpen = btn.querySelector('.eye-open');
-        if (input.type === 'password') {
-            input.type = 'text';
-            if (eyeSlash) eyeSlash.classList.add('hidden');
-            if (eyeOpen) eyeOpen.classList.remove('hidden');
-        } else {
-            input.type = 'password';
-            if (eyeOpen) eyeOpen.classList.add('hidden');
-            if (eyeSlash) eyeSlash.classList.remove('hidden');
-        }
-    }
-</script>
-<script src="../assets/js/main.js"></script>
-<script src="../assets/js/notifications.js"></script>
-<?php include __DIR__ . '/includes/notification_delete.php'; ?>
 </body>
 
 </html>

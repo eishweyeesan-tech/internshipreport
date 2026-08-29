@@ -25,7 +25,7 @@ if (!defined('MAILER_CONFIG_LOADED')) {
 
     // ── PUBLIC BASE URL FOR MOBILE / LAN / LIVE HOSTING ──────────────────────
     // ဖုန်းမှ တိုက်ရိုက် ဖွင့်နိုင်ရန် သင်၏ PC Wi-Fi IP သို့မဟုတ် Domain / Public Tunnel URL
-    define('APP_URL', 'https://a28461321fd888.lhr.life/internreportsystem');
+    define('APP_URL', 'http://192.168.100.78/internreportsystem');
 }
 
 /**

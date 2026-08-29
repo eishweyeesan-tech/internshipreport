@@ -1664,9 +1664,57 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
             card.classList.add('scale-95', 'opacity-0');
         }
 
+        // ── Center Signature Success Modal ──
+        function openSignSuccessModal(opts) {
+            var modal = document.getElementById('signSuccessModal');
+            var card = document.getElementById('signSuccessCard');
+            if (!modal || !card) {
+                if (opts && opts.message) showToast(opts.message, 'success');
+                return;
+            }
+
+            var titleEl = document.getElementById('signModalTitle');
+            var msgEl = document.getElementById('signModalMessage');
+            var myanmarEl = document.getElementById('signModalMyanmarNote');
+            var badgeEl = document.getElementById('signModalBadge');
+            var instructorNameEl = document.getElementById('signModalInstructorName');
+            var instructorEmailEl = document.getElementById('signModalInstructorEmail');
+
+            if (opts) {
+                if (titleEl && opts.title) titleEl.textContent = opts.title;
+                if (msgEl && opts.message) msgEl.textContent = opts.message;
+                if (badgeEl && opts.badge) badgeEl.textContent = opts.badge;
+                if (myanmarEl && opts.myanmarNote) {
+                    var noteSpan = myanmarEl.querySelector('.note-text');
+                    if (noteSpan) noteSpan.textContent = opts.myanmarNote;
+                }
+                if (instructorNameEl && opts.instructorName) instructorNameEl.textContent = opts.instructorName;
+                if (instructorEmailEl && opts.instructorEmail) instructorEmailEl.textContent = opts.instructorEmail;
+            }
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100', 'pointer-events-auto');
+
+            card.classList.remove('scale-95', 'opacity-0');
+            card.classList.add('scale-100', 'opacity-100');
+        }
+
+        function closeSignSuccessModal() {
+            var modal = document.getElementById('signSuccessModal');
+            var card = document.getElementById('signSuccessCard');
+            if (!modal || !card) return;
+
+            modal.classList.remove('opacity-100', 'pointer-events-auto');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+
+            card.classList.remove('scale-100', 'opacity-100');
+            card.classList.add('scale-95', 'opacity-0');
+        }
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeDateAlertModal();
+                closeSignSuccessModal();
             }
         });
 
@@ -1727,13 +1775,27 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
             <?php elseif ($message === 'student_sig_required'): ?>
                 showToast('Please provide your signature before submitting.', 'error');
             <?php elseif ($message === 'sig_saved_email_dispatched'): ?>
-                showToast('✅ Signed successfully! Review request email sent to your instructor.', 'success');
+                openSignSuccessModal({
+                    title: 'Signed Successfully!',
+                    badge: 'Email Dispatched',
+                    message: 'Review request email sent to your instructor.',
+                    myanmarNote: 'Instructor ထံသို့ စစ်ဆေးလက်မှတ်ထိုးရန် Magic Review Link ပါဝင်သော Email ကို အောင်မြင်စွာ ပို့ဆောင်ပြီးပါပြီ။',
+                    instructorName: <?= json_encode($profile_row['instructor_name'] ?? 'Instructor') ?>,
+                    instructorEmail: <?= json_encode($profile_row['instructor_email'] ?? '') ?>
+                });
             <?php elseif ($message === 'sig_saved_no_instructor_email'): ?>
                 showToast('⚠️ Signed successfully, but no instructor email found in profile. Please add instructor email.', 'warning');
             <?php elseif ($message === 'signature_saved'): ?>
                 showToast('Student signature saved successfully.', 'success');
             <?php elseif ($message === 'email_sent_success'): ?>
-                showToast('✉️ Review request email resent to instructor successfully.', 'success');
+                openSignSuccessModal({
+                    title: 'Email Sent Successfully!',
+                    badge: 'Resent to Instructor',
+                    message: 'Review request email resent to your instructor.',
+                    myanmarNote: 'Instructor ထံသို့ စစ်ဆေးလက်မှတ်ထိုးရန် Review Link ကို ပြန်လည် ပို့ဆောင်ပြီးပါပြီ။',
+                    instructorName: <?= json_encode($profile_row['instructor_name'] ?? 'Instructor') ?>,
+                    instructorEmail: <?= json_encode($profile_row['instructor_email'] ?? '') ?>
+                });
             <?php elseif ($message === 'email_no_instructor'): ?>
                 showToast('⚠️ No instructor email configured. Please update your profile first.', 'error');
             <?php elseif ($message === 'email_send_failed'): ?>
@@ -2601,15 +2663,15 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                 <div class="p-6">
                                                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                         <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">What was done?</p>
+                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">What was done? <span class="text-slate-400 font-normal">/ ဘာလုပ်သလဲ</span></p>
                                                             <p class="text-xs sm:text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['what_done'] ?? '—')) ?></p>
                                                         </div>
                                                         <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">How was it done?</p>
+                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">How was it done? <span class="text-slate-400 font-normal">/ ဘယ်လိုလုပ်ပါသလဲ</span></p>
                                                             <p class="text-xs sm:text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['how_done'] ?? '—')) ?></p>
                                                         </div>
                                                         <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">Why was it done?</p>
+                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">Why was it done? <span class="text-slate-400 font-normal">/ ဘာကြောင့်လုပ်ပါသလဲ</span></p>
                                                             <p class="text-xs sm:text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['why_done'] ?? '—')) ?></p>
                                                         </div>
                                                     </div>
@@ -2707,8 +2769,8 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                             <div id="left-sig-typed-fields" class="space-y-1.5">
                                                                 <label class="block text-xs font-bold text-slate-700">Enter Name to Sign</label>
                                                                 <input type="text" name="student_typed_name" id="left_typed_name"
-                                                                    value="<?= htmlspecialchars($student_name) ?>"
-                                                                    placeholder="Enter your name"
+                                                                    value=""
+                                                                    placeholder="e.g. <?= htmlspecialchars($student_name) ?>"
                                                                     oninput="previewLeftSig()"
                                                                     class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
                                                             </div>
@@ -2732,8 +2794,8 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                                 <label class="block text-xs font-bold text-slate-500 mb-1">Signature</label>
                                                                 <div class="inline-block min-w-[200px] w-full max-w-[260px]">
                                                                     <div class="min-h-[44px] flex items-end pb-1">
-                                                                        <p id="left_sig_preview" class="text-3xl text-slate-900 leading-none select-none cursor-default" style="font-family:'Great Vibes',cursive; min-height: 32px;">
-                                                                            <?= htmlspecialchars($student_name) ?>
+                                                                        <p id="left_sig_preview" class="text-3xl text-slate-400 leading-none select-none cursor-default" style="font-family:'Great Vibes',cursive; min-height: 32px;">
+                                                                            —
                                                                         </p>
                                                                     </div>
                                                                     <p class="pt-1 text-xs font-bold text-slate-700"><?= htmlspecialchars($student_name) ?></p>
@@ -3202,9 +3264,9 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
             foreach ($all_refs as $rf):
             ?>
                 content += '<h3>Week <?= (int)$rf["week_number"] ?></h3>';
-                content += '<p><strong>What was done:</strong> <?= nl2br(htmlspecialchars($rf["what_done"])) ?></p>';
-                content += '<p><strong>How it was done:</strong> <?= nl2br(htmlspecialchars($rf["how_done"])) ?></p>';
-                content += '<p><strong>Why it was done:</strong> <?= nl2br(htmlspecialchars($rf["why_done"])) ?></p>';
+                content += '<p><strong>What was done? / ဘာလုပ်သလဲ:</strong> <?= nl2br(htmlspecialchars($rf["what_done"])) ?></p>';
+                content += '<p><strong>How was it done? / ဘယ်လိုလုပ်ပါသလဲ:</strong> <?= nl2br(htmlspecialchars($rf["how_done"])) ?></p>';
+                content += '<p><strong>Why was it done? / ဘာကြောင့်လုပ်ပါသလဲ:</strong> <?= nl2br(htmlspecialchars($rf["why_done"])) ?></p>';
             <?php endforeach; ?>
             content += '<p style="margin-top:40px;font-size:11px;color:#94a3b8;">Generated on <?= date('d M Y, h:i A') ?> via InternReport</p>';
             content += '</body></html>';
@@ -3299,6 +3361,93 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
             <div class="flex items-center justify-center">
                 <button type="button" onclick="closeDateAlertModal()" class="w-full sm:w-auto min-w-[150px] px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-md hover:shadow-lg transition-all transform active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
                     <span>နားလည်ပါပြီ</span>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ BEAUTIFUL SIGNATURE SUCCESS MODAL ═══════════ -->
+    <div id="signSuccessModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md transition-opacity duration-300 opacity-0 pointer-events-none" onclick="if(event.target === this) closeSignSuccessModal()">
+        <div id="signSuccessCard" class="bg-white rounded-3xl shadow-2xl border border-emerald-100/90 max-w-sm sm:max-w-md w-full p-6 sm:p-7 text-center transform transition-all duration-300 scale-95 opacity-0 relative overflow-hidden">
+            <!-- Decorative Accent Top Gradient -->
+            <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-400 via-teal-500 to-indigo-600"></div>
+
+            <!-- Soft background glow decoration -->
+            <div class="absolute -top-16 -right-16 w-36 h-36 bg-emerald-200/30 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="absolute -bottom-16 -left-16 w-36 h-36 bg-teal-200/30 rounded-full blur-2xl pointer-events-none"></div>
+
+            <!-- Close button (top right) -->
+            <button type="button" onclick="closeSignSuccessModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition cursor-pointer" title="Close">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <!-- Animated Success Icon Container -->
+            <div class="w-16 h-16 mx-auto mb-3.5 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-white flex items-center justify-center shadow-lg shadow-emerald-500/25 relative ring-6 ring-emerald-50">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+                </svg>
+                <!-- Small Email Badge Icon -->
+                <span class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] shadow-sm border-2 border-white">
+                    ✉️
+                </span>
+            </div>
+
+            <!-- Badge -->
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-label font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200/80 mb-2 shadow-2xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="signModalBadge">Email Dispatched</span>
+            </div>
+
+            <!-- Title -->
+            <h3 id="signModalTitle" class="text-base sm:text-lg font-black text-slate-800 tracking-tight mb-1">
+                Signed Successfully!
+            </h3>
+
+            <!-- English/Technical Message -->
+            <p id="signModalMessage" class="text-xs sm:text-sm text-slate-600 font-semibold leading-relaxed mb-3">
+                Review request email sent to your instructor.
+            </p>
+
+            <!-- Recipient Information Card -->
+            <?php if (!empty($profile_row['instructor_email'])): ?>
+                <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 mb-3 text-left flex items-center gap-3 shadow-2xs">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                        </svg>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                            <span>Recipient</span>
+                            <span class="text-emerald-600 font-extrabold">• Sent</span>
+                        </div>
+                        <div id="signModalInstructorName" class="text-xs font-bold text-slate-800 truncate">
+                            <?= htmlspecialchars($profile_row['instructor_name'] ?? 'Instructor') ?>
+                        </div>
+                        <div id="signModalInstructorEmail" class="text-[11px] text-slate-500 font-mono truncate">
+                            <?= htmlspecialchars($profile_row['instructor_email'] ?? '') ?>
+                        </div>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <!-- Myanmar Highlighted Note -->
+            <div id="signModalMyanmarNote" class="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-3 text-xs text-emerald-900 font-medium mb-5 leading-relaxed text-left flex items-start gap-2.5 shadow-2xs">
+                <svg class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="note-text">Instructor ထံသို့ စစ်ဆေးလက်မှတ်ထိုးရန် Magic Review Link ပါဝင်သော Email ကို အောင်မြင်စွာ ပို့ဆောင်ပြီးပါပြီ။</span>
+            </div>
+
+            <!-- Action Button -->
+            <div class="flex items-center justify-center">
+                <button type="button" onclick="closeSignSuccessModal()" class="w-full sm:w-auto min-w-[170px] py-2.5 px-6 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black rounded-xl shadow-md hover:shadow-lg shadow-emerald-600/20 transition-all transform active:scale-95 cursor-pointer flex items-center justify-center gap-2">
+                    <span>နားလည်ပါပြီ (Got it)</span>
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                     </svg>

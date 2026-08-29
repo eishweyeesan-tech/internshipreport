@@ -249,13 +249,21 @@ $selected_year_history = [];
                                                 <i class="fa-solid fa-star text-[11px]"></i>
                                                 <span>Set Active</span>
                                             </button>
-                                            <?php endif; ?>
 
-                                            <?php if ($status_str !== 'ARCHIVED'): ?>
+                                            <?php if ((int)$y['student_count'] === 0): ?>
+                                            <button type="button"
+                                                    onclick="deleteAcademicYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label'], ENT_QUOTES) ?>')"
+                                                    class="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 h-7.5 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-lg border border-rose-200 transition cursor-pointer shrink-0"
+                                                    title="Permanently delete unused academic year">
+                                                <i class="fa-solid fa-trash-can text-xs"></i>
+                                                <span>Delete</span>
+                                            </button>
+                                            <?php endif; ?>
+                                            <?php else: ?>
                                             <button type="button"
                                                     onclick="confirmArchiveYear(<?= (int)$y['id'] ?>, '<?= htmlspecialchars($y['year_label']) ?>', <?= (int)$y['student_count'] ?>)"
                                                     class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 w-[102px] h-7.5 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg shadow-xs transition cursor-pointer shrink-0"
-                                                    title="Archive academic year">
+                                                    title="Archive current academic year">
                                                 <i class="fa-solid fa-box-archive text-xs"></i>
                                                 <span>Archive</span>
                                             </button>
@@ -719,6 +727,29 @@ window.setActiveYear = function(id, label) {
         })
         .catch(function() {
             window.showToast('error', 'Network error setting active year.');
+        });
+};
+
+// ── Delete Academic Year ──
+window.deleteAcademicYear = function(id, label) {
+    if (!confirm('Are you sure you want to permanently delete academic year "' + label + '"?\n\nThis action cannot be undone.')) return;
+
+    var fd = new FormData();
+    fd.append('id', id);
+    fd.append('year_label', label);
+
+    fetch('api/delete_year.php', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                window.showToast('success', data.message || 'Academic year deleted.');
+                setTimeout(function() { location.reload(); }, 800);
+            } else {
+                window.showToast('error', data.error || 'Failed to delete academic year.');
+            }
+        })
+        .catch(function() {
+            window.showToast('error', 'Network error deleting academic year.');
         });
 };
 
