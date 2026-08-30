@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config/db.php';
+require_once __DIR__ . '/includes/academic_year_helper.php';
 
 // Redirect to dashboard if already logged in
 if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
@@ -20,6 +21,10 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
     exit;
 }
 
+$db = $mysqli ?? $conn;
+ensure_academic_years_table($db);
+$current_active_year = get_active_academic_year_label($db, '2025-2026');
+
 $error = '';
 if (isset($_GET['error']) && $_GET['error'] === 'inactive') {
     $error = 'သင်၏ Supervisor အကောင့်မှာ Inactive ဖြစ်နေပါသဖြင့် Login ဝင်ရောက်ခွင့် မရှိပါ။ ကျေးဇူးပြု၍ Admin ထံ ဆက်သွယ်ပါ။';
@@ -32,17 +37,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($email) || empty($password)) {
         $error = 'Please enter your email and password.';
     } else {
-        $db = $mysqli ?? $conn;
         $stmt = $db->prepare("SELECT * FROM users WHERE email = ? LIMIT 1");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $res = $stmt->get_result();
         $user = $res ? $res->fetch_assoc() : null;
-
-        // Active Academic Year Standard
-        require_once __DIR__ . '/includes/academic_year_helper.php';
-        ensure_academic_years_table($db);
-        $current_active_year = get_active_academic_year_label($db, '2023-2024');
 
         if ($user && password_verify($password, $user['password'])) {
             $user_status = trim((string) ($user['status'] ?? 'Active'));
@@ -114,195 +113,220 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login – InternReport</title>
+    <title>Sign In — InternReport University Portal</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
-                        'sans': ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
-                        'inter': ['Inter', 'sans-serif'],
-                    },
-                    fontSize: {
-                        'micro': '0.5rem',
-                        'caption': '0.6875rem',
-                        'label': '0.8125rem',
-                        'subtitle': '0.9375rem',
-                        'body': '1rem',
+                        'sans': ['"Plus Jakarta Sans"', 'sans-serif'],
                     },
                 }
             }
         }
     </script>
     <style>
-        .gradient-text {
-            background: linear-gradient(135deg, #0d9488 0%, #0284c7 50%, #2563eb 100%);
+        .univ-gradient-text {
+            background: linear-gradient(135deg, #0d9488 0%, #0284c7 50%, #4338ca 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
 
+        .grid-pattern {
+            background-size: 28px 28px;
+            background-image: 
+                linear-gradient(to right, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
+        }
+
+        .spotlight-bg {
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(13, 148, 136, 0.08) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(37, 99, 235, 0.08) 0px, transparent 50%),
+                radial-gradient(at 50% 100%, rgba(124, 58, 237, 0.05) 0px, transparent 50%);
+        }
+
         @keyframes shake-soft {
-
-            0%,
-            100% {
-                transform: translateX(0);
-            }
-
-            20%,
-            60% {
-                transform: translateX(-4px);
-            }
-
-            40%,
-            80% {
-                transform: translateX(4px);
-            }
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-4px); }
+            40%, 80% { transform: translateX(4px); }
         }
 
         .animate-shake {
             animation: shake-soft 0.4s ease-in-out;
         }
+
+        .fade-in-up {
+            animation: fadeInUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
     </style>
 </head>
 
-<body class="bg-slate-50 font-sans antialiased min-h-screen text-slate-900 selection:bg-teal-500 selection:text-white flex flex-col justify-between">
+<body class="bg-[#f8fafc] grid-pattern spotlight-bg font-sans antialiased min-h-screen text-slate-900 selection:bg-teal-600 selection:text-white flex flex-col justify-between">
 
-    <!-- Main Container -->
-    <main class="flex-1 flex items-center justify-center p-5 sm:p-8 lg:p-12">
-        <div class="w-full max-w-6xl">
+    <!-- ════ TOP MINIMAL NAV ════ -->
+    <header class="max-w-6xl w-full mx-auto px-6 py-5 flex items-center justify-between">
+        <a href="index.php" class="flex items-center gap-3 group">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-slate-900 via-teal-900 to-indigo-950 text-teal-400 flex items-center justify-center text-base shadow-sm border border-slate-800/40 group-hover:scale-105 transition-transform duration-200">
+                <i class="fa-solid fa-graduation-cap"></i>
+            </div>
+            <div class="flex flex-col">
+                <span class="text-sm font-black text-slate-900 tracking-tight leading-none group-hover:text-teal-700 transition-colors">InternReport</span>
+                <span class="text-[10px] font-bold text-teal-700 tracking-wider uppercase mt-0.5">University Portal</span>
+            </div>
+        </a>
+
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-white/90 border border-slate-200/90 rounded-full text-xs font-bold text-slate-700 shadow-2xs">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span><?= htmlspecialchars($current_active_year) ?> Academic Year</span>
+        </div>
+    </header>
+
+    <!-- ════ MAIN AUTH STAGE ════ -->
+    <main class="flex-1 flex items-center justify-center p-5 sm:p-8">
+        <div class="w-full max-w-5xl fade-in-up">
             <div class="grid lg:grid-cols-12 gap-8 lg:gap-12 items-center">
 
-                <!-- Left Side: Clean, Simple, Normal Layout -->
+                <!-- Left Column: University Identity & Role Overviews -->
                 <div class="hidden lg:block lg:col-span-6 space-y-6 pr-4">
-                    <!-- Brand Header -->
-                    <a href="index.php" class="inline-flex items-center gap-3 group">
-                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-blue-700 flex items-center justify-center shadow-sm text-white text-xl">
-                            <span>📋</span>
-                        </div>
-                        <div>
-                            <span class="text-xl font-bold text-slate-900 tracking-tight block">InternReport</span>
-                            <span class="text-xs text-slate-500 font-medium block">University Management System</span>
-                        </div>
-                    </a>
-
-                    <!-- Title & Description -->
-                    <div class="space-y-2">
-                        <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
-                            Welcome Back to <span class="text-teal-700">InternReport</span>
+                    <div class="space-y-3">
+                        <h1 class="text-3xl font-black text-slate-900 tracking-tight leading-tight">
+                            Sign In to <br>
+                            <span class="univ-gradient-text">InternReport System</span>
                         </h1>
-                        <p class="text-sm text-slate-600 leading-relaxed">
-                            Sign in to manage internship reports, submit daily logs, track evaluation grades, and collaborate in real-time.
+
+                        <p class="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+                            Access your university workspace to record daily tasks, review submissions, and manage academic internship evaluations.
                         </p>
                     </div>
 
-                    <!-- Clean, Natural Internship Image -->
-                    <div class="rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white">
-                        <img src="assets/images/login_internship_visual.jpg" alt="University Internship Evaluation" class="w-full h-auto max-h-[250px] object-cover">
-                    </div>
+                    <!-- Clean Bento Role Highlights -->
+                    <div class="space-y-3 pt-2">
+                        <!-- Student Pill -->
+                        <div class="p-3.5 bg-white/80 backdrop-blur-md rounded-2xl border border-blue-100 flex items-center gap-3.5 shadow-2xs hover:border-blue-300 transition-colors">
+                            <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm font-bold shrink-0">
+                                <i class="fa-solid fa-user-graduate"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs font-bold text-slate-900">Student Portal</p>
+                                <p class="text-[11px] text-slate-500 truncate">Daily logs &amp; weekly reflections</p>
+                            </div>
+                        </div>
 
-                    <!-- Clean Role Information List -->
-                    <div class="space-y-2.5 pt-1">
-                        <div class="flex items-center gap-3 text-sm text-slate-700">
-                            <span class="w-7 h-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center text-xs font-bold shrink-0">🎓</span>
-                            <span><strong class="font-semibold text-slate-800">Students:</strong> Submit daily logs and weekly reflections</span>
+                        <!-- Supervisor Pill -->
+                        <div class="p-3.5 bg-white/80 backdrop-blur-md rounded-2xl border border-teal-100 flex items-center gap-3.5 shadow-2xs hover:border-teal-300 transition-colors">
+                            <div class="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-sm font-bold shrink-0">
+                                <i class="fa-solid fa-chalkboard-user"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs font-bold text-slate-900">Faculty Supervisor</p>
+                                <p class="text-[11px] text-slate-500 truncate">Student attendance monitoring &amp; A–F grading</p>
+                            </div>
                         </div>
-                        <div class="flex items-center gap-3 text-sm text-slate-700">
-                            <span class="w-7 h-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center text-xs font-bold shrink-0">👨‍🏫</span>
-                            <span><strong class="font-semibold text-slate-800">Supervisors:</strong> Review progress and assign weekly grades</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm text-slate-700">
-                            <span class="w-7 h-7 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center text-xs font-bold shrink-0">⚙️</span>
-                            <span><strong class="font-semibold text-slate-800">Administrators:</strong> Manage users, companies, and academic years</span>
+
+                        <!-- Admin Pill -->
+                        <div class="p-3.5 bg-white/80 backdrop-blur-md rounded-2xl border border-slate-200 flex items-center gap-3.5 shadow-2xs hover:border-slate-300 transition-colors">
+                            <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center text-sm font-bold shrink-0">
+                                <i class="fa-solid fa-shield-halved"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs font-bold text-slate-900">Department Admin</p>
+                                <p class="text-[11px] text-slate-500 truncate">Academic batch governance, users &amp; company rosters</p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Right Side: Elevated Login Card (100% Preserved) -->
+                <!-- Right Column: Elevated Academic Login Form Card -->
                 <div class="lg:col-span-6">
-                    <div class="bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl shadow-slate-900/10 border border-slate-200/80 p-8 sm:p-10 relative">
-                        <!-- Mobile Header -->
-                        <div class="lg:hidden flex items-center justify-center gap-3 mb-6 text-center">
-                            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-teal-600 to-blue-700 flex items-center justify-center shadow-md shadow-teal-600/25">
-                                <span class="text-white text-xl">📋</span>
-                            </div>
-                            <div class="text-left">
-                                <span class="text-xl font-black text-slate-900 tracking-tight block">InternReport</span>
-                                <span class="text-[0.625rem] font-extrabold uppercase tracking-widest text-teal-700 block">University Portal</span>
-                            </div>
-                        </div>
-
-                        <div class="mb-7">
-                            <h2 class="text-2xl sm:text-3xl font-black text-slate-900 mb-1.5 tracking-tight">Sign In to Your Account</h2>
-                            <p class="text-sm text-slate-500 font-medium">Enter your university credentials to access the platform</p>
+                    <div class="bg-white/95 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-900/5 border border-slate-200/90 p-8 sm:p-10 relative">
+                        
+                        <!-- Header -->
+                        <div class="mb-6">
+                            <h2 class="text-xl sm:text-2xl font-black text-slate-900 mb-1 tracking-tight">University Sign In</h2>
+                            <p class="text-xs text-slate-500 font-medium">Enter your registered institutional credentials</p>
                         </div>
 
                         <!-- Error Message Banner -->
                         <?php if ($error): ?>
-                            <div class="bg-red-50/95 border border-red-200 text-red-800 text-sm font-semibold px-4 py-3.5 rounded-2xl flex items-start gap-3 mb-6 shadow-sm animate-shake">
-                                <span class="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs shrink-0 mt-0.5 font-bold">!</span>
+                            <div class="bg-red-50 border border-red-200 text-red-800 text-xs font-semibold px-4 py-3 rounded-xl flex items-start gap-2.5 mb-5 shadow-2xs animate-shake">
+                                <i class="fa-solid fa-circle-exclamation text-red-500 text-sm shrink-0 mt-0.5"></i>
                                 <div class="leading-relaxed flex-1"><?= htmlspecialchars($error) ?></div>
                             </div>
                         <?php endif; ?>
 
                         <!-- Login Form -->
-                        <form method="POST" class="space-y-5" autocomplete="off">
+                        <form method="POST" class="space-y-4" autocomplete="off">
                             <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Email Address</label>
+                                <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Email Address</label>
                                 <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                                        <i class="fa-regular fa-envelope text-slate-400"></i>
+                                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                        <i class="fa-regular fa-envelope text-xs"></i>
                                     </div>
-                                    <input type="email" name="email" required placeholder="Enter Your Email" autocomplete="email"
-                                        class="w-full pl-11 pr-4 py-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 focus:bg-white transition-all duration-200 shadow-sm placeholder:text-slate-400">
+                                    <input type="email" name="email" required placeholder="Enter your email" autocomplete="email"
+                                        class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 focus:bg-white transition-all shadow-2xs placeholder:text-slate-400">
                                 </div>
                             </div>
 
                             <div>
-                                <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Password</label>
+                                <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">Password</label>
                                 <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                                        <i class="fa-solid fa-lock text-slate-400"></i>
+                                    <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                                        <i class="fa-solid fa-lock text-xs"></i>
                                     </div>
-                                    <input type="password" id="passwordInput" name="password" required placeholder="••••••••" autocomplete="new-password"
-                                        class="w-full pl-11 pr-12 py-3.5 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 focus:bg-white transition-all duration-200 shadow-sm placeholder:text-slate-400">
-                                    <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1.5 focus:outline-none cursor-pointer flex items-center justify-center transition-colors" aria-label="Toggle password visibility">
-                                        <i id="eyeIcon" class="fa-regular fa-eye text-slate-400 hover:text-slate-700 text-sm transition-colors"></i>
+                                    <input type="password" id="passwordInput" name="password" required placeholder="Enter your password" autocomplete="current-password"
+                                        class="w-full pl-10 pr-11 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-600 focus:bg-white transition-all shadow-2xs placeholder:text-slate-400">
+                                    <button type="button" onclick="togglePasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 focus:outline-none cursor-pointer transition-colors" aria-label="Toggle password visibility">
+                                        <i id="eyeIcon" class="fa-regular fa-eye text-xs"></i>
                                     </button>
                                 </div>
                             </div>
 
                             <button type="submit"
-                                class="w-full px-6 py-4 bg-gradient-to-r from-teal-600 via-teal-700 to-blue-700 hover:from-teal-700 hover:to-blue-800 text-white font-bold text-sm rounded-2xl shadow-xl shadow-teal-600/25 hover:shadow-teal-600/40 hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 cursor-pointer flex items-center justify-center gap-2">
+                                class="w-full mt-2 px-6 py-3.5 bg-slate-900 hover:bg-teal-600 active:scale-98 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-slate-900/10 hover:shadow-teal-600/20 transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 group">
                                 <span>Sign In</span>
-                                <span class="text-base">→</span>
+                                <i class="fa-solid fa-arrow-right text-xs group-hover:translate-x-1 transition-transform"></i>
                             </button>
                         </form>
 
-                        <!-- Back to Home & Help Links -->
-                        <div class="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between text-xs font-semibold text-slate-500">
+                        <!-- Back to Home & Help -->
+                        <div class="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500">
                             <a href="index.php" class="hover:text-teal-700 transition-colors flex items-center gap-1.5 group">
-                                <span class="group-hover:-translate-x-0.5 transition-transform">←</span>
+                                <i class="fa-solid fa-arrow-left text-[10px] group-hover:-translate-x-0.5 transition-transform"></i>
                                 <span>Back to Home</span>
                             </a>
-                            <span class="text-slate-400">Internship Report Management System</span>
+                            <span class="text-slate-400 font-medium">InternReport System</span>
                         </div>
                     </div>
                 </div>
+
             </div>
         </div>
     </main>
 
-    <!-- Footer Copyright -->
-    <footer class="py-4 text-center text-xs text-slate-400">
+    <!-- ════ FOOTER ════ -->
+    <footer class="py-4 text-center text-xs text-slate-400 border-t border-slate-200/60 bg-white/60">
         © <?= date('Y') ?> InternReport. All rights reserved. University Internship Platform.
     </footer>
 
+    <!-- Password visibility toggle script -->
     <script>
         function togglePasswordVisibility() {
             var pass = document.getElementById('passwordInput');

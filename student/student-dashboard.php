@@ -3190,7 +3190,7 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                         </svg>
                     </span>
                     <div class="text-left">
-                        <p class="font-bold text-slate-700 group-hover:text-indigo-700">Official Weekly Report (Print / PDF)</p>
+                        <p class="font-bold text-slate-700 group-hover:text-indigo-700">Official Weekly Report (Save as PDF)</p>
                         <p class="text-label text-slate-400">Formal document with letterhead, reflections & signatures</p>
                     </div>
                 </button>

@@ -829,10 +829,10 @@ function build_query_url($overrides = []) {
                                                 <span>Weeks (<?= $sd['submitted_weeks'] ?>)</span>
                                             </button>
 
-                                            <!-- Print Report -->
-                                            <a href="../student/print_report.php?student_id=<?= $uid ?>&week=all" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 text-xs font-semibold rounded-xl transition" title="Print Official 12-Week Report">
-                                                <i class="fa-solid fa-print text-xs"></i>
-                                                <span>Print</span>
+                                            <!-- Save as PDF Report -->
+                                            <a href="../student/print_report.php?student_id=<?= $uid ?>&week=all" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 text-xs font-semibold rounded-xl transition" title="Save Official 12-Week Report as PDF">
+                                                <i class="fa-solid fa-file-pdf text-xs"></i>
+                                                <span>Save as PDF</span>
                                             </a>
                                         </div>
                                     </td>
@@ -909,8 +909,8 @@ function build_query_url($overrides = []) {
         <!-- Modal Footer -->
         <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between flex-wrap gap-2">
             <a id="modalPrintAllBtn" href="#" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold rounded-xl shadow-xs transition">
-                <i class="fa-solid fa-print"></i>
-                <span>Print</span>
+                <i class="fa-solid fa-file-pdf"></i>
+                <span>Save as PDF</span>
             </a>
             <div class="flex items-center gap-2">
                 <a id="modalFullDashboardBtn" href="#" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
@@ -1052,7 +1052,7 @@ function openStudentBreakdownModal(studentId) {
             actionHtml = `
                 <div class="flex items-center justify-end gap-1.5">
                     <a href="supervisor-review.php?student_id=${student.uid}&week=${w}" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition">View</a>
-                    <a href="../student/print_report.php?student_id=${student.uid}&week=${w}" target="_blank" class="px-2 py-1 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 font-semibold rounded-lg transition" title="Print Week"><i class="fa-solid fa-print"></i></a>
+                    <a href="../student/print_report.php?student_id=${student.uid}&week=${w}" target="_blank" class="px-2 py-1 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 text-slate-600 font-semibold rounded-lg transition" title="Save Week as PDF"><i class="fa-solid fa-file-pdf"></i></a>
                 </div>
             `;
         } else {

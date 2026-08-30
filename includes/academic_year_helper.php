@@ -188,7 +188,7 @@ if (!function_exists('get_supervisor_year_student_count')) {
             WHERE sp.supervisor_id = ?
               AND (stu.academic_year_id = ay.id OR stu.academic_year = ay.year_label)
         ");
-        $stmt->bind_param("iii", $academic_year_id, $supervisor_id, $academic_year_id);
+        $stmt->bind_param("ii", $academic_year_id, $supervisor_id);
         $stmt->execute();
         $res = $stmt->get_result();
         $row = $res ? $res->fetch_row() : null;

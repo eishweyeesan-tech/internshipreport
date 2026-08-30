@@ -889,7 +889,7 @@ $average_attendance_rate = $students_with_att > 0 ? (int) round($total_att_pct_s
                         <span>📜</span> 13-Week History
                     </a>
                     <a id="modalLinkPrint" href="#" target="_blank" class="flex items-center justify-center gap-2 p-2.5 bg-[#005f73] hover:bg-[#0a9396] text-white text-xs font-bold rounded-xl transition shadow-xs">
-                        <span>🖨️</span> Print Report
+                        <span>📄</span> Save as PDF
                     </a>
                 </div>
             </div>

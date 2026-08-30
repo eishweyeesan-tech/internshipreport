@@ -52,6 +52,10 @@ $supervisor_name  = $profile['supervisor_name'] ?? '';
 $supervisor_email = $profile['supervisor_email'] ?? '';
 $academic_year    = $profile['academic_year'] ?? '';
 
+// Fetch all available companies for placement selection
+$companies_res = $db->query("SELECT id, company_name FROM companies ORDER BY company_name ASC");
+$companies_list = $companies_res ? $companies_res->fetch_all(MYSQLI_ASSOC) : [];
+
 // Build Week Ranges
 $weeks = [];
 if ($intern_start) {
@@ -106,6 +110,112 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         $supervisor_email = $profile['supervisor_email'] ?? '';
 
         $profile_msg = 'Personal details updated successfully.';
+    }
+}
+
+// Handle Internship Details Update
+$internship_msg = '';
+$internship_err = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_internship'])) {
+    $company_id          = (int) ($_POST['company_id'] ?? 0);
+    $custom_company_name = trim($_POST['custom_company_name'] ?? '');
+    $company_name        = '';
+    $job_role            = trim($_POST['job_role'] ?? '');
+    $instructor_name     = trim($_POST['instructor_name'] ?? '');
+    $instructor_email    = trim($_POST['instructor_email'] ?? '');
+    $instructor_phone    = trim($_POST['instructor_phone'] ?? '');
+    $start_date_in       = trim($_POST['internship_start_date'] ?? '');
+    $end_date_in         = trim($_POST['internship_end_date'] ?? '');
+
+    if ($company_id > 0) {
+        $c_stmt = $db->prepare("SELECT company_name FROM companies WHERE id = ?");
+        $c_stmt->bind_param("i", $company_id);
+        $c_stmt->execute();
+        $c_res = $c_stmt->get_result();
+        if ($c_row = $c_res->fetch_assoc()) {
+            $company_name = $c_row['company_name'];
+        }
+        $c_stmt->close();
+    } elseif (!empty($custom_company_name)) {
+        $company_name = $custom_company_name;
+        $company_id   = null;
+    } else {
+        $company_id   = null;
+    }
+
+    $phone_err = null;
+    if (!empty($instructor_phone)) {
+        $phone_err = phone_validation_error($instructor_phone);
+    }
+
+    if ($phone_err !== null) {
+        $internship_err = $phone_err;
+    } elseif (!empty($instructor_email) && !filter_var($instructor_email, FILTER_VALIDATE_EMAIL)) {
+        $internship_err = 'Please enter a valid instructor email address.';
+    } elseif (!empty($start_date_in) && !empty($end_date_in) && $start_date_in > $end_date_in) {
+        $internship_err = 'Internship start date cannot be later than the end date.';
+    } else {
+        if (!empty($instructor_phone)) {
+            $instructor_phone = normalize_phone($instructor_phone);
+        }
+
+        $s_start_val = !empty($start_date_in) ? $start_date_in : null;
+        $s_end_val   = !empty($end_date_in) ? $end_date_in : null;
+        $c_name_val  = !empty($company_name) ? $company_name : null;
+        $j_role_val  = !empty($job_role) ? $job_role : null;
+        $i_name_val  = !empty($instructor_name) ? $instructor_name : null;
+        $i_mail_val  = !empty($instructor_email) ? $instructor_email : null;
+        $i_phone_val = !empty($instructor_phone) ? $instructor_phone : null;
+
+        $upd_int = $db->prepare("UPDATE student_profiles SET
+            company_id = ?,
+            company_name = ?,
+            job_role = ?,
+            instructor_name = ?,
+            instructor_email = ?,
+            instructor_phone = ?,
+            internship_start_date = ?,
+            internship_end_date = ?
+            WHERE user_id = ?");
+        $upd_int->bind_param(
+            "isssssssi",
+            $company_id,
+            $c_name_val,
+            $j_role_val,
+            $i_name_val,
+            $i_mail_val,
+            $i_phone_val,
+            $s_start_val,
+            $s_end_val,
+            $user_id
+        );
+        $upd_int->execute();
+
+        // Refresh profile row
+        $profile_stmt->bind_param("i", $user_id);
+        $profile_stmt->execute();
+        $res = $profile_stmt->get_result();
+        $profile = $res ? $res->fetch_assoc() : null;
+
+        $intern_start     = $profile['internship_start_date'] ?? null;
+        $intern_end       = $profile['internship_end_date'] ?? null;
+        $supervisor_name  = $profile['supervisor_name'] ?? '';
+        $supervisor_email = $profile['supervisor_email'] ?? '';
+
+        // Recompute week ranges if dates changed
+        $weeks = [];
+        if ($intern_start) {
+            $w = 1;
+            while (true) {
+                $range = getWeekRange($intern_start, $w);
+                if (!$range) break;
+                if ($intern_end && $range['start'] > $intern_end) break;
+                $weeks[$w] = $range;
+                $w++;
+            }
+        }
+
+        $internship_msg = 'Internship & placement details updated successfully.';
     }
 }
 
@@ -384,6 +494,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         </div>
                     <?php endif; ?>
 
+                    <?php if ($internship_msg): ?>
+                        <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <?= htmlspecialchars($internship_msg) ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if ($internship_err): ?>
+                        <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <?= htmlspecialchars($internship_err) ?>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if ($pw_msg): ?>
                         <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
                             <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -553,14 +677,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                 </span>
                                 Internship &amp; Placement Details
                             </h3>
-                            <span class="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-xl border border-amber-200/80">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                                Supervisor Assigned
-                            </span>
+                            <button type="button" onclick="toggleEdit('internship')" class="edit-toggle px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition cursor-pointer">Edit</button>
                         </div>
 
-                        <!-- Read-Only View Mode (Students cannot edit their instructor to prevent self-approval fraud) -->
-                        <div class="p-6">
+                        <!-- View Mode -->
+                        <div class="view-mode p-6">
                             <dl class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                                 <div>
                                     <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Company / Organization</dt>
@@ -610,12 +731,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     <?= $supervisor_name ? 'Supervised' : 'Pending Assignment' ?>
                                 </span>
                             </div>
-
-                            <p class="text-[11px] text-slate-500 mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
-                                <span class="text-amber-600 font-bold">🔒 လုံခြုံရေး အသိပေးချက်:</span>
-                                ကုမ္ပဏီနှင့် Instructor အချက်အလက်များကို Supervisor / Admin ကသာ တရားဝင် သတ်မှတ်ပြင်ဆင်ပေးပါသည်။ (ပြောင်းလဲလိုပါက တာဝန်ခံ Supervisor ထံ ဆက်သွယ်ပါ)
-                            </p>
                         </div>
+
+                        <!-- Edit Mode -->
+                        <form method="POST" class="edit-mode hidden">
+                            <input type="hidden" name="update_internship" value="1">
+                            <div class="p-6 space-y-4">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Company / Organization</label>
+                                        <select name="company_id" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition cursor-pointer mb-2">
+                                            <option value="">— Select Partner Company —</option>
+                                            <?php foreach ($companies_list as $comp): ?>
+                                                <option value="<?= $comp['id'] ?>" <?= ((int)($profile['company_id'] ?? 0) === (int)$comp['id'] || ($profile['company_name'] ?? '') === $comp['company_name']) ? 'selected' : '' ?>>
+                                                    <?= htmlspecialchars($comp['company_name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <input type="text" name="custom_company_name" value="<?= htmlspecialchars($profile['company_name'] ?? '') ?>" placeholder="Or type other company name" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Company Instructor Name</label>
+                                        <input type="text" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name'] ?? '') ?>" placeholder="e.g. U Thant Zin" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Instructor Email Address</label>
+                                        <input type="email" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email'] ?? '') ?>" placeholder="instructor@company.com" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Instructor Phone Number</label>
+                                        <input type="text" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone'] ?? '') ?>" placeholder="09-xxxxxxxxx" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Internship Start Date</label>
+                                        <input type="date" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Internship End Date</label>
+                                        <input type="date" name="internship_end_date" value="<?= htmlspecialchars($profile['internship_end_date'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition">
+                                    </div>
+                                </div>
+                                <div class="flex justify-end pt-2">
+                                    <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer">Save Internship Details</button>
+                                </div>
+                            </div>
+                        </form>
                     </div>
 
                     <!-- ════ SECURITY & CHANGE PASSWORD ════ -->

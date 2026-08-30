@@ -13,6 +13,9 @@ require_once __DIR__ . '/../includes/academic_year_helper.php';
 ensure_academic_years_table($db);
 ensure_supervisor_assignments_table($db);
 
+// Default account password for student and supervisor registrations & resets
+$default_account_password = 'Intern@123';
+
 // ── Academic Years (from academic_years table) ────────────────
 $active_ay_rec = get_active_academic_year($db);
 $current_active_year_label = $active_ay_rec ? $active_ay_rec['year_label'] : '2023-2024';
@@ -63,10 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     $s_start            = trim($_POST['s_start_date'] ?? '');
     $s_end              = trim($_POST['s_end_date'] ?? '');
     $s_academic         = trim($_POST['s_academic_year'] ?? '') ?: $current_active_year_label;
-    $s_password         = trim($_POST['s_password'] ?? '');
-    if (empty($s_password)) {
-        $s_password = generate_random_strong_password(8);
-    }
+    $s_password         = trim($_POST['s_password'] ?? '') ?: $default_account_password;
 
     if (empty($s_name) || empty($s_roll) || empty($s_email)) {
         $err = 'Name, Roll No, and Email are required.';
@@ -96,15 +96,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
                 $err = 'This Roll Number already exists for the selected Academic Year.';
             } else {
                 // Look up company name from selected company_id
-                $company_name = '';
+                $company_name = null;
                 if ($s_company_id > 0) {
                     $cn = $db->prepare("SELECT company_name FROM companies WHERE id = ?");
                     $cn->bind_param("i", $s_company_id);
                     $cn->execute();
                     $res_c = $cn->get_result();
                     $row_c = $res_c ? $res_c->fetch_row() : null;
-                    $company_name = $row_c[0] ?? '';
+                    $company_name = $row_c[0] ?? null;
                 }
+
+                $s_start_val            = !empty($s_start) ? $s_start : null;
+                $s_end_val              = !empty($s_end) ? $s_end : null;
+                $s_company_id_val       = ($s_company_id > 0) ? $s_company_id : null;
+                $s_supervisor_id_val    = ($s_supervisor_id > 0) ? $s_supervisor_id : null;
+                $s_major_val            = !empty($s_major) ? $s_major : null;
+                $s_instructor_val       = !empty($s_instructor) ? $s_instructor : null;
+                $s_instructor_email_val = !empty($s_instructor_email) ? $s_instructor_email : null;
 
                 $hash = password_hash($s_password, PASSWORD_DEFAULT);
                 $ins_u = $db->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?, ?)");
@@ -113,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
                 $uid = (int) $db->insert_id;
 
                 $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, instructor_email, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins_sp->bind_param("isssisissss", $uid, $s_name, $s_roll, $s_major, $s_company_id, $company_name, $s_supervisor_id, $s_instructor, $s_instructor_email, $s_start, $s_end);
+                $ins_sp->bind_param("isssisissss", $uid, $s_name, $s_roll, $s_major_val, $s_company_id_val, $company_name, $s_supervisor_id_val, $s_instructor_val, $s_instructor_email_val, $s_start_val, $s_end_val);
                 $ins_sp->execute();
 
                 $_SESSION['credential_slip'] = [
@@ -127,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
                     'temp_password' => $s_password
                 ];
 
-                $msg = "Student \"{$s_name}\" created successfully. Unique temporary password generated.";
+                $msg = "Student \"{$s_name}\" created successfully. Default password: {$s_password}";
             }
         }
     }
@@ -139,10 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
     $t_dept     = trim($_POST['t_dept'] ?? '');
     $t_pos      = trim($_POST['t_position'] ?? $_POST['position'] ?? '');
     $t_email    = trim($_POST['t_email'] ?? '');
-    $t_password = trim($_POST['t_password'] ?? '');
-    if (empty($t_password)) {
-        $t_password = generate_random_strong_password(8);
-    }
+    $t_password = trim($_POST['t_password'] ?? '') ?: $default_account_password;
 
     if (empty($t_name) || empty($t_email)) {
         $err = 'Name and Email are required.';
@@ -175,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_supervisor'])) {
                 'temp_password' => $t_password
             ];
 
-            $msg = "Supervisor \"{$t_name}\" created successfully. Unique temporary password generated.";
+            $msg = "Supervisor \"{$t_name}\" created successfully. Default password: {$t_password}";
         }
     }
 }
@@ -195,7 +200,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_user'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password'])) {
     $rid = (int) ($_POST['reset_uid'] ?? 0);
     if ($rid > 0 && $rid !== $admin_id) {
-        $new_temp_pw = generate_random_strong_password(8);
+        $new_temp_pw = $default_account_password;
         $hash = password_hash($new_temp_pw, PASSWORD_DEFAULT);
         $up = $db->prepare("UPDATE users SET password = ?, is_first_login = 1 WHERE id = ? AND role IN ('student','supervisor')");
         $up->bind_param("si", $hash, $rid);
@@ -213,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password'])) {
         $disp_role = ucfirst($u_info['role'] ?? 'User');
 
         $_SESSION['credential_slip'] = [
-            'title' => 'Temporary Password Reset',
+            'title' => 'Password Reset',
             'name' => $disp_name,
             'roll' => $disp_roll,
             'major' => ($u_info['major'] ?? '') ?: (($u_info['position'] ?? '') ?: '—'),
@@ -223,7 +228,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reset_password'])) {
             'temp_password' => $new_temp_pw
         ];
 
-        $msg = "Password reset for \"{$disp_name}\". New unique temporary password generated.";
+        $msg = "Password reset for \"{$disp_name}\". Default password: {$new_temp_pw}";
     }
 }
 
@@ -1312,10 +1317,10 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                 <?php endif; ?>
                                                             </div>
                                                             <div class="flex items-center gap-1.5">
-                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>?\nA new unique temporary password will be generated for manual delivery.')" class="inline">
+                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>?\nDefault password will be: <?= htmlspecialchars($default_account_password, ENT_QUOTES) ?>')" class="inline">
                                                                     <input type="hidden" name="reset_password" value="1">
                                                                     <input type="hidden" name="reset_uid" value="<?= $s['uid'] ?>">
-                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset & generate temporary password">
+                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset to default password (<?= htmlspecialchars($default_account_password) ?>)">
                                                                         <i class="fa-solid fa-key text-[11px]"></i>
                                                                     </button>
                                                                 </form>
@@ -1489,10 +1494,10 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                         <span><?= $is_inactive ? 'Activate' : 'Deactivate' ?></span>
                                                                     </button>
                                                                 </form>
-                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\nA new unique temporary password will be generated for manual delivery.')" class="inline m-0 p-0">
+                                                                <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>?\nDefault password will be: <?= htmlspecialchars($default_account_password, ENT_QUOTES) ?>')" class="inline m-0 p-0">
                                                                     <input type="hidden" name="reset_password" value="1">
                                                                     <input type="hidden" name="reset_uid" value="<?= $sup['id'] ?>">
-                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset & generate temporary password">
+                                                                    <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer" title="Reset to default password (<?= htmlspecialchars($default_account_password) ?>)">
                                                                         <i class="fa-solid fa-key text-[11px]"></i>
                                                                     </button>
                                                                 </form>
@@ -1722,10 +1727,10 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                     </button>
                                                                 </form>
                                                             <?php endif; ?>
-                                                            <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($u['full_name'] ?: $u['username'], ENT_QUOTES) ?>?\nA new unique temporary password will be generated for manual delivery.')" class="inline m-0 p-0">
+                                                            <form method="POST" onsubmit="return confirm('Reset password for <?= htmlspecialchars($u['full_name'] ?: $u['username'], ENT_QUOTES) ?>?\nDefault password will be: <?= htmlspecialchars($default_account_password, ENT_QUOTES) ?>')" class="inline m-0 p-0">
                                                                 <input type="hidden" name="reset_password" value="1">
                                                                 <input type="hidden" name="reset_uid" value="<?= $u['id'] ?>">
-                                                                <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer shrink-0" title="Reset & generate temporary password">
+                                                                <button type="submit" class="inline-flex items-center justify-center w-7 h-7 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-bold rounded-lg border border-amber-200/70 shadow-xs transition cursor-pointer shrink-0" title="Reset to default password (<?= htmlspecialchars($default_account_password) ?>)">
                                                                     <i class="fa-solid fa-key text-[11px]"></i>
                                                                 </button>
                                                             </form>
@@ -2806,11 +2811,11 @@ usort($supervisor_workloads, function ($a, $b) {
         }
 
         /**
-         * Copy only the temporary password
+         * Copy only the password
          */
         function copySlipPassword(pw) {
             navigator.clipboard.writeText(pw).then(function() {
-                alert('🔑 Temporary password copied to clipboard:\n' + pw);
+                alert('🔑 Password copied to clipboard:\n' + pw);
             }).catch(function() {
                 prompt('Copy this password:', pw);
             });
@@ -2827,9 +2832,9 @@ usort($supervisor_workloads, function ($a, $b) {
                 `Name: ${slip.name || ''}\n` +
                 `ID / Roll / Dept: ${slip.roll || ''}\n` +
                 `Login Email: ${slip.email || ''}\n` +
-                `Temporary Password: ${slip.temp_password || ''}\n` +
+                `Default Password: ${slip.temp_password || ''}\n` +
                 `Login Portal: ${loginUrl}\n\n` +
-                `⚠️ Note: You will be required to change your temporary password immediately upon your first login.`;
+                `⚠️ Note: You will be required to change your password immediately upon your first login.`;
             navigator.clipboard.writeText(text).then(function() {
                 alert('📋 Full credentials text copied successfully!\n\nYou can now paste and send it directly via Viber, Telegram, SMS, or Email.');
             }).catch(function() {
@@ -2878,11 +2883,11 @@ usort($supervisor_workloads, function ($a, $b) {
                                 <span class="row-val">${document.querySelector('#printableSlipArea .font-mono')?.innerText || ''}</span>
                             </div>
                             <div class="pw-card">
-                                <div class="pw-label">Temporary Password</div>
+                                <div class="pw-label">Default Password</div>
                                 <div class="pw-code">${document.getElementById('slipTempPwText')?.innerText || ''}</div>
                             </div>
                             <div class="notice">
-                                <strong>⚠️ First-Login Notice:</strong> You must change this temporary password to your own secret password upon your first login.
+                                <strong>⚠️ First-Login Notice:</strong> You must change this default password to your own secret password upon your first login.
                             </div>
                             <div class="footer">
                                 University Internship Supervision Portal
@@ -3070,10 +3075,10 @@ usort($supervisor_workloads, function ($a, $b) {
                     <!-- Partner Company (Optional) -->
                     <div class="sm:col-span-2">
                         <label for="modal_s_company_select" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Partner Company <span class="text-slate-400 font-normal text-[10px]">(Optional — Can be assigned later)</span>
+                            Partner Company <span class="text-slate-400 font-normal text-[10px]">(Optional)</span>
                         </label>
                         <select name="s_company_id" id="modal_s_company_select" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
-                            <option value="">— Unassigned (Student / Supervisor can assign later) —</option>
+                            <option value="">— Select Company —</option>
                             <?php foreach ($companies as $c): ?>
                                 <option value="<?= $c['id'] ?>" <?= (isset($_POST['s_company_id']) && (int)$_POST['s_company_id'] === (int)$c['id']) ? 'selected' : '' ?>>
                                     <?= htmlspecialchars($c['company_name']) ?><?= !empty($c['contact_person']) ? ' (Contact: ' . htmlspecialchars($c['contact_person']) . ')' : '' ?>
@@ -3082,16 +3087,11 @@ usort($supervisor_workloads, function ($a, $b) {
                         </select>
                     </div>
 
-                    <!-- Temporary Password -->
-                    <div class="sm:col-span-2 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-100">
-                        <div class="flex items-center justify-between mb-1.5">
-                            <label for="modal_s_password" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                Temporary Password <span class="text-slate-400 font-normal text-[11px]">(Optional)</span>
-                            </label>
-                            <button type="button" onclick="generateRandomPasswordForInput('modal_s_password')" class="inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs">
-                                <span>🎲 Generate Random</span>
-                            </button>
-                        </div>
+                    <!-- Default Password -->
+                    <div class="sm:col-span-2">
+                        <label for="modal_s_password" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                            Default Password
+                        </label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
                                 <i class="fa-solid fa-key text-xs"></i>
@@ -3099,17 +3099,10 @@ usort($supervisor_workloads, function ($a, $b) {
                             <input type="text"
                                 id="modal_s_password"
                                 name="s_password"
-                                placeholder="Leave blank to auto-generate unique 8-character password"
-                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_password'] ?? '') : '' ?>"
-                                class="w-full bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
+                                placeholder="Intern@123"
+                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_password'] ?? '') : 'Intern@123' ?>"
+                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
                         </div>
-                        <p class="text-[11px] text-slate-500 mt-1">If left blank, the system will automatically create a unique random password for manual delivery (Access Slip).</p>
-                    </div>
-
-                    <!-- Info Alert -->
-                    <div class="sm:col-span-2 bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-start gap-2.5 text-slate-500 text-xs leading-relaxed">
-                        <i class="fa-solid fa-circle-info text-indigo-500 mt-0.5 shrink-0"></i>
-                        <span>Company instructor contact details and internship dates can be completed by the student in their <strong>Student Profile</strong> upon first login.</span>
                     </div>
                 </div>
 
@@ -3203,10 +3196,10 @@ usort($supervisor_workloads, function ($a, $b) {
                     </div>
                     <div>
                         <label for="modal_t_pos" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Rank / Position
+                            Position
                         </label>
                         <select id="modal_t_pos" name="t_position" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition cursor-pointer">
-                            <option value="">— Select Rank —</option>
+                            <option value="">— Select Position —</option>
                             <option value="Professor" <?= (isset($_POST['t_position']) && $_POST['t_position'] === 'Professor') ? 'selected' : '' ?>>Professor</option>
                             <option value="Associate Professor" <?= (isset($_POST['t_position']) && $_POST['t_position'] === 'Associate Professor') ? 'selected' : '' ?>>Associate Professor</option>
                             <option value="Lecturer" <?= (isset($_POST['t_position']) && $_POST['t_position'] === 'Lecturer') ? 'selected' : '' ?>>Lecturer</option>
@@ -3216,15 +3209,11 @@ usort($supervisor_workloads, function ($a, $b) {
                     </div>
                 </div>
 
-                <div class="bg-emerald-50/40 p-3.5 rounded-xl border border-emerald-100">
-                    <div class="flex items-center justify-between mb-1.5">
-                        <label for="modal_t_password" class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                            Temporary Password <span class="text-slate-400 font-normal text-[11px]">(Optional)</span>
-                        </label>
-                        <button type="button" onclick="generateRandomPasswordForInput('modal_t_password')" class="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 bg-white hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition cursor-pointer shadow-2xs">
-                            <span>🎲 Generate Random</span>
-                        </button>
-                    </div>
+                <!-- Default Password -->
+                <div>
+                    <label for="modal_t_password" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Default Password
+                    </label>
                     <div class="relative">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
                             <i class="fa-solid fa-key text-xs"></i>
@@ -3232,11 +3221,10 @@ usort($supervisor_workloads, function ($a, $b) {
                         <input type="text"
                             id="modal_t_password"
                             name="t_password"
-                            placeholder="Leave blank to auto-generate unique 8-character password"
-                            value="<?= (isset($_POST['add_supervisor']) && !empty($err)) ? htmlspecialchars($_POST['t_password'] ?? '') : '' ?>"
-                            class="w-full bg-white border border-slate-200 focus:border-emerald-500 rounded-xl pl-9 pr-3.5 py-2 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition">
+                            placeholder="Intern@123"
+                            value="<?= (isset($_POST['add_supervisor']) && !empty($err)) ? htmlspecialchars($_POST['t_password'] ?? '') : 'Intern@123' ?>"
+                            class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-emerald-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition">
                     </div>
-                    <p class="text-[11px] text-slate-500 mt-1">If left blank, the system will automatically create a unique random password for manual delivery.</p>
                 </div>
 
                 <!-- Footer Actions -->
@@ -3298,7 +3286,7 @@ usort($supervisor_workloads, function ($a, $b) {
                             </div>
                             <div class="flex justify-between items-center py-2.5 bg-amber-50/90 px-3 rounded-xl border border-amber-200 mt-2">
                                 <div>
-                                    <span class="text-amber-800 font-bold block text-[10px] uppercase tracking-wider">Temporary Password:</span>
+                                    <span class="text-amber-800 font-bold block text-[10px] uppercase tracking-wider">Default Password:</span>
                                     <span id="slipTempPwText" class="font-black text-base text-amber-900 font-mono tracking-wider"><?= htmlspecialchars($slip['temp_password'] ?? '') ?></span>
                                 </div>
                                 <button type="button" data-html2canvas-ignore="true" onclick="copySlipPassword('<?= htmlspecialchars($slip['temp_password'] ?? '', ENT_QUOTES) ?>')" class="px-2.5 py-1.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold shadow-xs transition cursor-pointer">
@@ -3310,33 +3298,16 @@ usort($supervisor_workloads, function ($a, $b) {
                         <!-- Security Notice -->
                         <div class="mt-3 p-2.5 bg-indigo-50/70 border border-indigo-100 rounded-xl text-[11px] text-indigo-900 leading-relaxed flex items-start gap-2">
                             <i class="fa-solid fa-shield-halved text-indigo-600 mt-0.5 shrink-0"></i>
-                            <span><strong>First-Login Security:</strong> The user will be required to change this temporary password to their own secret password immediately upon first login.</span>
+                            <span><strong>First-Login Security:</strong> The user will be required to change this default password to their own secret password immediately upon first login.</span>
                         </div>
                     </div>
 
                     <!-- Action Buttons -->
-                    <div class="space-y-2 pt-2">
-                        <!-- Primary Image Copy Button -->
-                        <button type="button" id="btnCopySlipImage" onclick="copySlipAsImage()" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-200 transition cursor-pointer">
-                            <i class="fa-solid fa-image text-sm"></i>
-                            <span>Copy Card (Image for Viber/Telegram)</span>
+                    <div class="pt-2">
+                        <button type="button" onclick="downloadSlipImage('<?= htmlspecialchars($slip['name'] ?? 'user', ENT_QUOTES) ?>')" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-200 transition cursor-pointer" title="Save as PNG image">
+                            <i class="fa-solid fa-download text-sm"></i>
+                            <span>Save Image</span>
                         </button>
-                        
-                        <!-- Secondary Actions Row -->
-                        <div class="grid grid-cols-3 gap-2">
-                            <button type="button" onclick="copyFullCredentials(<?= htmlspecialchars(json_encode($slip), ENT_QUOTES) ?>)" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl border border-slate-200 transition cursor-pointer" title="Copy formatted text">
-                                <i class="fa-solid fa-file-lines text-slate-500"></i>
-                                <span>Copy Text</span>
-                            </button>
-                            <button type="button" onclick="downloadSlipImage('<?= htmlspecialchars($slip['name'] ?? 'user', ENT_QUOTES) ?>')" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-xl border border-emerald-200 transition cursor-pointer" title="Save as PNG image">
-                                <i class="fa-solid fa-download text-emerald-600"></i>
-                                <span>Save Image</span>
-                            </button>
-                            <button type="button" onclick="printCredentialSlip()" class="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl transition cursor-pointer" title="Print slip">
-                                <i class="fa-solid fa-print text-slate-300"></i>
-                                <span>Print</span>
-                            </button>
-                        </div>
                     </div>
                 </div>
 
@@ -3890,8 +3861,8 @@ usort($supervisor_workloads, function ($a, $b) {
                         html += '              <a href="../view_student_history.php?uid=' + encodeURIComponent(st.id) + '" class="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-200/60 shadow-2xs transition text-[11px]" title="View 13-week log history & evaluations">';
                         html += '                <i class="fa-regular fa-file-lines text-[10px]"></i> History';
                         html += '              </a>';
-                        html += '              <a href="../student/print_report.php?student_id=' + encodeURIComponent(st.id) + '&week=1" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition text-[11px]" title="Print official report">';
-                        html += '                <i class="fa-solid fa-print text-[10px]"></i>';
+                        html += '              <a href="../student/print_report.php?student_id=' + encodeURIComponent(st.id) + '&week=1" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition text-[11px]" title="Save official report as PDF">';
+                        html += '                <i class="fa-solid fa-file-pdf text-[10px]"></i>';
                         html += '              </a>';
                         html += '            </div>';
                         html += '          </td>';

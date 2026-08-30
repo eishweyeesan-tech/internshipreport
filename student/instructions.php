@@ -342,14 +342,14 @@ if (!empty($weeks)) {
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
                                         <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
-                                            <span>🖨️</span> တရားဝင် အစီရင်ခံစာ ထုတ်ယူခြင်း (Official Print &amp; PDF Export)
+                                            <span>📄</span> တရားဝင် အစီရင်ခံစာ ထုတ်ယူခြင်း (Official Save as PDF Export)
                                         </h2>
                                         <span class="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-200">Official Report / စာရွက်စာတမ်း</span>
                                     </div>
                                     <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
                                         <li class="flex items-start gap-2">
                                             <span class="text-teal-600 font-bold">•</span>
-                                            <span><strong>Print Report ရယူခြင်း:</strong> <a href="log-history.php" class="text-indigo-600 underline font-semibold hover:text-indigo-800">Log History</a> စာမျက်နှာရှိ <strong>Print</strong> ခလုတ်ကို နှိပ်၍ သက်ဆိုင်ရာ အပတ်စဉ်အလိုက် (သို့မဟုတ် All Weeks အားလုံးအတွက်) တရားဝင် အစီရင်ခံစာ စာမျက်နှာကို ဖွင့်လှစ်နိုင်ပါသည်။</span>
+                                            <span><strong>Save as PDF ရယူခြင်း:</strong> <a href="log-history.php" class="text-indigo-600 underline font-semibold hover:text-indigo-800">Log History</a> စာမျက်နှာရှိ <strong>Save as PDF</strong> ခလုတ်ကို နှိပ်၍ သက်ဆိုင်ရာ အပတ်စဉ်အလိုက် (သို့မဟုတ် All Weeks အားလုံးအတွက်) တရားဝင် အစီရင်ခံစာ စာမျက်နှာကို ဖွင့်လှစ်နိုင်ပါသည်။</span>
                                         </li>
                                         <li class="flex items-start gap-2">
                                             <span class="text-teal-600 font-bold">•</span>
@@ -357,7 +357,7 @@ if (!empty($weeks)) {
                                         </li>
                                         <li class="flex items-start gap-2">
                                             <span class="text-teal-600 font-bold">•</span>
-                                            <span><strong>Hardcopy & PDF:</strong> အစီရင်ခံစာ စာမျက်နှာရှိ <strong>Print / Save PDF</strong> ခလုတ်ကို အသုံးပြု၍ A4 Format ဖြင့် Hardcopy ထုတ်ယူခြင်း သို့မဟုတ် PDF အဖြစ် ကွန်ပျူတာထဲသို့ တိုက်ရိုက် Save ပြုလုပ်နိုင်ပါသည်။</span>
+                                            <span><strong>Hardcopy & PDF:</strong> အစီရင်ခံစာ စာမျက်နှာရှိ <strong>Save as PDF</strong> ခလုတ်ကို အသုံးပြု၍ A4 Format ဖြင့် PDF အဖြစ် ကွန်ပျူတာထဲသို့ တိုက်ရိုက် Save ပြုလုပ်နိုင်ပါသည်။</span>
                                         </li>
                                     </ul>
                                 </div>
