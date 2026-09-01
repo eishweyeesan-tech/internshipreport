@@ -249,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
     } else {
         $grade          = $_POST['grade'] ?? '';
         $comment        = trim($_POST['comment'] ?? '');
-        $signature_type = $_POST['signature_type'] ?? '';
+        $signature_type = 'typed';
         $typed_name     = trim($_POST['typed_name'] ?? '');
 
         $allowed = ['excellent', 'good', 'average', 'needs_improvement'];
@@ -257,22 +257,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_feedback'])) {
         $sig_val = null;
 
         // Validate signature
-        if ($signature_type === 'typed' && !empty($typed_name)) {
+        if (!empty($typed_name)) {
             $sig_ok  = true;
             $sig_val = $typed_name;
-        } elseif ($signature_type === 'uploaded' && isset($_FILES['signature_file']) && $_FILES['signature_file']['error'] === UPLOAD_ERR_OK) {
-            $file = $_FILES['signature_file'];
-            $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-
-            if (in_array($ext, ['jpg', 'jpeg', 'png'], true) && $file['size'] <= 2 * 1024 * 1024) {
-                $safe_name = 'sig_' . $student_id . '_w' . $week_number . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-                $dest = __DIR__ . '/../uploads/signatures/' . $safe_name;
-
-                if (move_uploaded_file($file['tmp_name'], $dest)) {
-                    $sig_ok  = true;
-                    $sig_val = $safe_name;
-                }
-            }
         }
 
         // Determine which field failed for debugging
@@ -769,19 +756,7 @@ $grade_labels = [
                                 <div class="border-t border-slate-100 pt-4">
                                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">✍️ Instructor Signature / လက်မှတ်</label>
 
-                                    <!-- Signature Type Toggle -->
-                                    <div class="flex gap-2 mb-3">
-                                        <button type="button" onclick="switchSigType('typed')" id="btn-typed"
-                                            class="flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600">
-                                            ✏️ Type Name
-                                        </button>
-                                        <button type="button" onclick="switchSigType('uploaded')" id="btn-uploaded"
-                                            class="flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50">
-                                            📷 Upload Image
-                                        </button>
-                                    </div>
-
-                                    <!-- Option 1: Typed Signature -->
+                                    <!-- Typed Signature -->
                                     <div id="sig-typed-fields" class="space-y-3">
                                         <input type="hidden" name="signature_type" value="typed" id="sig_type_input">
 
@@ -796,19 +771,6 @@ $grade_labels = [
                                         <div class="bg-white border-2 border-dashed border-slate-200 rounded-xl p-3 text-center">
                                             <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Signature Preview</p>
                                             <p id="sig_preview" class="sig-preview sig-type-great" style="font-family:'Great Vibes',cursive; font-size:28px; color:#1e293b;">—</p>
-                                        </div>
-                                    </div>
-
-                                    <!-- Option 2: Upload Signature -->
-                                    <div id="sig-upload-fields" class="hidden space-y-2">
-                                        <div class="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 text-center">
-                                            <div class="text-2xl mb-1">📷</div>
-                                            <p class="text-xs text-slate-500 font-semibold mb-2">Upload handwritten signature</p>
-                                            <label class="inline-block px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer transition shadow-2xs">
-                                                Choose JPG/PNG
-                                                <input type="file" name="signature_file" accept=".jpg,.jpeg,.png" class="hidden">
-                                            </label>
-                                            <p class="text-[10px] text-slate-400 mt-1.5">Max 2MB • JPG or PNG only</p>
                                         </div>
                                     </div>
                                 </div>
@@ -914,29 +876,6 @@ $grade_labels = [
             var reviewComment = document.getElementById('review_comment');
             if (reviewComment) reviewComment.removeAttribute('required');
             if (rejectReason) rejectReason.setAttribute('required', 'required');
-        }
-
-        // Toggle signature type buttons styling
-        function switchSigType(type) {
-            var typed = document.getElementById('sig-typed-fields');
-            var upload = document.getElementById('sig-upload-fields');
-            var hidden = document.getElementById('sig_type_input');
-            var btnT = document.getElementById('btn-typed');
-            var btnU = document.getElementById('btn-uploaded');
-
-            if (type === 'typed') {
-                if (typed) typed.classList.remove('hidden');
-                if (upload) upload.classList.add('hidden');
-                if (hidden) hidden.value = 'typed';
-                if (btnT) btnT.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-                if (btnU) btnU.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-            } else {
-                if (typed) typed.classList.add('hidden');
-                if (upload) upload.classList.remove('hidden');
-                if (hidden) hidden.value = 'uploaded';
-                if (btnU) btnU.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-                if (btnT) btnT.className = 'flex-1 px-2 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-            }
         }
     </script>
 

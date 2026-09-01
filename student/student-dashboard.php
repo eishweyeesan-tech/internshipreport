@@ -661,22 +661,8 @@ if ($is_rejected) {
 
 // Handle student signature POST
 if ($reflection_submitted && isset($_POST['save_student_signature'])) {
-    $sig_type = $_POST['student_signature_type'] ?? '';
-    $sig_val  = null;
-
-    if ($sig_type === 'typed' && !empty(trim($_POST['student_typed_name'] ?? ''))) {
-        $sig_val = trim($_POST['student_typed_name']);
-    } elseif ($sig_type === 'uploaded' && isset($_FILES['student_signature_file']) && $_FILES['student_signature_file']['error'] === UPLOAD_ERR_OK) {
-        $file = $_FILES['student_signature_file'];
-        $ext  = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        if (in_array($ext, ['jpg', 'jpeg', 'png'], true) && $file['size'] <= 2 * 1024 * 1024) {
-            $safe_name = 'std_sig_' . $internship_id . '_w' . $selected_week . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-            $dest = __DIR__ . '/../uploads/signatures/' . $safe_name;
-            if (move_uploaded_file($file['tmp_name'], $dest)) {
-                $sig_val = $safe_name;
-            }
-        }
-    }
+    $sig_type = 'typed';
+    $sig_val  = trim($_POST['student_typed_name'] ?? '');
 
     if (!empty($sig_val)) {
         $sig_stmt = $db->prepare("INSERT INTO report_evaluations (student_id, week_number, grade, comment, student_signature_type, student_signature_value, report_status)
@@ -1061,56 +1047,6 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                     }, 2000);
                 }
             });
-        }
-
-        function switchStudentSigType(type) {
-            var typed = document.getElementById('student-sig-typed-fields');
-            var upload = document.getElementById('student-sig-upload-fields');
-            var hidden = document.getElementById('student_sig_type_input');
-            var btnT = document.getElementById('btn-student-typed');
-            var btnU = document.getElementById('btn-student-uploaded');
-            if (type === 'typed') {
-                typed.classList.remove('hidden');
-                upload.classList.add('hidden');
-                hidden.value = 'typed';
-                btnT.className = 'flex-1 px-2 py-1.5 text-label font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-                btnU.className = 'flex-1 px-2 py-1.5 text-label font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-            } else {
-                typed.classList.add('hidden');
-                upload.classList.remove('hidden');
-                hidden.value = 'uploaded';
-                btnU.className = 'flex-1 px-2 py-1.5 text-label font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600';
-                btnT.className = 'flex-1 px-2 py-1.5 text-label font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-            }
-        }
-
-        function previewStudentSig() {
-            var name = document.getElementById('student_typed_name').value;
-            var el = document.getElementById('student_sig_preview');
-            if (el) el.textContent = name || '—';
-        }
-
-        // ── Left-column signature form functions ──
-        function switchLeftSigType(type) {
-            var typed = document.getElementById('left-sig-typed-fields');
-            var upload = document.getElementById('left-sig-upload-fields');
-            var hidden = document.getElementById('left-sig-type-input');
-            var btnT = document.getElementById('left-btn-typed');
-            var btnU = document.getElementById('left-btn-uploaded');
-            if (!typed || !upload || !hidden || !btnT || !btnU) return;
-            if (type === 'typed') {
-                typed.classList.remove('hidden');
-                upload.classList.add('hidden');
-                hidden.value = 'typed';
-                btnT.className = 'px-3 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600 shadow-2xs';
-                btnU.className = 'px-3 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-            } else {
-                typed.classList.add('hidden');
-                upload.classList.remove('hidden');
-                hidden.value = 'uploaded';
-                btnU.className = 'px-3 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600 shadow-2xs';
-                btnT.className = 'px-3 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
-            }
         }
 
         function previewLeftSig() {
@@ -2857,19 +2793,8 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                 </div>
 
                                                 <!-- Clean Signature Input Form -->
-                                                <form method="POST" enctype="multipart/form-data" class="space-y-4">
-                                                    <!-- Toggle Mode -->
-                                                    <div class="flex items-center gap-2">
-                                                        <input type="hidden" name="student_signature_type" value="typed" id="left-sig-type-input">
-                                                        <button type="button" onclick="switchLeftSigType('typed')" id="left-btn-typed"
-                                                            class="px-3.5 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-indigo-600 text-white border-indigo-600 shadow-2xs">
-                                                            ✍️ Type Name
-                                                        </button>
-                                                        <button type="button" onclick="switchLeftSigType('uploaded')" id="left-btn-uploaded"
-                                                            class="px-3.5 py-1.5 text-xs font-bold rounded-lg border transition cursor-pointer bg-white text-slate-600 border-slate-200 hover:bg-slate-50">
-                                                            📁 Upload Image
-                                                        </button>
-                                                    </div>
+                                                <form method="POST" class="space-y-4">
+                                                    <input type="hidden" name="student_signature_type" value="typed" id="left-sig-type-input">
 
                                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                                                         <!-- Left: Input Mode -->
@@ -2882,18 +2807,6 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                                     placeholder="e.g. <?= htmlspecialchars($student_name) ?>"
                                                                     oninput="previewLeftSig()"
                                                                     class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:bg-white transition">
-                                                            </div>
-
-                                                            <!-- Upload Mode -->
-                                                            <div id="left-sig-upload-fields" class="hidden space-y-1.5">
-                                                                <label class="block text-xs font-bold text-slate-700">Upload Handwritten Signature</label>
-                                                                <div class="bg-slate-50/70 border border-dashed border-slate-300 rounded-xl p-3 flex items-center justify-between gap-3">
-                                                                    <label class="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition shrink-0 shadow-2xs">
-                                                                        Choose File
-                                                                        <input type="file" name="student_signature_file" accept=".jpg,.jpeg,.png" class="hidden" onchange="document.getElementById('upload-file-name').textContent = this.files[0] ? this.files[0].name : 'No file chosen'">
-                                                                    </label>
-                                                                    <span id="upload-file-name" class="text-xs text-slate-500 truncate">JPG/PNG (Max 2MB)</span>
-                                                                </div>
                                                             </div>
                                                         </div>
 
