@@ -654,28 +654,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <div>
                                         <label class="block text-xs font-bold text-slate-700 mb-1">Full Name</label>
-                                        <input type="text" name="full_name" value="<?= htmlspecialchars($profile['full_name']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                        <input type="text" name="full_name" value="<?= htmlspecialchars($profile['full_name'] ?? '') ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                     <div>
                                         <label class="block text-xs font-bold text-slate-700 mb-1">Student Roll No</label>
-                                        <input type="text" name="student_roll" value="<?= htmlspecialchars($profile['student_roll']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                        <input type="text" name="student_roll" value="<?= htmlspecialchars($profile['student_roll'] ?? '') ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                     <div>
                                         <label class="block text-xs font-bold text-slate-700 mb-1">Major</label>
-                                        <input type="text" name="major" value="<?= htmlspecialchars($profile['major']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                        <input type="text" name="major" value="<?= htmlspecialchars($profile['major'] ?? '') ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                     <div>
                                         <label class="block text-xs font-bold text-slate-700 mb-1">Phone Number</label>
-                                        <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone']) ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
+                                        <input type="text" name="phone" value="<?= htmlspecialchars($profile['phone'] ?? '') ?>" pattern="[0-9+ .()\/-]{6,30}" maxlength="30" title="Enter a valid Myanmar phone number, e.g. 09-123-456-789" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                 </div>
                                 <!-- Hidden fields to preserve internship data on save -->
-                                <input type="hidden" name="company_name" value="<?= htmlspecialchars($profile['company_name']) ?>">
-                                <input type="hidden" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name']) ?>">
-                                <input type="hidden" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email']) ?>">
-                                <input type="hidden" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone']) ?>">
-                                <input type="hidden" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date']) ?>">
-                                <input type="hidden" name="internship_end_date" value="<?= htmlspecialchars($profile['internship_end_date']) ?>">
+                                <input type="hidden" name="company_name" value="<?= htmlspecialchars($profile['company_name'] ?? '') ?>">
+                                <input type="hidden" name="instructor_name" value="<?= htmlspecialchars($profile['instructor_name'] ?? '') ?>">
+                                <input type="hidden" name="instructor_email" value="<?= htmlspecialchars($profile['instructor_email'] ?? '') ?>">
+                                <input type="hidden" name="instructor_phone" value="<?= htmlspecialchars($profile['instructor_phone'] ?? '') ?>">
+                                <input type="hidden" name="internship_start_date" value="<?= htmlspecialchars($profile['internship_start_date'] ?? '') ?>">
+                                <input type="hidden" name="internship_end_date" value="<?= htmlspecialchars($profile['internship_end_date'] ?? '') ?>">
                                 <div class="flex justify-end pt-2">
                                     <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition active:scale-95 cursor-pointer">Save Changes</button>
                                 </div>

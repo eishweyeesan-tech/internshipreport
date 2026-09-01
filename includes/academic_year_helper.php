@@ -127,35 +127,47 @@ if (!function_exists('ensure_supervisor_assignments_table')) {
 
 if (!function_exists('assign_supervisor_to_year')) {
     function assign_supervisor_to_year($db, $supervisor_id, $academic_year_id, $assigned_by = null) {
-        $stmt = $db->prepare("INSERT IGNORE INTO supervisor_academic_assignments (supervisor_id, academic_year_id, assigned_by) VALUES (?, ?, ?)");
-        $stmt->bind_param("iii", $supervisor_id, $academic_year_id, $assigned_by);
-        $stmt->execute();
-        return $stmt->affected_rows > 0;
+        // Supervisor academic year association is dynamically derived from student_profiles.supervisor_id
+        return true;
     }
 }
 
 if (!function_exists('unassign_supervisor_from_year')) {
     function unassign_supervisor_from_year($db, $supervisor_id, $academic_year_id) {
-        $stmt = $db->prepare("DELETE FROM supervisor_academic_assignments WHERE supervisor_id = ? AND academic_year_id = ?");
-        $stmt->bind_param("ii", $supervisor_id, $academic_year_id);
+        // Unassign all students of this academic year belonging to this supervisor
+        $stmt = $db->prepare("
+            UPDATE student_profiles sp
+            JOIN users stu ON stu.id = sp.user_id AND stu.role = 'student'
+            JOIN academic_years ay ON ay.id = ?
+            SET sp.supervisor_id = NULL
+            WHERE sp.supervisor_id = ?
+              AND (stu.academic_year_id = ay.id OR stu.academic_year = ay.year_label)
+        ");
+        $stmt->bind_param("ii", $academic_year_id, $supervisor_id);
         $stmt->execute();
-        return $stmt->affected_rows > 0;
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+        return $affected >= 0;
     }
 }
 
 if (!function_exists('get_supervisor_assignments')) {
     function get_supervisor_assignments($db, $supervisor_id) {
         $stmt = $db->prepare("
-            SELECT saa.*, ay.year_label, ay.start_date, ay.end_date, ay.status AS year_status
-            FROM supervisor_academic_assignments saa
-            JOIN academic_years ay ON ay.id = saa.academic_year_id
-            WHERE saa.supervisor_id = ?
+            SELECT DISTINCT ay.id AS academic_year_id, ay.year_label, ay.start_date, ay.end_date, ay.status AS year_status,
+                   COUNT(DISTINCT sp.user_id) AS student_count
+            FROM academic_years ay
+            JOIN users stu ON (stu.academic_year_id = ay.id OR stu.academic_year = ay.year_label) AND stu.role = 'student'
+            JOIN student_profiles sp ON sp.user_id = stu.id AND sp.supervisor_id = ?
+            GROUP BY ay.id
             ORDER BY ay.start_date DESC
         ");
         $stmt->bind_param("i", $supervisor_id);
         $stmt->execute();
         $res = $stmt->get_result();
-        return $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+        $rows = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
+        $stmt->close();
+        return $rows;
     }
 }
 
@@ -216,11 +228,17 @@ if (!function_exists('get_total_supervisors_for_year')) {
 
 if (!function_exists('is_supervisor_assigned_to_year')) {
     function is_supervisor_assigned_to_year($db, $supervisor_id, $academic_year_id) {
-        $stmt = $db->prepare("SELECT COUNT(*) FROM supervisor_academic_assignments WHERE supervisor_id = ? AND academic_year_id = ?");
-        $stmt->bind_param("ii", $supervisor_id, $academic_year_id);
+        $stmt = $db->prepare("
+            SELECT COUNT(*) FROM student_profiles sp
+            JOIN users stu ON stu.id = sp.user_id AND stu.role = 'student'
+            JOIN academic_years ay ON ay.id = ?
+            WHERE sp.supervisor_id = ? AND (stu.academic_year_id = ay.id OR stu.academic_year = ay.year_label)
+        ");
+        $stmt->bind_param("ii", $academic_year_id, $supervisor_id);
         $stmt->execute();
         $res = $stmt->get_result();
         $row = $res ? $res->fetch_row() : null;
+        $stmt->close();
         return (int) ($row[0] ?? 0) > 0;
     }
 }

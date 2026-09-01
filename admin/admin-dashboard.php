@@ -94,10 +94,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
                 $ins_u->execute();
                 $uid = (int) $db->insert_id;
 
-                // Create linked initial student_profile record with real full name
-                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, student_roll, full_name) VALUES (?, ?, ?)");
-                $ins_sp->bind_param("iss", $uid, $s_roll, $s_fullname);
-                $ins_sp->execute();
+                $s_supervisor_id = (int) ($_POST['s_supervisor_id'] ?? 0);
+
+                // Create linked initial student_profile record with real full name and optional supervisor
+                if ($s_supervisor_id > 0) {
+                    $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, student_roll, full_name, supervisor_id) VALUES (?, ?, ?, ?)");
+                    $ins_sp->bind_param("issi", $uid, $s_roll, $s_fullname, $s_supervisor_id);
+                    $ins_sp->execute();
+
+                    if ($s_academic_id > 0) {
+                        assign_supervisor_to_year($db, $s_supervisor_id, $s_academic_id, $admin_id);
+                    }
+                } else {
+                    $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, student_roll, full_name) VALUES (?, ?, ?)");
+                    $ins_sp->bind_param("iss", $uid, $s_roll, $s_fullname);
+                    $ins_sp->execute();
+                }
 
                 $_SESSION['credential_slip'] = [
                     'title' => 'Student Account Created',
@@ -457,6 +469,10 @@ if ($selected_year !== '' && $selected_year !== 'all') {
     $res_sup = $db->query("SELECT id, username, email, phone, department, position, status, is_first_login, created_at FROM users WHERE role = 'supervisor' ORDER BY username");
     $supervisors = $res_sup ? $res_sup->fetch_all(MYSQLI_ASSOC) : [];
 }
+
+// All active supervisors for assignment dropdowns
+$all_active_supervisors_q = $db->query("SELECT id, username, email, phone, department, position, status FROM users WHERE role = 'supervisor' AND (status = 'Active' OR status IS NULL OR status = '') ORDER BY username ASC");
+$all_active_supervisors = $all_active_supervisors_q ? $all_active_supervisors_q->fetch_all(MYSQLI_ASSOC) : [];
 
 // Students list with dynamic filters and roll number natural ordering
 $search_student = trim($_GET['search_student'] ?? $_GET['student_search'] ?? '');
@@ -1149,6 +1165,18 @@ usort($supervisor_workloads, function ($a, $b) {
                                         </select>
                                     </div>
 
+                                    <!-- Supervisor Filter Dropdown -->
+                                    <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                                        <label for="filter_student_supervisor" class="text-slate-500 whitespace-nowrap">Supervisor:</label>
+                                        <select id="filter_student_supervisor" onchange="filterStudentBySupervisor(this.value)" class="bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition cursor-pointer">
+                                            <option value="all">All Supervisors</option>
+                                            <option value="unassigned">— Unassigned Only —</option>
+                                            <?php foreach ($all_active_supervisors as $sup): ?>
+                                                <option value="<?= htmlspecialchars($sup['username']) ?>"><?= htmlspecialchars($sup['username']) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+
                                     <!-- Live / Instant Search Bar (No reload) -->
                                     <div class="relative flex-1 sm:w-64 max-w-xs">
                                         <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
@@ -1175,6 +1203,14 @@ usort($supervisor_workloads, function ($a, $b) {
                                     </div>
 
                                     <button type="button"
+                                        id="bulkAssignSupervisorBtn"
+                                        onclick="openBulkAssignSupervisorModal()"
+                                        class="hidden inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow transition-all duration-200 cursor-pointer shrink-0">
+                                        <i class="fa-solid fa-user-check text-xs"></i>
+                                        <span>Assign Supervisor (<span id="selectedStudentCount">0</span>)</span>
+                                    </button>
+
+                                    <button type="button"
                                         onclick="openAddStudentModal()"
                                         class="inline-flex items-center gap-2 px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow transition-all duration-200 cursor-pointer shrink-0">
                                         <i class="fa-solid fa-user-plus text-xs"></i>
@@ -1187,11 +1223,14 @@ usort($supervisor_workloads, function ($a, $b) {
                                     <table class="w-full text-left text-sm">
                                         <thead>
                                             <tr class="bg-slate-50 text-slate-500 font-semibold uppercase tracking-wider text-xs border-b border-slate-100">
+                                                <th class="px-3 py-3 w-10 text-center">
+                                                    <input type="checkbox" id="selectAllStudentsCheckbox" onchange="toggleSelectAllStudents(this)" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" title="Select all visible students">
+                                                </th>
                                                 <th class="px-4 py-3 min-w-[120px]"># / Roll No</th>
                                                 <th class="px-4 py-3 min-w-[220px]">Student Info</th>
-                                                <th class="px-4 py-3 min-w-[170px]">Academic Details</th>
-                                                <th class="px-4 py-3 min-w-[220px]">Internship Assignment</th>
-                                                <th class="px-4 py-3 min-w-[180px]">Status & Actions</th>
+                                                <th class="px-4 py-3 min-w-[160px]">Academic Details</th>
+                                                <th class="px-4 py-3 min-w-[240px]">Internship &amp; Supervisor</th>
+                                                <th class="px-4 py-3 min-w-[180px]">Status &amp; Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="studentTableBody" class="divide-y divide-slate-100">
@@ -1206,11 +1245,12 @@ usort($supervisor_workloads, function ($a, $b) {
                                                     $batch_student_index = 0;
                                                 }
                                                 $batch_student_index++;
+                                                $sup_label = $s['supervisor_name'] ?: 'Unassigned';
                                                 $stu_search_str = strtolower(trim(($s['student_roll'] ?? '') . ' ' . ($s['username'] ?? '') . ' ' . ($s['full_name'] ?? '') . ' ' . ($s['email'] ?? '') . ' ' . ($s['company_name'] ?? '') . ' ' . ($s['job_role'] ?? '') . ' ' . ($s['supervisor_name'] ?? '') . ' ' . $s_ay));
                                             ?>
                                                 <?php if ($is_new_batch && (empty($filter_stu_year) || $filter_stu_year === 'all')): ?>
                                                     <tr class="academic-year-header-row bg-slate-100/90 border-y border-slate-200" data-group-ay="<?= htmlspecialchars($s_ay) ?>">
-                                                        <td colspan="5" class="px-4 py-2 text-xs font-bold text-slate-700">
+                                                        <td colspan="6" class="px-4 py-2 text-xs font-bold text-slate-700">
                                                             <div class="flex items-center gap-2">
                                                                 <span class="p-1 bg-indigo-100 text-indigo-700 rounded text-xs leading-none">🎓</span>
                                                                 <span class="text-slate-500 uppercase tracking-wider text-[11px] font-bold">Academic Batch:</span>
@@ -1219,7 +1259,10 @@ usort($supervisor_workloads, function ($a, $b) {
                                                         </td>
                                                     </tr>
                                                 <?php endif; ?>
-                                                <tr class="student-row hover:bg-slate-50/80 transition-colors" data-search="<?= htmlspecialchars($stu_search_str) ?>" data-ay="<?= htmlspecialchars($s_ay) ?>">
+                                                <tr class="student-row hover:bg-slate-50/80 transition-colors" data-search="<?= htmlspecialchars($stu_search_str) ?>" data-ay="<?= htmlspecialchars($s_ay) ?>" data-sup="<?= htmlspecialchars(strtolower($sup_label)) ?>">
+                                                    <td class="px-3 py-3.5 text-center">
+                                                        <input type="checkbox" class="student-select-cb w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer" value="<?= $s['uid'] ?>" data-name="<?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>" onchange="updateBulkAssignButtonState()">
+                                                    </td>
                                                     <td class="px-4 py-3.5">
                                                         <div class="flex items-center gap-2">
                                                             <span class="student-seq-badge text-slate-400 font-mono text-xs w-5"><?= $batch_student_index ?></span>
@@ -1260,7 +1303,7 @@ usort($supervisor_workloads, function ($a, $b) {
                                                         </div>
                                                     </td>
                                                     <td class="px-4 py-3.5">
-                                                        <div class="flex flex-col gap-1 text-xs">
+                                                        <div class="flex flex-col gap-1.5 text-xs">
                                                             <div class="flex items-center gap-1.5">
                                                                 <i class="fa-regular fa-building text-[11px] text-slate-400"></i>
                                                                 <span class="font-bold text-slate-800"><?= htmlspecialchars($s['company_name'] ?: 'No Company Assigned') ?></span>
@@ -1271,10 +1314,21 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                     <span><?= htmlspecialchars($s['job_role']) ?></span>
                                                                 </div>
                                                             <?php endif; ?>
-                                                            <div class="text-slate-500 flex items-center gap-1.5">
-                                                                <i class="fa-solid fa-chalkboard-user text-[11px] text-slate-400"></i>
-                                                                <span class="text-slate-500">Supervisor:</span>
-                                                                <span class="font-medium text-slate-700"><?= htmlspecialchars($s['supervisor_name'] ?: 'Unassigned') ?></span>
+                                                            <div class="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-100">
+                                                                <div class="flex items-center gap-1.5 min-w-0">
+                                                                    <i class="fa-solid fa-chalkboard-user text-[11px] <?= !empty($s['supervisor_name']) ? 'text-emerald-600' : 'text-slate-400' ?>"></i>
+                                                                    <span class="text-slate-500 text-[11px]">Supervisor:</span>
+                                                                    <span id="stuSupBadge_<?= $s['uid'] ?>" class="font-bold text-[11px] <?= !empty($s['supervisor_name']) ? 'text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-1.5 py-0.5 rounded' : 'text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded' ?>">
+                                                                        <?= htmlspecialchars($s['supervisor_name'] ?: 'Unassigned') ?>
+                                                                    </span>
+                                                                </div>
+                                                                <button type="button"
+                                                                    onclick="openAssignSingleStudentModal(<?= (int)$s['uid'] ?>, '<?= htmlspecialchars($s['full_name'] ?: $s['username'], ENT_QUOTES) ?>', '<?= htmlspecialchars($s['student_roll'] ?: $s['username'], ENT_QUOTES) ?>', <?= (int)($s['supervisor_id'] ?? 0) ?>)"
+                                                                    class="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 text-[11px] font-bold rounded border border-slate-200 hover:border-emerald-300 transition cursor-pointer shrink-0"
+                                                                    title="Assign or change faculty supervisor">
+                                                                    <i class="fa-solid fa-user-pen text-[10px]"></i>
+                                                                    <span><?= !empty($s['supervisor_name']) ? 'Change' : 'Assign' ?></span>
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     </td>
@@ -1312,7 +1366,7 @@ usort($supervisor_workloads, function ($a, $b) {
                                                 </tr>
                                             <?php endforeach; ?>
                                             <tr id="noStudentsMatchRow" class="hidden">
-                                                <td colspan="5" class="px-4 py-8 text-center text-xs text-slate-400">No student records found matching your search.</td>
+                                                <td colspan="6" class="px-4 py-8 text-center text-xs text-slate-400">No student records found matching your search.</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -1453,6 +1507,13 @@ usort($supervisor_workloads, function ($a, $b) {
                                                                 <?php endif; ?>
                                                             </div>
                                                             <div class="flex items-center gap-1.5">
+                                                                <button type="button"
+                                                                    onclick="openAssignStudentsToSupervisorModal(<?= (int)$sup['id'] ?>, '<?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>', '<?= htmlspecialchars($sup['department'] ?? '', ENT_QUOTES) ?>')"
+                                                                    class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg border border-emerald-200/70 shadow-xs transition cursor-pointer"
+                                                                    title="Assign students to this supervisor">
+                                                                    <i class="fa-solid fa-user-plus text-xs"></i>
+                                                                    <span>Assign Students</span>
+                                                                </button>
                                                                 <button type="button"
                                                                     onclick="openSupervisorHistoryModal(<?= (int)$sup['id'] ?>, '<?= htmlspecialchars($sup['username'], ENT_QUOTES) ?>', '<?= htmlspecialchars($sup['email'], ENT_QUOTES) ?>')"
                                                                     class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200/70 shadow-xs transition cursor-pointer"
@@ -3523,7 +3584,598 @@ usort($supervisor_workloads, function ($a, $b) {
         </div>
     </div>
 
+    <!-- ════ ASSIGN SINGLE STUDENT SUPERVISOR MODAL ════ -->
+    <div id="singleStudentAssignModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden" role="dialog" aria-modal="true">
+        <div class="relative w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+            <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 via-white to-teal-50 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-black shrink-0 shadow-2xs">
+                        👨‍🏫
+                    </div>
+                    <div>
+                        <h3 class="text-base font-black text-slate-800">Assign Faculty Supervisor</h3>
+                        <p id="singleAssignStudentName" class="text-xs text-slate-500 font-medium truncate mt-0.5">Student</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeAssignSingleStudentModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer shrink-0">✕</button>
+            </div>
+            <form id="singleStudentAssignForm" onsubmit="handleSingleStudentAssignSubmit(event)" class="p-6 space-y-4">
+                <input type="hidden" id="singleAssignStudentId" value="">
+                <div>
+                    <label for="singleAssignSupervisorSelect" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Select Faculty Supervisor
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-emerald-600">
+                            <i class="fa-solid fa-chalkboard-user text-xs"></i>
+                        </span>
+                        <select id="singleAssignSupervisorSelect" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 shadow-2xs transition cursor-pointer">
+                            <option value="0">— Remove / Unassign Supervisor —</option>
+                            <?php foreach ($all_active_supervisors as $sup): ?>
+                                <option value="<?= (int)$sup['id'] ?>">
+                                    <?= htmlspecialchars($sup['username']) ?><?= !empty($sup['department']) ? ' — ' . htmlspecialchars($sup['department']) : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="p-3 bg-emerald-50/80 rounded-xl border border-emerald-100 flex items-start gap-2.5 text-xs text-emerald-900 leading-relaxed">
+                    <i class="fa-solid fa-circle-info text-emerald-600 mt-0.5 shrink-0 text-sm"></i>
+                    <span>Assigning a supervisor will grant them immediate access to view this student's internship logs, attendance, and weekly reflection reports.</span>
+                </div>
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                    <button type="button" onclick="closeAssignSingleStudentModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">Cancel</button>
+                    <button type="submit" id="saveSingleAssignBtn" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer">
+                        Save Assignment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ════ BULK ASSIGN SUPERVISOR MODAL ════ -->
+    <div id="bulkAssignSupervisorModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden" role="dialog" aria-modal="true">
+        <div class="relative w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+            <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 via-white to-emerald-50 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-lg font-black shrink-0 shadow-2xs">
+                        👥
+                    </div>
+                    <div>
+                        <h3 class="text-base font-black text-slate-800">Bulk Assign Supervisor</h3>
+                        <p class="text-xs text-slate-500 font-medium mt-0.5"><span id="bulkAssignCountText" class="font-bold text-indigo-600">0</span> student(s) selected</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeBulkAssignSupervisorModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer shrink-0">✕</button>
+            </div>
+            <form id="bulkAssignSupervisorForm" onsubmit="handleBulkAssignSupervisorSubmit(event)" class="p-6 space-y-4">
+                <div>
+                    <label for="bulkAssignSupervisorSelect" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Assign Selected Students To:
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-emerald-600">
+                            <i class="fa-solid fa-chalkboard-user text-xs"></i>
+                        </span>
+                        <select id="bulkAssignSupervisorSelect" required class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-2xs transition cursor-pointer">
+                            <option value="">— Select Faculty Supervisor —</option>
+                            <option value="0">— Remove / Unassign Supervisor —</option>
+                            <?php foreach ($all_active_supervisors as $sup): ?>
+                                <option value="<?= (int)$sup['id'] ?>">
+                                    <?= htmlspecialchars($sup['username']) ?><?= !empty($sup['department']) ? ' — ' . htmlspecialchars($sup['department']) : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div id="bulkSelectedStudentsPreview" class="max-h-36 overflow-y-auto bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs text-slate-600 space-y-1">
+                    <!-- Populated by JS -->
+                </div>
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                    <button type="button" onclick="closeBulkAssignSupervisorModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">Cancel</button>
+                    <button type="submit" id="saveBulkAssignBtn" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer">
+                        Apply to Selected Students
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ════ ASSIGN STUDENTS TO SUPERVISOR MODAL ════ -->
+    <div id="assignStudentsToSupervisorModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 hidden" role="dialog" aria-modal="true">
+        <div class="relative w-full max-w-3xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-150">
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 via-white to-teal-50 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-black shrink-0 shadow-2xs">
+                        👨‍🏫
+                    </div>
+                    <div>
+                        <h3 class="text-base font-black text-slate-800">Assign Students to Supervisor</h3>
+                        <p id="supAssignModalSubtitle" class="text-xs text-slate-500 font-medium mt-0.5">Supervisor Name</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeAssignStudentsToSupervisorModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition cursor-pointer shrink-0">✕</button>
+            </div>
+
+            <!-- Filter & Search Bar -->
+            <div class="px-6 py-3 border-b border-slate-100 bg-slate-50/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div class="flex items-center gap-3 flex-wrap flex-1">
+                    <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                        <label for="supAssignYearFilter" class="text-slate-500 whitespace-nowrap">Academic Year:</label>
+                        <select id="supAssignYearFilter" onchange="loadStudentsForSupervisorAssignment()" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition cursor-pointer">
+                            <option value="all">All Academic Years</option>
+                            <?php foreach ($academic_years as $ay): ?>
+                                <option value="<?= htmlspecialchars($ay) ?>" <?= ($ay === $current_active_year_label) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($ay) ?><?= ($ay === $current_active_year_label) ? ' (Active)' : '' ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="relative flex-1 sm:w-56 max-w-xs">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                        </span>
+                        <input type="text" id="supAssignStudentSearch" oninput="filterSupAssignStudentsList(this.value)" placeholder="Search roll no, name..." class="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 transition">
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 text-xs font-bold shrink-0">
+                    <button type="button" onclick="selectAllSupAssignStudents(true)" class="text-emerald-700 hover:text-emerald-800 hover:underline">Select All</button>
+                    <span class="text-slate-300">|</span>
+                    <button type="button" onclick="selectAllSupAssignStudents(false)" class="text-slate-500 hover:text-slate-700 hover:underline">Deselect All</button>
+                </div>
+            </div>
+
+            <!-- Student Roster Table -->
+            <div class="p-6 overflow-y-auto flex-1" style="scrollbar-gutter: stable;">
+                <input type="hidden" id="supAssignModalSupervisorId" value="">
+                <div id="supAssignStudentsLoading" class="p-10 text-center">
+                    <div class="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                    <p class="text-xs font-bold text-slate-500">Loading students roster...</p>
+                </div>
+                <div id="supAssignStudentsTableWrap" class="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs hidden">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[11px] sticky top-0 border-b border-slate-100">
+                            <tr>
+                                <th class="px-3 py-2.5 w-10 text-center">Assign</th>
+                                <th class="px-3 py-2.5">Roll No</th>
+                                <th class="px-3 py-2.5">Student Name</th>
+                                <th class="px-3 py-2.5">Academic Batch</th>
+                                <th class="px-3 py-2.5">Company &amp; Role</th>
+                                <th class="px-3 py-2.5">Current Supervisor</th>
+                            </tr>
+                        </thead>
+                        <tbody id="supAssignStudentsTbody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+                <div id="supAssignStudentsEmpty" class="hidden p-8 text-center bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                    <p class="text-xs font-bold text-slate-600">No students found</p>
+                    <p class="text-[11px] text-slate-400 mt-0.5">Try selecting a different academic year or clearing your search.</p>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+                <p class="text-xs text-slate-500 font-medium">
+                    <span id="supAssignSelectedCount" class="font-bold text-emerald-700">0</span> student(s) selected for this supervisor.
+                </p>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="closeAssignStudentsToSupervisorModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer">Cancel</button>
+                    <button type="button" id="saveSupAssignBtn" onclick="saveStudentsToSupervisorAssignment()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer">
+                        Save Assignments
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
+        // ═══ STUDENT ↔ SUPERVISOR ASSIGNMENT HANDLERS ════════════════════
+        function filterStudentBySupervisor(supName) {
+            supName = (supName || '').toLowerCase().trim();
+            var rows = document.querySelectorAll('.student-row');
+            var visibleCount = 0;
+            
+            rows.forEach(function(row) {
+                var rowSup = (row.getAttribute('data-sup') || '').toLowerCase().trim();
+                var match = false;
+                if (!supName || supName === 'all') {
+                    match = true;
+                } else if (supName === 'unassigned') {
+                    match = (rowSup === 'unassigned' || rowSup === '');
+                } else {
+                    match = (rowSup.indexOf(supName) !== -1);
+                }
+                
+                if (match) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            var noMatchRow = document.getElementById('noStudentsMatchRow');
+            if (noMatchRow) {
+                if (visibleCount === 0 && rows.length > 0) {
+                    noMatchRow.classList.remove('hidden');
+                } else {
+                    noMatchRow.classList.add('hidden');
+                }
+            }
+            
+            var headers = document.querySelectorAll('.academic-year-header-row');
+            headers.forEach(function(hdr) {
+                var ay = hdr.getAttribute('data-group-ay');
+                var anyVisible = document.querySelector('.student-row[data-ay="' + ay + '"]:not([style*="display: none"])');
+                hdr.style.display = anyVisible ? '' : 'none';
+            });
+            
+            var countDisplay = document.getElementById('stuCountDisplay');
+            if (countDisplay) countDisplay.textContent = visibleCount + ' visible';
+            
+            updateBulkAssignButtonState();
+        }
+
+        function toggleSelectAllStudents(masterCb) {
+            var cbs = document.querySelectorAll('.student-select-cb');
+            var isChecked = masterCb.checked;
+            cbs.forEach(function(cb) {
+                var row = cb.closest('tr');
+                if (row && row.style.display !== 'none') {
+                    cb.checked = isChecked;
+                }
+            });
+            updateBulkAssignButtonState();
+        }
+
+        function updateBulkAssignButtonState() {
+            var selected = document.querySelectorAll('.student-select-cb:checked');
+            var btn = document.getElementById('bulkAssignSupervisorBtn');
+            var countSpan = document.getElementById('selectedStudentCount');
+            var masterCb = document.getElementById('selectAllStudentsCheckbox');
+            
+            if (countSpan) countSpan.textContent = selected.length;
+            if (btn) {
+                if (selected.length > 0) {
+                    btn.classList.remove('hidden');
+                } else {
+                    btn.classList.add('hidden');
+                }
+            }
+            if (masterCb) {
+                var allVisible = document.querySelectorAll('.student-row:not([style*="display: none"]) .student-select-cb');
+                masterCb.checked = (allVisible.length > 0 && selected.length === allVisible.length);
+            }
+        }
+
+        function openAssignSingleStudentModal(studentId, studentName, rollNo, currentSupId) {
+            var modal = document.getElementById('singleStudentAssignModal');
+            if (!modal) return;
+            document.getElementById('singleAssignStudentId').value = studentId;
+            document.getElementById('singleAssignStudentName').textContent = (studentName || 'Student') + ' (' + (rollNo || '') + ')';
+            var select = document.getElementById('singleAssignSupervisorSelect');
+            if (select) select.value = currentSupId || '0';
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function closeAssignSingleStudentModal() {
+            var modal = document.getElementById('singleStudentAssignModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        function handleSingleStudentAssignSubmit(e) {
+            e.preventDefault();
+            var studentId = document.getElementById('singleAssignStudentId').value;
+            var supervisorId = document.getElementById('singleAssignSupervisorSelect').value;
+            var btn = document.getElementById('saveSingleAssignBtn');
+            
+            btn.disabled = true;
+            btn.textContent = 'Saving...';
+            
+            var fd = new FormData();
+            fd.append('action', 'assign_student_to_supervisor');
+            fd.append('student_id', studentId);
+            fd.append('supervisor_id', supervisorId);
+            
+            fetch('api/assign_supervisor.php', {
+                method: 'POST',
+                body: fd
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                btn.textContent = 'Save Assignment';
+                if (data.success) {
+                    closeAssignSingleStudentModal();
+                    showToast('success', data.message || 'Supervisor assigned successfully.');
+                    var badge = document.getElementById('stuSupBadge_' + studentId);
+                    if (badge) {
+                        if (data.supervisor_id > 0) {
+                            badge.className = 'font-bold text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-1.5 py-0.5 rounded';
+                            badge.textContent = data.supervisor_name;
+                        } else {
+                            badge.className = 'font-bold text-[11px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded';
+                            badge.textContent = 'Unassigned';
+                        }
+                    }
+                    setTimeout(function() { window.location.reload(); }, 900);
+                } else {
+                    showToast('error', data.error || 'Failed to assign supervisor.');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.textContent = 'Save Assignment';
+                showToast('error', 'Network error.');
+            });
+        }
+
+        function openBulkAssignSupervisorModal() {
+            var selected = document.querySelectorAll('.student-select-cb:checked');
+            if (selected.length === 0) {
+                showToast('error', 'Please select at least one student.');
+                return;
+            }
+            var modal = document.getElementById('bulkAssignSupervisorModal');
+            if (!modal) return;
+            
+            document.getElementById('bulkAssignCountText').textContent = selected.length;
+            var preview = document.getElementById('bulkSelectedStudentsPreview');
+            var html = '';
+            selected.forEach(function(cb) {
+                var name = cb.getAttribute('data-name') || ('Student #' + cb.value);
+                html += '<div class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span><span class="font-medium">' + escHtml(name) + '</span></div>';
+            });
+            if (preview) preview.innerHTML = html;
+            
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+        }
+
+        function closeBulkAssignSupervisorModal() {
+            var modal = document.getElementById('bulkAssignSupervisorModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        function handleBulkAssignSupervisorSubmit(e) {
+            e.preventDefault();
+            var selected = document.querySelectorAll('.student-select-cb:checked');
+            var studentIds = [];
+            selected.forEach(function(cb) { studentIds.push(parseInt(cb.value)); });
+            
+            var supervisorId = document.getElementById('bulkAssignSupervisorSelect').value;
+            if (supervisorId === '') {
+                showToast('error', 'Please select a supervisor option.');
+                return;
+            }
+            
+            var btn = document.getElementById('saveBulkAssignBtn');
+            btn.disabled = true;
+            btn.textContent = 'Applying...';
+            
+            var fd = new FormData();
+            fd.append('action', 'bulk_assign_students');
+            fd.append('supervisor_id', supervisorId);
+            fd.append('student_ids', JSON.stringify(studentIds));
+            
+            fetch('api/assign_supervisor.php', {
+                method: 'POST',
+                body: fd
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                btn.textContent = 'Apply to Selected Students';
+                if (data.success) {
+                    closeBulkAssignSupervisorModal();
+                    showToast('success', data.message || 'Students updated successfully.');
+                    setTimeout(function() { window.location.reload(); }, 900);
+                } else {
+                    showToast('error', data.error || 'Failed to bulk assign.');
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.textContent = 'Apply to Selected Students';
+                showToast('error', 'Network error.');
+            });
+        }
+
+        var _currentAssignModalSupId = 0;
+        var _currentAssignModalStudents = [];
+
+        function openAssignStudentsToSupervisorModal(supervisorId, supervisorName, department) {
+            var modal = document.getElementById('assignStudentsToSupervisorModal');
+            if (!modal) return;
+            _currentAssignModalSupId = supervisorId;
+            document.getElementById('supAssignModalSupervisorId').value = supervisorId;
+            document.getElementById('supAssignModalSubtitle').textContent = (supervisorName || 'Supervisor') + (department ? ' — ' + department : '');
+            
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+            
+            loadStudentsForSupervisorAssignment();
+        }
+
+        function closeAssignStudentsToSupervisorModal() {
+            var modal = document.getElementById('assignStudentsToSupervisorModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.body.classList.remove('overflow-hidden');
+            }
+        }
+
+        function loadStudentsForSupervisorAssignment() {
+            var yearFilter = document.getElementById('supAssignYearFilter') ? document.getElementById('supAssignYearFilter').value : 'all';
+            var loading = document.getElementById('supAssignStudentsLoading');
+            var tableWrap = document.getElementById('supAssignStudentsTableWrap');
+            var emptyEl = document.getElementById('supAssignStudentsEmpty');
+            var tbody = document.getElementById('supAssignStudentsTbody');
+            
+            if (loading) loading.classList.remove('hidden');
+            if (tableWrap) tableWrap.classList.add('hidden');
+            if (emptyEl) emptyEl.classList.add('hidden');
+            
+            var fd = new FormData();
+            fd.append('action', 'get_students_for_assignment');
+            fd.append('academic_year', yearFilter);
+            
+            fetch('api/assign_supervisor.php', {
+                method: 'POST',
+                body: fd
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (loading) loading.classList.add('hidden');
+                if (data.success && data.students && data.students.length > 0) {
+                    _currentAssignModalStudents = data.students;
+                    renderSupAssignStudents(data.students);
+                } else {
+                    _currentAssignModalStudents = [];
+                    if (tbody) tbody.innerHTML = '';
+                    if (emptyEl) emptyEl.classList.remove('hidden');
+                }
+            })
+            .catch(function() {
+                if (loading) loading.classList.add('hidden');
+                if (emptyEl) emptyEl.classList.remove('hidden');
+            });
+        }
+
+        function renderSupAssignStudents(students) {
+            var tbody = document.getElementById('supAssignStudentsTbody');
+            var tableWrap = document.getElementById('supAssignStudentsTableWrap');
+            var emptyEl = document.getElementById('supAssignStudentsEmpty');
+            if (!tbody) return;
+            
+            if (!students || students.length === 0) {
+                tbody.innerHTML = '';
+                if (tableWrap) tableWrap.classList.add('hidden');
+                if (emptyEl) emptyEl.classList.remove('hidden');
+                return;
+            }
+            
+            if (tableWrap) tableWrap.classList.remove('hidden');
+            if (emptyEl) emptyEl.classList.add('hidden');
+            
+            var html = '';
+            students.forEach(function(s) {
+                var isAssignedToThis = (parseInt(s.supervisor_id) === _currentAssignModalSupId);
+                var hasOtherSup = (s.supervisor_id && !isAssignedToThis);
+                var searchStr = ((s.student_roll || '') + ' ' + (s.full_name || '') + ' ' + (s.username || '') + ' ' + (s.company_name || '') + ' ' + (s.supervisor_name || '')).toLowerCase();
+                
+                html += '<tr class="sup-assign-stu-row hover:bg-slate-50 transition" data-search="' + escAttr(searchStr) + '">';
+                html += '  <td class="px-3 py-2.5 text-center">';
+                html += '    <input type="checkbox" class="sup-assign-cb w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer" value="' + s.id + '" ' + (isAssignedToThis ? 'checked' : '') + ' onchange="updateSupAssignCount()">';
+                html += '  </td>';
+                html += '  <td class="px-3 py-2.5 font-mono font-bold text-slate-800">' + escHtml(s.student_roll || s.username) + '</td>';
+                html += '  <td class="px-3 py-2.5 font-bold text-slate-800">' + escHtml(s.full_name || s.username) + '</td>';
+                html += '  <td class="px-3 py-2.5 font-mono text-indigo-700 font-bold">' + escHtml(s.academic_year || '—') + '</td>';
+                html += '  <td class="px-3 py-2.5 text-slate-700 font-medium truncate max-w-[140px]">' + escHtml(s.company_name || 'Unassigned') + '</td>';
+                html += '  <td class="px-3 py-2.5">';
+                if (isAssignedToThis) {
+                    html += '    <span class="inline-flex items-center gap-1 font-bold text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">Current</span>';
+                } else if (hasOtherSup) {
+                    html += '    <span class="inline-flex items-center gap-1 text-[10px] text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded" title="Currently assigned to ' + escAttr(s.supervisor_name) + '">' + escHtml(s.supervisor_name) + '</span>';
+                } else {
+                    html += '    <span class="text-slate-400 text-[10px]">Unassigned</span>';
+                }
+                html += '  </td>';
+                html += '</tr>';
+            });
+            
+            tbody.innerHTML = html;
+            updateSupAssignCount();
+        }
+
+        function filterSupAssignStudentsList(query) {
+            query = (query || '').toLowerCase().trim();
+            var rows = document.querySelectorAll('.sup-assign-stu-row');
+            rows.forEach(function(r) {
+                var s = r.getAttribute('data-search') || '';
+                r.style.display = (!query || s.indexOf(query) !== -1) ? '' : 'none';
+            });
+        }
+
+        function selectAllSupAssignStudents(checkAll) {
+            var cbs = document.querySelectorAll('.sup-assign-cb');
+            cbs.forEach(function(cb) {
+                var row = cb.closest('tr');
+                if (row && row.style.display !== 'none') {
+                    cb.checked = checkAll;
+                }
+            });
+            updateSupAssignCount();
+        }
+
+        function updateSupAssignCount() {
+            var checked = document.querySelectorAll('.sup-assign-cb:checked');
+            var span = document.getElementById('supAssignSelectedCount');
+            if (span) span.textContent = checked.length;
+        }
+
+        function saveStudentsToSupervisorAssignment() {
+            var allCheckboxes = document.querySelectorAll('.sup-assign-cb');
+            var assignStudentIds = [];
+            var unassignStudentIds = [];
+            
+            allCheckboxes.forEach(function(cb) {
+                var sid = parseInt(cb.value);
+                if (cb.checked) {
+                    assignStudentIds.push(sid);
+                } else {
+                    var row = cb.closest('tr');
+                    if (row && row.textContent.indexOf('Current') !== -1) {
+                        unassignStudentIds.push(sid);
+                    }
+                }
+            });
+            
+            var btn = document.getElementById('saveSupAssignBtn');
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Saving...';
+            }
+            
+            var p1 = assignStudentIds.length > 0 ? fetch('api/assign_supervisor.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=bulk_assign_students&supervisor_id=' + encodeURIComponent(_currentAssignModalSupId) + '&student_ids=' + encodeURIComponent(JSON.stringify(assignStudentIds))
+            }).then(function(r) { return r.json(); }) : Promise.resolve({ success: true });
+            
+            var p2 = unassignStudentIds.length > 0 ? fetch('api/assign_supervisor.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'action=bulk_assign_students&supervisor_id=0&student_ids=' + encodeURIComponent(JSON.stringify(unassignStudentIds))
+            }).then(function(r) { return r.json(); }) : Promise.resolve({ success: true });
+            
+            Promise.all([p1, p2])
+            .then(function() {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Assignments';
+                }
+                closeAssignStudentsToSupervisorModal();
+                showToast('success', 'Supervisor student assignments saved successfully.');
+                setTimeout(function() { window.location.reload(); }, 900);
+            })
+            .catch(function() {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = 'Save Assignments';
+                }
+                showToast('error', 'Failed to save assignments.');
+            });
+        }
+
         // ═══ ENHANCED SUPERVISOR HISTORY MODAL ═════════════════════════════
         var _currentModalSupId = 0;
         var _currentModalSupStatus = 'Active';
