@@ -55,21 +55,14 @@ $selected_academic_id = ($selected_year !== 'all' && isset($ay_label_to_id[$sele
 
 // ── Add Student ──────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
-    $s_name          = trim($_POST['s_name'] ?? '');
     $s_roll          = trim($_POST['s_roll'] ?? '');
-    $s_major         = trim($_POST['s_major'] ?? '');
+    $s_fullname      = trim($_POST['s_fullname'] ?? '');
     $s_email         = trim($_POST['s_email'] ?? '');
-    $s_company_id    = (int) ($_POST['s_company_id'] ?? 0);
-    $s_supervisor_id = (int) ($_POST['s_supervisor_id'] ?? 0);
-    $s_instructor       = trim($_POST['s_instructor'] ?? '');
-    $s_instructor_email = trim($_POST['s_instructor_email'] ?? '');
-    $s_start            = trim($_POST['s_start_date'] ?? '');
-    $s_end              = trim($_POST['s_end_date'] ?? '');
-    $s_academic         = trim($_POST['s_academic_year'] ?? '') ?: $current_active_year_label;
-    $s_password         = trim($_POST['s_password'] ?? '') ?: $default_account_password;
+    $s_academic      = trim($_POST['s_academic_year'] ?? '') ?: $current_active_year_label;
+    $s_password      = trim($_POST['s_password'] ?? '') ?: $default_account_password;
 
-    if (empty($s_name) || empty($s_roll) || empty($s_email)) {
-        $err = 'Name, Roll No, and Email are required.';
+    if (empty($s_roll) || empty($s_fullname) || empty($s_email)) {
+        $err = 'Roll Number, Student Full Name, and Gmail Address are required.';
     } elseif ($email_err = validate_gmail_address($s_email)) {
         $err = $email_err;
     } elseif ($pw_err = validate_strong_password($s_password)) {
@@ -95,47 +88,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
             if ($res && $res->fetch_row()) {
                 $err = 'This Roll Number already exists for the selected Academic Year.';
             } else {
-                // Look up company name from selected company_id
-                $company_name = null;
-                if ($s_company_id > 0) {
-                    $cn = $db->prepare("SELECT company_name FROM companies WHERE id = ?");
-                    $cn->bind_param("i", $s_company_id);
-                    $cn->execute();
-                    $res_c = $cn->get_result();
-                    $row_c = $res_c ? $res_c->fetch_row() : null;
-                    $company_name = $row_c[0] ?? null;
-                }
-
-                $s_start_val            = !empty($s_start) ? $s_start : null;
-                $s_end_val              = !empty($s_end) ? $s_end : null;
-                $s_company_id_val       = ($s_company_id > 0) ? $s_company_id : null;
-                $s_supervisor_id_val    = ($s_supervisor_id > 0) ? $s_supervisor_id : null;
-                $s_major_val            = !empty($s_major) ? $s_major : null;
-                $s_instructor_val       = !empty($s_instructor) ? $s_instructor : null;
-                $s_instructor_email_val = !empty($s_instructor_email) ? $s_instructor_email : null;
-
                 $hash = password_hash($s_password, PASSWORD_DEFAULT);
                 $ins_u = $db->prepare("INSERT INTO users (username, email, password, role, is_first_login, academic_year, academic_year_id) VALUES (?, ?, ?, 'student', 1, ?, ?)");
                 $ins_u->bind_param("ssssi", $s_roll, $s_email, $hash, $s_academic, $s_academic_id);
                 $ins_u->execute();
                 $uid = (int) $db->insert_id;
 
-                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, full_name, student_roll, major, company_id, company_name, supervisor_id, instructor_name, instructor_email, internship_start_date, internship_end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-                $ins_sp->bind_param("isssisissss", $uid, $s_name, $s_roll, $s_major_val, $s_company_id_val, $company_name, $s_supervisor_id_val, $s_instructor_val, $s_instructor_email_val, $s_start_val, $s_end_val);
+                // Create linked initial student_profile record with real full name
+                $ins_sp = $db->prepare("INSERT INTO student_profiles (user_id, student_roll, full_name) VALUES (?, ?, ?)");
+                $ins_sp->bind_param("iss", $uid, $s_roll, $s_fullname);
                 $ins_sp->execute();
 
                 $_SESSION['credential_slip'] = [
                     'title' => 'Student Account Created',
-                    'name' => $s_name,
+                    'name' => $s_fullname,
                     'roll' => $s_roll,
-                    'major' => $s_major ?: '—',
+                    'major' => '—',
                     'email' => $s_email,
                     'role' => 'Student',
                     'academic_year' => $s_academic,
                     'temp_password' => $s_password
                 ];
 
-                $msg = "Student \"{$s_name}\" created successfully. Default password: {$s_password}";
+                $msg = "Student account \"{$s_fullname} ({$s_roll})\" created successfully. Default password: {$s_password}";
             }
         }
     }
@@ -2574,7 +2549,8 @@ usort($supervisor_workloads, function ($a, $b) {
                     staffEmailLink.href = u.email ? 'mailto:' + u.email : '#';
 
                     document.getElementById('detailStaffPhone').textContent = u.phone || '—';
-                    document.getElementById('detailStaffDept').textContent = u.department || '—';
+                    const deptEl = document.getElementById('detailStaffDept');
+                    if (deptEl) deptEl.textContent = u.department || '—';
                     document.getElementById('detailStaffPos').textContent = u.position || (u.role === 'admin' ? 'Administrator' : 'Supervisor');
                     document.getElementById('detailStaffYear').textContent = u.academic_year || 'All Batches';
                     document.getElementById('detailStaffDate').textContent = u.created_at || '—';
@@ -2596,7 +2572,7 @@ usort($supervisor_workloads, function ($a, $b) {
             modal.classList.remove('hidden');
             document.body.classList.add('overflow-hidden');
             setTimeout(function() {
-                const input = document.getElementById('modal_s_name');
+                const input = document.getElementById('modal_s_roll');
                 if (input) input.focus();
             }, 60);
         }
@@ -2740,7 +2716,9 @@ usort($supervisor_workloads, function ($a, $b) {
                     let copied = false;
                     if (navigator.clipboard && window.ClipboardItem) {
                         try {
-                            const item = new ClipboardItem({ 'image/png': blob });
+                            const item = new ClipboardItem({
+                                'image/png': blob
+                            });
                             await navigator.clipboard.write([item]);
                             copied = true;
                         } catch (clipErr) {
@@ -2954,7 +2932,7 @@ usort($supervisor_workloads, function ($a, $b) {
 
     <!-- ════ ADD NEW STUDENT MODAL ════ -->
     <div id="addStudentModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto hidden" role="dialog" aria-modal="true" aria-labelledby="addStudentModalTitle">
-        <div class="relative w-full max-w-2xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+        <div class="relative w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
             <!-- Modal Header -->
             <div class="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50/70 via-white to-blue-50/70 flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-3 min-w-0">
@@ -2962,8 +2940,8 @@ usort($supervisor_workloads, function ($a, $b) {
                         🎓
                     </div>
                     <div class="min-w-0">
-                        <h3 id="addStudentModalTitle" class="text-base font-black text-slate-800">Register New Student</h3>
-                        <p class="text-xs text-slate-400 font-medium truncate mt-0.5">Add a student account, assign partner company and university supervisor</p>
+                        <h3 id="addStudentModalTitle" class="text-base font-black text-slate-800">Register Student Account</h3>
+                        <p class="text-xs text-slate-400 font-medium truncate mt-0.5">Create login credentials for new student</p>
                     </div>
                 </div>
                 <button type="button" onclick="closeAddStudentModal()" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition cursor-pointer shrink-0 ml-2" title="Close" aria-label="Close modal">
@@ -2971,139 +2949,108 @@ usort($supervisor_workloads, function ($a, $b) {
                 </button>
             </div>
 
-            <!-- Modal Form Body (Scrollable) -->
-            <form id="addStudentForm" method="POST" class="p-6 space-y-4 overflow-y-auto flex-1" style="scrollbar-gutter: stable;">
+            <!-- Modal Form Body -->
+            <form id="addStudentForm" method="POST" class="p-6 space-y-4">
                 <input type="hidden" name="add_student" value="1">
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <!-- Full Name -->
-                    <div>
-                        <label for="modal_s_name" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Full Name <span class="text-rose-500">*</span>
-                        </label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
-                                <i class="fa-regular fa-user text-xs"></i>
-                            </span>
-                            <input type="text"
-                                id="modal_s_name"
-                                name="s_name"
-                                required
-                                placeholder="e.g. Aung Kyaw"
-                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_name'] ?? '') : '' ?>"
-                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                        </div>
+                <!-- Roll Number / Login Username -->
+                <div>
+                    <label for="modal_s_roll" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Roll Number / Username <span class="text-rose-500">*</span>
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-id-card text-xs"></i>
+                        </span>
+                        <input type="text"
+                            id="modal_s_roll"
+                            name="s_roll"
+                            required
+                            placeholder="e.g. 5CS-1 or 5CT-12"
+                            value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_roll'] ?? '') : '' ?>"
+                            class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-mono font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
                     </div>
+                </div>
 
-                    <!-- Roll Number -->
-                    <div>
-                        <label for="modal_s_roll" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Roll Number <span class="text-rose-500">*</span>
-                        </label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
-                                <i class="fa-solid fa-id-card text-xs"></i>
-                            </span>
-                            <input type="text"
-                                id="modal_s_roll"
-                                name="s_roll"
-                                required
-                                placeholder="e.g. 5CS-1"
-                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_roll'] ?? '') : '' ?>"
-                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                        </div>
+                <!-- Student Full Name -->
+                <div>
+                    <label for="modal_s_fullname" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Student Full Name <span class="text-rose-500">*</span>
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-user text-xs"></i>
+                        </span>
+                        <input type="text"
+                            id="modal_s_fullname"
+                            name="s_fullname"
+                            required
+                            placeholder="e.g. Mg Mg"
+                            value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_fullname'] ?? '') : '' ?>"
+                            class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
                     </div>
+                </div>
 
-                    <!-- Major -->
-                    <div>
-                        <label for="modal_s_major" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Major
-                        </label>
-                        <select id="modal_s_major" name="s_major" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
-                            <option value="">— Select Major —</option>
-                            <option value="Computer Science" <?= (isset($_POST['s_major']) && $_POST['s_major'] === 'Computer Science') ? 'selected' : '' ?>>Computer Science</option>
-                            <option value="Computer Technology" <?= (isset($_POST['s_major']) && $_POST['s_major'] === 'Computer Technology') ? 'selected' : '' ?>>Computer Technology</option>
-                        </select>
+                <!-- Gmail Address -->
+                <div>
+                    <label for="modal_s_email" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Gmail Address <span class="text-rose-500">*</span>
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                            <i class="fa-regular fa-envelope text-xs"></i>
+                        </span>
+                        <input type="email"
+                            id="modal_s_email"
+                            name="s_email"
+                            required
+                            placeholder="student@gmail.com"
+                            value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_email'] ?? '') : '' ?>"
+                            class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
                     </div>
+                </div>
 
-                    <!-- Gmail Address -->
-                    <div>
-                        <label for="modal_s_email" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Gmail Address <span class="text-rose-500">*</span>
-                        </label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
-                                <i class="fa-regular fa-envelope text-xs"></i>
-                            </span>
-                            <input type="email"
-                                id="modal_s_email"
-                                name="s_email"
-                                required
-                                placeholder="student@gmail.com"
-                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_email'] ?? '') : '' ?>"
-                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                        </div>
-                    </div>
-
-                    <!-- Academic Year -->
-                    <div>
-                        <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Academic Year
-                        </label>
+                <!-- Academic Batch -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Academic Batch
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-indigo-500">
+                            <i class="fa-solid fa-calendar-days text-xs"></i>
+                        </span>
                         <input type="text"
                             name="s_academic_year"
                             value="<?= htmlspecialchars($current_active_year_label) ?>"
                             readonly
-                            class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-indigo-700 font-mono focus:outline-none cursor-not-allowed">
+                            class="w-full bg-slate-100 border border-slate-200 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-bold text-indigo-700 font-mono focus:outline-none cursor-not-allowed">
                     </div>
+                </div>
 
-                    <!-- University Supervisor -->
-                    <div>
-                        <label for="modal_s_supervisor_id" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            University Supervisor <span class="text-slate-400 font-normal text-[10px]">(Optional)</span>
-                        </label>
-                        <select name="s_supervisor_id" id="modal_s_supervisor_id" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
-                            <option value="">— Select Supervisor —</option>
-                            <?php foreach ($supervisors as $sup): ?>
-                                <option value="<?= $sup['id'] ?>" <?= (isset($_POST['s_supervisor_id']) && (int)$_POST['s_supervisor_id'] === (int)$sup['id']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($sup['username']) ?> (<?= htmlspecialchars($sup['email']) ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                <!-- Default Password -->
+                <div>
+                    <label for="modal_s_password" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
+                        Default Password
+                    </label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-key text-xs"></i>
+                        </span>
+                        <input type="text"
+                            id="modal_s_password"
+                            name="s_password"
+                            placeholder="Intern@123"
+                            value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_password'] ?? '') : 'Intern@123' ?>"
+                            class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
                     </div>
+                </div>
 
-                    <!-- Partner Company (Optional) -->
-                    <div class="sm:col-span-2">
-                        <label for="modal_s_company_select" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Partner Company <span class="text-slate-400 font-normal text-[10px]">(Optional)</span>
-                        </label>
-                        <select name="s_company_id" id="modal_s_company_select" class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition cursor-pointer">
-                            <option value="">— Select Company —</option>
-                            <?php foreach ($companies as $c): ?>
-                                <option value="<?= $c['id'] ?>" <?= (isset($_POST['s_company_id']) && (int)$_POST['s_company_id'] === (int)$c['id']) ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($c['company_name']) ?><?= !empty($c['contact_person']) ? ' (Contact: ' . htmlspecialchars($c['contact_person']) . ')' : '' ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-
-                    <!-- Default Password -->
-                    <div class="sm:col-span-2">
-                        <label for="modal_s_password" class="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                            Default Password
-                        </label>
-                        <div class="relative">
-                            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
-                                <i class="fa-solid fa-key text-xs"></i>
-                            </span>
-                            <input type="text"
-                                id="modal_s_password"
-                                name="s_password"
-                                placeholder="Intern@123"
-                                value="<?= (isset($_POST['add_student']) && !empty($err)) ? htmlspecialchars($_POST['s_password'] ?? '') : 'Intern@123' ?>"
-                                class="w-full bg-slate-50/80 hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-xl pl-9 pr-3.5 py-2.5 text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition">
-                        </div>
-                    </div>
+                <!-- Notice / Information Note -->
+                <div class="p-3 bg-indigo-50/80 rounded-xl border border-indigo-100 flex items-start gap-2.5 text-xs text-indigo-900 leading-relaxed">
+                    <i class="fa-solid fa-circle-info text-indigo-600 mt-0.5 shrink-0 text-sm"></i>
+                    <span>
+                        <strong>Student Setup:</strong> Upon first login, the student will be required to change their default password and complete remaining internship details (Phone, Major, Company & Dates).
+                    </span>
                 </div>
 
                 <!-- Footer Actions -->
@@ -3115,7 +3062,7 @@ usort($supervisor_workloads, function ($a, $b) {
                     </button>
                     <button type="submit"
                         class="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition cursor-pointer">
-                        <span>🎓 Create Student</span>
+                        <span>🎓 Create Student Account</span>
                     </button>
                 </div>
             </form>
@@ -3452,10 +3399,6 @@ usort($supervisor_workloads, function ($a, $b) {
                                 <span id="detailStaffPhone" class="font-mono font-semibold text-slate-800 block truncate">—</span>
                             </div>
                             <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
-                                <span class="text-slate-400 font-medium block text-[11px] mb-0.5">Department</span>
-                                <span id="detailStaffDept" class="font-bold text-slate-800 block truncate">—</span>
-                            </div>
-                            <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
                                 <span class="text-slate-400 font-medium block text-[11px] mb-0.5">Rank</span>
                                 <span id="detailStaffPos" class="font-semibold text-slate-800 block truncate">—</span>
                             </div>
@@ -3463,7 +3406,7 @@ usort($supervisor_workloads, function ($a, $b) {
                                 <span class="text-slate-400 font-medium block text-[11px] mb-0.5">Academic Session</span>
                                 <span id="detailStaffYear" class="font-mono font-bold text-slate-700 block truncate">—</span>
                             </div>
-                            <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs sm:col-span-2">
+                            <div class="bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
                                 <span class="text-slate-400 font-medium block text-[11px] mb-0.5">Registration Date</span>
                                 <span id="detailStaffDate" class="font-medium text-slate-600 block truncate">—</span>
                             </div>

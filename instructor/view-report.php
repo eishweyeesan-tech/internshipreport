@@ -15,12 +15,14 @@ function render_error($title, $msg, $icon = '🔒')
 ?>
     <!DOCTYPE html>
     <html lang="en">
+
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title><?= htmlspecialchars($title) ?> – InternReport</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
+
     <body class="bg-slate-50 flex items-center justify-center min-h-screen p-6 font-sans">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-xl p-8 max-w-md w-full text-center">
             <div class="w-16 h-16 rounded-full bg-red-50 text-red-500 border border-red-100 flex items-center justify-center text-3xl mx-auto mb-4"><?= $icon ?></div>
@@ -33,6 +35,7 @@ function render_error($title, $msg, $icon = '🔒')
             </div>
         </div>
     </body>
+
     </html>
 <?php
     exit;
@@ -47,12 +50,14 @@ function render_student_blocked_error($student_username = 'Student')
 ?>
     <!DOCTYPE html>
     <html lang="en">
+
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Access Denied – Student Session Active</title>
         <script src="https://cdn.tailwindcss.com"></script>
     </head>
+
     <body class="bg-slate-900 min-h-screen flex items-center justify-center p-6 font-sans antialiased text-slate-100">
         <div class="max-w-md w-full bg-slate-800/90 backdrop-blur border border-slate-700/80 rounded-2xl p-8 shadow-2xl text-center relative overflow-hidden">
             <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-500 to-red-500"></div>
@@ -66,7 +71,7 @@ function render_student_blocked_error($student_username = 'Student')
             </span>
 
             <h2 class="text-xl font-black text-white mb-2 tracking-tight">Access Denied: Student Account Detected</h2>
-            
+
             <p class="text-xs text-slate-300 leading-relaxed mb-4">
                 You are currently signed in as student <strong class="text-white font-bold bg-slate-700 px-2 py-0.5 rounded">@<?= htmlspecialchars($student_username) ?></strong>.
             </p>
@@ -94,6 +99,7 @@ function render_student_blocked_error($student_username = 'Student')
             </p>
         </div>
     </body>
+
     </html>
 <?php
     exit;
@@ -457,7 +463,12 @@ $grade_labels = [
             <div class="flex items-center gap-2">
                 <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">🏢 Company Instructor Review</span>
             </div>
-            <button type="button" onclick="window.print()" class="px-4 py-2 bg-slate-800 hover:bg-black text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs">🖨️ Print Report</button>
+            <a href="../student/print_report.php?token=<?= urlencode($token) ?>&student_id=<?= (int)$student_id ?>&week=<?= (int)$week_number ?>" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-[#005f73] hover:bg-[#0a9396] text-white text-xs font-bold rounded-xl shadow-xs transition cursor-pointer" title="Save Official Internship Report as PDF">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Save as PDF
+            </a>
         </div>
 
         <?php if ($eval_msg === 'saved'): ?>
@@ -526,9 +537,9 @@ $grade_labels = [
                                         <th class="px-3.5 py-3 text-left whitespace-nowrap">တက်ရောက်မှုအခြေအနေ</th>
                                         <th class="px-3.5 py-3 text-left min-w-[160px]">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
                                         <th class="px-3.5 py-3 text-left min-w-[200px]">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
-                                        <th class="px-3.5 py-3 text-left min-w-[120px]">အသုံးပြုသောပစ္စည်းများ</th>
+                                        <th class="px-3.5 py-3 text-left min-w-[120px]">အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</th>
                                         <th class="px-3.5 py-3 text-left min-w-[160px]">လေ့လာသိရှိသော အသိပညာ</th>
-                                        <th class="px-3.5 py-3 text-left whitespace-nowrap">ကြာချိန်</th>
+                                        <th class="px-3.5 py-3 text-left whitespace-nowrap">ကြာချိန်(နာရီ)</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-100 text-slate-700">
@@ -696,7 +707,7 @@ $grade_labels = [
                     <?php else: ?>
                         <!-- ── Fresh / Interactive Decision Form ── -->
                         <form method="POST" enctype="multipart/form-data" class="p-5 space-y-4" id="instructorEvaluationForm">
-                            
+
                             <!-- Decision Mode Selector Tabs -->
                             <div>
                                 <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Select Decision</label>
@@ -859,17 +870,17 @@ $grade_labels = [
         // Decision Mode Switcher (Approve vs Reject)
         function setDecisionMode(mode) {
             var approveCont = document.getElementById('decision-approve-container');
-            var rejectCont  = document.getElementById('decision-reject-container');
-            var tabApprove  = document.getElementById('tab-decision-approve');
-            var tabReject   = document.getElementById('tab-decision-reject');
+            var rejectCont = document.getElementById('decision-reject-container');
+            var tabApprove = document.getElementById('tab-decision-approve');
+            var tabReject = document.getElementById('tab-decision-reject');
             var reviewComment = document.getElementById('review_comment');
-            var rejectReason  = document.getElementById('reject_reason');
+            var rejectReason = document.getElementById('reject_reason');
 
             if (mode === 'approve') {
                 if (approveCont) approveCont.classList.remove('hidden');
                 if (rejectCont) rejectCont.classList.add('hidden');
                 if (tabApprove) tabApprove.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer bg-white text-emerald-700 shadow-sm border border-emerald-200';
-                if (tabReject) tabReject.className  = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer text-slate-600 hover:text-rose-600 hover:bg-white/70';
+                if (tabReject) tabReject.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer text-slate-600 hover:text-rose-600 hover:bg-white/70';
                 if (rejectReason) {
                     rejectReason.removeAttribute('required');
                 }
@@ -879,7 +890,7 @@ $grade_labels = [
             } else {
                 if (approveCont) approveCont.classList.add('hidden');
                 if (rejectCont) rejectCont.classList.remove('hidden');
-                if (tabReject) tabReject.className  = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer bg-white text-rose-700 shadow-sm border border-rose-200';
+                if (tabReject) tabReject.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer bg-white text-rose-700 shadow-sm border border-rose-200';
                 if (tabApprove) tabApprove.className = 'flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl font-bold text-xs transition-all duration-200 cursor-pointer text-slate-600 hover:text-emerald-600 hover:bg-white/70';
                 if (reviewComment) {
                     reviewComment.removeAttribute('required');

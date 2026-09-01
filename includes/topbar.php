@@ -118,19 +118,5 @@ if ($topbar_user_id > 0 && isset($db) && $db) {
     </div>
 </header>
 
-<!-- ════ FLOATING SCROLL TO TOP BUTTON ════ -->
-<button
-    id="adminScrollToTopBtn"
-    type="button"
-    onclick="adminScrollToTop()"
-    class="fixed bottom-6 right-6 z-50 px-3.5 py-2.5 bg-[#005f73] hover:bg-[#0a9396] text-white rounded-2xl shadow-xl shadow-teal-950/20 opacity-0 pointer-events-none translate-y-4 transition-all duration-300 flex items-center gap-2 text-xs font-bold hover:scale-105 active:scale-95 cursor-pointer border border-teal-300/30"
-    aria-label="Scroll to top"
-    title="Back to Top"
->
-    <svg class="w-4 h-4 text-teal-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18"/>
-    </svg>
-    <span class="tracking-wide">Back to Top</span>
-</button>
-
 <script src="../assets/js/main.js"></script>
+

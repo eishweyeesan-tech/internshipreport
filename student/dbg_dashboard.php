@@ -124,10 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
                 }
                 if ($attendance_status === 'absent') {
                     $intended_task  = $reason_for_absence ?: 'Absent';
-                    $task_detail    = 'N/A - Absent';
-                    $actual_task    = 'N/A - Absent';
-                    $tools_used     = 'N/A - Absent';
-                    $knowledge_gained = 'N/A - Absent';
+                    $task_detail    = '';
+                    $actual_task    = '';
+                    $tools_used     = '';
+                    $knowledge_gained = '';
                     $hours_worked   = '00:00';
                 }
                 $ins_log = $db->prepare("INSERT INTO daily_logs
@@ -229,10 +229,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
                 }
                 if ($attendance_status === 'absent') {
                     $intended_task  = $reason_for_absence ?: 'Absent';
-                    $task_detail    = 'N/A - Absent';
-                    $actual_task    = 'N/A - Absent';
-                    $tools_used     = 'N/A - Absent';
-                    $knowledge_gained = 'N/A - Absent';
+                    $task_detail    = '';
+                    $actual_task    = '';
+                    $tools_used     = '';
+                    $knowledge_gained = '';
                     $hours_worked   = '00:00';
                 }
                 $upd_stmt = $db->prepare("UPDATE daily_logs SET
@@ -1577,7 +1577,7 @@ if ($magic_link_unlocked && empty($magic_link)) {
                                     </div>
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label class="block text-caption font-bold text-slate-500 mb-1">Tools / Tech Used <span class="text-slate-300 font-normal">/ အသုံးပြုသောပစ္စည်းများ</span></label>
+                                            <label class="block text-caption font-bold text-slate-500 mb-1">Tools / Tech Used <span class="text-slate-300 font-normal">/ အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</span></label>
                                             <input type="text" name="tools_used" value="<?= htmlspecialchars($editing_log['tools_used'] ?? '') ?>" placeholder="PHP, TailwindCSS, MySQL…" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-emerald-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                         </div>
                                         <div>

@@ -1,5 +1,12 @@
 <?php
 require_once __DIR__ . '/../auth.php';
+
+// Safe redirect to unified student-dashboard daily log tab
+$target_week = isset($_GET['week']) ? (int)$_GET['week'] : 0;
+$target_qs = $target_week > 0 ? '?tab=daily-log&week=' . $target_week : '?tab=daily-log';
+header('Location: student-dashboard.php' . $target_qs);
+exit;
+
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
@@ -211,10 +218,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
 
                     if ($attendance_status === 'absent') {
                         $intended_task    = $reason_for_absence ?: 'Absent';
-                        $task_detail      = 'N/A - Absent';
-                        $actual_task      = 'N/A - Absent';
-                        $tools_used       = 'N/A - Absent';
-                        $knowledge_gained = 'N/A - Absent';
+                        $task_detail      = '';
+                        $actual_task      = '';
+                        $tools_used       = '';
+                        $knowledge_gained = '';
                         $hours_worked     = '00:00';
                     }
 
@@ -258,10 +265,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
 
         if ($attendance_status === 'absent') {
             $intended_task    = $reason_for_absence ?: 'Absent';
-            $task_detail      = 'N/A - Absent';
-            $actual_task      = 'N/A - Absent';
-            $tools_used       = 'N/A - Absent';
-            $knowledge_gained = 'N/A - Absent';
+            $task_detail      = '';
+            $actual_task      = '';
+            $tools_used       = '';
+            $knowledge_gained = '';
             $hours_worked     = '00:00';
         }
         $upd_stmt = $db->prepare("UPDATE daily_logs SET

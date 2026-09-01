@@ -62,6 +62,28 @@ $warn_res = $warn_stmt->get_result();
 $warn_row = $warn_res ? $warn_res->fetch_row() : null;
 $is_warned = (bool) ($warn_row[0] ?? 0);
 
+$supervisor_warning_title = 'Supervisor Warning: Behind Schedule';
+$supervisor_warning_message = '';
+$supervisor_warning_time = '';
+if ($is_warned) {
+    $wn_stmt = $db->prepare("SELECT title, message, created_at FROM notifications WHERE user_id = ? AND type = 'student_behind_schedule' ORDER BY id DESC LIMIT 1");
+    if ($wn_stmt) {
+        $wn_stmt->bind_param("i", $user_id);
+        $wn_stmt->execute();
+        $wn_res = $wn_stmt->get_result();
+        $wn_row = $wn_res ? $wn_res->fetch_assoc() : null;
+        if ($wn_row) {
+            if (!empty($wn_row['title'])) $supervisor_warning_title = $wn_row['title'];
+            if (!empty($wn_row['message'])) $supervisor_warning_message = $wn_row['message'];
+            if (!empty($wn_row['created_at'])) $supervisor_warning_time = $wn_row['created_at'];
+        }
+        $wn_stmt->close();
+    }
+}
+if (empty($supervisor_warning_message)) {
+    $supervisor_warning_message = 'Your supervisor noticed you are behind schedule with your daily logs/reports. Please update and submit your logs promptly.';
+}
+
 // Build week ranges
 $weeks = [];
 if ($intern_start) {
@@ -197,10 +219,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_log'])) {
                 }
                 if ($attendance_status === 'absent') {
                     $intended_task  = $reason_for_absence ?: 'Absent';
-                    $task_detail    = 'N/A - Absent';
-                    $actual_task    = 'N/A - Absent';
-                    $tools_used     = 'N/A - Absent';
-                    $knowledge_gained = 'N/A - Absent';
+                    $task_detail    = '';
+                    $actual_task    = '';
+                    $tools_used     = '';
+                    $knowledge_gained = '';
                     $hours_worked   = '00:00';
                 }
                 $ins_log = $db->prepare("INSERT INTO daily_logs
@@ -311,10 +333,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_log'])) {
                 }
                 if ($attendance_status === 'absent') {
                     $intended_task  = $reason_for_absence ?: 'Absent';
-                    $task_detail    = 'N/A - Absent';
-                    $actual_task    = 'N/A - Absent';
-                    $tools_used     = 'N/A - Absent';
-                    $knowledge_gained = 'N/A - Absent';
+                    $task_detail    = '';
+                    $actual_task    = '';
+                    $tools_used     = '';
+                    $knowledge_gained = '';
                     $hours_worked   = '00:00';
                 }
                 $upd_stmt = $db->prepare("UPDATE daily_logs SET
@@ -477,6 +499,7 @@ if ($editing_log && !empty($editing_log['log_date'])) {
         $selected_date = '';
     }
 }
+$form_date = $editing_log ? ($editing_log['log_date'] ?? '') : '';
 
 $active_day_log = null;
 if (!empty($selected_date)) {
@@ -1229,6 +1252,13 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
             var logDateInput = document.getElementById('log_date');
             if (!logDateInput || logDateInput.dataset.bound) return;
             logDateInput.dataset.bound = '1';
+
+            updateWeekBadge();
+
+            if (document.querySelector('input[name="log_id"]')) {
+                return;
+            }
+
             logDateInput.addEventListener('change', function() {
                 updateWeekBadge();
                 var iso = this.value;
@@ -1412,6 +1442,11 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
         function validateLogDate(e) {
             var dateInput = document.getElementById('log_date');
             if (!dateInput || !dateInput.value) return true;
+
+            if (document.querySelector('input[name="log_id"]')) {
+                return true;
+            }
+
             var iso = parseDisplayDate(dateInput.value);
             if (!iso) {
                 openDateAlertModal({
@@ -1711,10 +1746,41 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
             card.classList.add('scale-95', 'opacity-0');
         }
 
+        // ── Center Supervisor Warning Card Modal ──
+        function openSupervisorWarningModal() {
+            var modal = document.getElementById('supervisorWarningModal');
+            var card = document.getElementById('supervisorWarningCard');
+            if (!modal || !card) return;
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.add('opacity-100', 'pointer-events-auto');
+
+            card.classList.remove('scale-95', 'opacity-0');
+            card.classList.add('scale-100', 'opacity-100');
+        }
+
+        function closeSupervisorWarningModal() {
+            var modal = document.getElementById('supervisorWarningModal');
+            var card = document.getElementById('supervisorWarningCard');
+            if (!modal || !card) return;
+
+            modal.classList.remove('opacity-100', 'pointer-events-auto');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+
+            card.classList.remove('scale-100', 'opacity-100');
+            card.classList.add('scale-95', 'opacity-0');
+        }
+
+        function goToDailyLogsFromWarning() {
+            closeSupervisorWarningModal();
+            window.location.href = 'student-dashboard.php?tab=daily-log#daily-log-form';
+        }
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeDateAlertModal();
                 closeSignSuccessModal();
+                closeSupervisorWarningModal();
             }
         });
 
@@ -1843,6 +1909,10 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                 });
             <?php elseif ($message === 'log_locked'): ?>
                 showToast('This week has been signed and cannot be edited. Wait for instructor rejection to make changes.', 'error');
+            <?php endif; ?>
+
+            <?php if ($is_warned): ?>
+                openSupervisorWarningModal();
             <?php endif; ?>
         };
     </script>
@@ -2479,15 +2549,37 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
                                                 <h2 class="text-xs sm:text-sm font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-3 mb-5 flex items-center justify-between gap-2">
                                                     <span class="flex items-center gap-2">
-                                                        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <svg class="w-4 h-4 <?= $editing_log ? 'text-indigo-600' : 'text-blue-600' ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M9 8h6M5 4h14a1 1 0 011 1v16a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1z" />
                                                         </svg>
                                                         <?= $editing_log ? 'Edit Daily Log' : 'Daily Log Sheet' ?>
                                                     </span>
                                                     <?php if ($editing_log): ?>
-                                                        <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>" class="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-full hover:bg-rose-100 transition">Cancel Edit</a>
+                                                        <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>" class="text-[11px] font-bold text-rose-600 bg-rose-50 border border-rose-100 px-2.5 py-1 rounded-full hover:bg-rose-100 transition">✕ Cancel Edit</a>
                                                     <?php endif; ?>
                                                 </h2>
+
+                                                <?php if ($editing_log): ?>
+                                                    <div class="bg-indigo-50/80 border border-indigo-200/90 rounded-2xl p-4 mb-4 flex items-center justify-between flex-wrap gap-3 shadow-2xs">
+                                                        <div class="flex items-center gap-3">
+                                                            <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-lg shrink-0">
+                                                                ✏️
+                                                            </div>
+                                                            <div>
+                                                                <p class="text-[11px] font-bold text-indigo-500 uppercase tracking-wider">ပြင်ဆင်နေသော မှတ်တမ်း (Editing Daily Log)</p>
+                                                                <p class="text-sm font-black text-indigo-950">
+                                                                    <?= (new DateTime($editing_log['log_date']))->format('d.m.Y — l') ?>
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div class="flex items-center gap-2">
+                                                            <span class="text-xs font-bold text-indigo-700 bg-white border border-indigo-200 px-3 py-1 rounded-full shadow-2xs">
+                                                                Week <?= getInternshipWeekNumber($intern_start, $editing_log['log_date']) ?>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
+
                                                 <form method="POST" class="space-y-4" onsubmit="return validateLogDate(event)">
                                                     <?php if ($editing_log): ?>
                                                         <input type="hidden" name="log_id" value="<?= $editing_log['id'] ?>">
@@ -2495,21 +2587,38 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                     <input type="hidden" name="selected_week" value="<?= (int) $selected_week ?>">
                                                     <!-- Date (always visible) -->
                                                     <div>
-                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">ရက်စွဲ/နေ့</span></label>
-                                                        <input type="date" name="log_date" id="log_date" required
-                                                            value="<?= htmlspecialchars($form_date ?? '') ?>"
-                                                            min="<?= htmlspecialchars($intern_start ?? '') ?>"
-                                                            max="<?= htmlspecialchars(!$editing_log && !empty($next_expected_date) ? $next_expected_date : ($intern_end ?? '')) ?>"
-                                                            class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition cursor-pointer">
-                                                        <?php if (!empty($weeks[$selected_week])): ?>
+                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">
+                                                            ရက်စွဲ/နေ့
+                                                            <?php if ($editing_log): ?>
+                                                                <span class="text-indigo-600 font-bold ml-1">(ရက်စွဲ သတ်မှတ်ပြီးဖြစ်၍ ထပ်မံရွေးချယ်ရန် မလိုပါ)</span>
+                                                            <?php endif; ?>
+                                                        </label>
+
+                                                        <?php if ($editing_log): ?>
+                                                            <input type="date" name="log_date" id="log_date" required
+                                                                value="<?= htmlspecialchars($editing_log['log_date']) ?>"
+                                                                readonly
+                                                                class="w-full bg-slate-100 text-slate-700 font-bold border border-slate-300 rounded-xl px-3.5 py-2 text-xs sm:text-sm cursor-not-allowed select-none shadow-inner">
+                                                        <?php else: ?>
+                                                            <input type="date" name="log_date" id="log_date" required
+                                                                value="<?= htmlspecialchars($form_date ?? '') ?>"
+                                                                min="<?= htmlspecialchars($intern_start ?? '') ?>"
+                                                                max="<?= htmlspecialchars(!empty($next_expected_date) ? $next_expected_date : ($intern_end ?? '')) ?>"
+                                                                class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition cursor-pointer">
+                                                        <?php endif; ?>
+
+                                                        <?php if (!$editing_log && !empty($weeks[$selected_week])): ?>
                                                             <p class="text-[11px] text-slate-400 mt-1">Week <?= $selected_week ?> allowed: <?= (new DateTime($weeks[$selected_week]['start']))->format('d.m.Y') ?> – <?= (new DateTime($weeks[$selected_week]['end']))->format('d.m.Y') ?></p>
-                                                        <?php elseif ($intern_start && $intern_end): ?>
+                                                        <?php elseif (!$editing_log && $intern_start && $intern_end): ?>
                                                             <p class="text-[11px] text-slate-400 mt-1">Allowed: <?= (new DateTime($intern_start))->format('d.m.Y') ?> – <?= (new DateTime($intern_end))->format('d.m.Y') ?></p>
                                                         <?php endif; ?>
-                                                        <p id="selected-day" class="text-[11px] text-slate-500 mt-1">Choose a date from the calendar.</p>
-                                                        <div id="week-badge" class="hidden mt-1.5">
+
+                                                        <p id="selected-day" class="text-[11px] text-slate-500 mt-1">
+                                                            <?= $editing_log ? (new DateTime($editing_log['log_date']))->format('l, F j, Y') : 'Choose a date from the calendar.' ?>
+                                                        </p>
+                                                        <div id="week-badge" class="<?= $editing_log ? '' : 'hidden' ?> mt-1.5">
                                                             <span class="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
-                                                                Week <span id="week-badge-num">—</span>
+                                                                Week <span id="week-badge-num"><?= $editing_log ? getInternshipWeekNumber($intern_start, $editing_log['log_date']) : '—' ?></span>
                                                             </span>
                                                         </div>
                                                     </div>
@@ -2542,7 +2651,7 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                                 <input type="time" name="end_time" id="end_time" value="17:00" onchange="calcHours()" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs sm:text-sm text-blue-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                                             </div>
                                                             <div>
-                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">ကြာချိန်</label>
+                                                                <label class="block text-xs font-bold text-slate-700 mb-1.5">ကြာချိန်(နာရီ)</label>
                                                                 <input type="text" id="hours_display" value="<?= htmlspecialchars($editing_log['calculated_duration'] ?? '08:00') ?>" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 font-mono text-xs sm:text-sm text-blue-700 font-bold focus:outline-none cursor-default">
                                                                 <input type="hidden" name="hours_worked" id="hours_worked" value="<?= htmlspecialchars($editing_log['calculated_duration'] ?? '08:00') ?>">
                                                             </div>
@@ -2558,7 +2667,7 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                             </div>
                                                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                                 <div>
-                                                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">အသုံးပြုသောပစ္စည်းများ</label>
+                                                                    <label class="block text-xs font-bold text-slate-700 mb-1.5">အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</label>
                                                                     <input type="text" name="tools_used" value="<?= htmlspecialchars($editing_log['tools_used'] ?? '') ?>" placeholder="PHP, TailwindCSS, MySQL…" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 font-mono text-xs sm:text-sm text-emerald-600 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                                                 </div>
                                                                 <div>
@@ -2615,15 +2724,15 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                         <input type="number" name="week_number" value="<?= $selected_week ?>" readonly class="w-full bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-2 text-xs font-bold text-indigo-600 focus:outline-none cursor-default">
                                                     </div>
                                                     <div>
-                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">What was done? <span class="text-slate-400 font-normal text-[11px]">/ ဘာလုပ်သလဲ</span></label>
+                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">ဘာလုပ်သလဲ</label>
                                                         <textarea name="what_done" rows="3" required placeholder="What did you accomplish this week?" class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($curr_ref['what_done'] ?? '') ?></textarea>
                                                     </div>
                                                     <div>
-                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">How was it done? <span class="text-slate-400 font-normal text-[11px]">/ ဘယ်လိုလုပ်ပါသလဲ</span></label>
+                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">ဘယ်လိုလုပ်ပါသလဲ</label>
                                                         <textarea name="how_done" rows="3" required placeholder="Describe the methods, tools, and approach you used." class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($curr_ref['how_done'] ?? '') ?></textarea>
                                                     </div>
                                                     <div>
-                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">Why was it done? <span class="text-slate-400 font-normal text-[11px]">/ ဘာကြောင့်လုပ်ပါသလဲ</span></label>
+                                                        <label class="block text-xs font-bold text-slate-700 mb-1.5">ဘာကြောင့်လုပ်ပါသလဲ</label>
                                                         <textarea name="why_done" rows="3" required placeholder="Explain the purpose, goals, and expected outcomes." class="w-full bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:bg-white transition resize-none"><?= htmlspecialchars($curr_ref['why_done'] ?? '') ?></textarea>
                                                     </div>
                                                     <div class="flex justify-end pt-2">
@@ -2663,15 +2772,15 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                                                 <div class="p-6">
                                                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                                         <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">What was done? <span class="text-slate-400 font-normal">/ ဘာလုပ်သလဲ</span></p>
+                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">ဘာလုပ်သလဲ</p>
                                                             <p class="text-xs sm:text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['what_done'] ?? '—')) ?></p>
                                                         </div>
                                                         <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">How was it done? <span class="text-slate-400 font-normal">/ ဘယ်လိုလုပ်ပါသလဲ</span></p>
+                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">ဘယ်လိုလုပ်ပါသလဲ</p>
                                                             <p class="text-xs sm:text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['how_done'] ?? '—')) ?></p>
                                                         </div>
                                                         <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">Why was it done? <span class="text-slate-400 font-normal">/ ဘာကြောင့်လုပ်ပါသလဲ</span></p>
+                                                            <p class="text-[11px] font-bold text-teal-700 uppercase tracking-wider mb-2">ဘာကြောင့်လုပ်ပါသလဲ</p>
                                                             <p class="text-xs sm:text-sm text-slate-700 leading-relaxed"><?= nl2br(htmlspecialchars($submitted_ref['why_done'] ?? '—')) ?></p>
                                                         </div>
                                                     </div>
@@ -3364,6 +3473,89 @@ if ($magic_link_unlocked && empty($existing_link) && !$is_rejected) {
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                     </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════ BEAUTIFUL SUPERVISOR WARNING CENTER CARD MODAL ═══════════ -->
+    <div id="supervisorWarningModal" class="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md transition-opacity duration-300 opacity-0 pointer-events-none" onclick="if(event.target === this) closeSupervisorWarningModal()">
+        <div id="supervisorWarningCard" class="bg-white rounded-3xl shadow-2xl border border-amber-200/90 max-w-sm sm:max-w-md w-full p-6 sm:p-7 text-center transform transition-all duration-300 scale-95 opacity-0 relative overflow-hidden">
+            <!-- Decorative Accent Top Gradient -->
+            <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500"></div>
+
+            <!-- Soft background glow decoration -->
+            <div class="absolute -top-16 -right-16 w-36 h-36 bg-amber-200/40 rounded-full blur-2xl pointer-events-none"></div>
+            <div class="absolute -bottom-16 -left-16 w-36 h-36 bg-orange-200/30 rounded-full blur-2xl pointer-events-none"></div>
+
+            <!-- Close button (top right) -->
+            <button type="button" onclick="closeSupervisorWarningModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-2 rounded-full transition cursor-pointer" title="Close">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <!-- Animated Warning Icon Container -->
+            <div class="w-16 h-16 mx-auto mb-3.5 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 text-white flex items-center justify-center shadow-lg shadow-amber-500/30 relative ring-6 ring-amber-50">
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                </svg>
+                <!-- Small Warning Alert Badge Icon -->
+                <span class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-[10px] font-black shadow-sm border-2 border-white animate-pulse">
+                    !
+                </span>
+            </div>
+
+            <!-- Badge -->
+            <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-label font-bold uppercase tracking-wider bg-amber-50 text-amber-700 border border-amber-200/80 mb-2 shadow-2xs">
+                <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span>အရေးကြီး သတိပေးချက် (Urgent Reminder)</span>
+            </div>
+
+            <!-- Title -->
+            <h3 class="text-base sm:text-lg font-black text-slate-800 tracking-tight mb-1">
+                <?= htmlspecialchars($supervisor_warning_title) ?>
+            </h3>
+
+            <!-- Supervisor Sender Info Card -->
+            <div class="bg-amber-50/60 border border-amber-200/70 rounded-2xl p-3 mb-3 text-left flex items-center gap-3 shadow-2xs">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
+                    <?= htmlspecialchars($sup_initial_display) ?>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="text-[10px] uppercase font-bold tracking-wider text-amber-700 flex items-center gap-1">
+                        <span>Supervisor</span>
+                        <span class="text-amber-800 font-extrabold">• Urgent Notice</span>
+                    </div>
+                    <div class="text-xs font-bold text-slate-800 truncate">
+                        <?= htmlspecialchars($supervisor_name) ?>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Warning Technical Message -->
+            <p class="text-xs sm:text-sm text-slate-600 font-semibold leading-relaxed mb-3 text-left">
+                <?= htmlspecialchars($supervisor_warning_message) ?>
+            </p>
+
+            <!-- Myanmar Highlighted Note -->
+            <div class="bg-amber-50/90 border border-amber-200/90 rounded-2xl p-3 text-xs text-amber-900 font-medium mb-5 leading-relaxed text-left flex items-start gap-2.5 shadow-2xs">
+                <svg class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>သင်၏ Internship Daily Logs များကို အချိန်မီ ဖြည့်သွင်းခြင်း မရှိသေးကြောင်း Supervisor မှ သတိပေးထားပါသည်။ ကျေးဇူးပြု၍ Daily Logs များကို အမြန်ဆုံး ဖြည့်သွင်းပေးပါရန်။</span>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-2.5">
+                <button type="button" onclick="goToDailyLogsFromWarning()" class="w-full sm:w-auto flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black rounded-xl shadow-md hover:shadow-lg shadow-amber-500/20 transition-all transform active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span>Daily Log ချက်ချင်းဖြည့်မည်</span>
+                </button>
+                <button type="button" onclick="closeSupervisorWarningModal()" class="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center justify-center gap-1">
+                    <span>နားလည်ပါပြီ (Got it)</span>
                 </button>
             </div>
         </div>

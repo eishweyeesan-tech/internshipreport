@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../includes/security_helper.php';
+require_once __DIR__ . '/../includes/phone_validation.php';
 
 $admin_id   = (int) $_SESSION['user_id'];
 $admin_name = $_SESSION['username'];
@@ -15,7 +16,7 @@ $profile_pic   = '';
 $last_login_at = '';
 
 try {
-    $admin_stmt = $db->prepare("SELECT id, username, email, role, profile_pic, last_login_at FROM users WHERE id = ?");
+    $admin_stmt = $db->prepare("SELECT id, username, email, phone, role, profile_pic, last_login_at FROM users WHERE id = ?");
     $admin_stmt->bind_param("i", $admin_id);
     $admin_stmt->execute();
     $res = $admin_stmt->get_result();
@@ -23,7 +24,7 @@ try {
     $profile_pic   = $admin['profile_pic'] ?? '';
     $last_login_at = $admin['last_login_at'] ?? '';
 } catch (Throwable $e) {
-    $admin_stmt = $db->prepare("SELECT id, username, email, role FROM users WHERE id = ?");
+    $admin_stmt = $db->prepare("SELECT id, username, email, phone, role FROM users WHERE id = ?");
     $admin_stmt->bind_param("i", $admin_id);
     $admin_stmt->execute();
     $res = $admin_stmt->get_result();
@@ -38,12 +39,16 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $new_name  = trim($_POST['new_name'] ?? '');
     $new_email = trim($_POST['new_email'] ?? '');
+    $new_phone = trim($_POST['new_phone'] ?? '');
 
     if (empty($new_name) || empty($new_email)) {
         $err = 'Name and Email are required.';
     } elseif ($email_err = validate_gmail_address($new_email)) {
         $err = $email_err;
+    } elseif (($phone_err = phone_validation_error($new_phone)) !== null) {
+        $err = $phone_err;
     } else {
+        $new_phone = normalize_phone($new_phone);
         // Check email uniqueness (exclude self)
         $chk = $db->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
         $chk->bind_param("si", $new_email, $admin_id);
@@ -52,12 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         if ($res && $res->fetch_row()) {
             $err = 'This email is already in use by another account.';
         } else {
-            $up = $db->prepare("UPDATE users SET username = ?, email = ? WHERE id = ?");
-            $up->bind_param("ssi", $new_name, $new_email, $admin_id);
+            $up = $db->prepare("UPDATE users SET username = ?, email = ?, phone = ? WHERE id = ?");
+            $up->bind_param("sssi", $new_name, $new_email, $new_phone, $admin_id);
             $up->execute();
             $_SESSION['username'] = $new_name;
             $admin['username'] = $new_name;
             $admin['email'] = $new_email;
+            $admin['phone'] = $new_phone;
             $admin_name = $new_name;
             $msg = 'Profile updated successfully.';
         }
@@ -463,6 +469,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                                 value="<?= htmlspecialchars($admin['email'] ?? '') ?>"
                                                 required
                                                 placeholder="admin@internreport.edu"
+                                                class="input-saas w-full pl-8 pr-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white">
+                                        </div>
+                                    </div>
+
+                                    <div class="space-y-1">
+                                        <label for="admin_new_phone" class="block text-xs font-bold uppercase tracking-wider text-slate-600">
+                                            Phone Number
+                                        </label>
+                                        <div class="relative">
+                                            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
+                                                <i class="fa-solid fa-phone"></i>
+                                            </span>
+                                            <input
+                                                type="text"
+                                                id="admin_new_phone"
+                                                name="new_phone"
+                                                value="<?= htmlspecialchars($admin['phone'] ?? '') ?>"
+                                                placeholder="09XXXXXXXXX"
                                                 class="input-saas w-full pl-8 pr-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white">
                                         </div>
                                     </div>

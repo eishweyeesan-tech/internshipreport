@@ -11,10 +11,15 @@ header('Pragma: no-cache');
 // 2. Redirect unauthenticated guests to login.php
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
     $script = $_SERVER['SCRIPT_NAME'] ?? '';
-    $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/instructor/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
-    $login_path = $in_sub ? '../login.php' : 'login.php';
-    header('Location: ' . $login_path);
-    exit;
+    // Allow magic link token access on print_report.php
+    if (strpos($script, 'print_report.php') !== false && !empty($_GET['token'])) {
+        // Guest instructor viewing via magic link token
+    } else {
+        $in_sub = (strpos($script, '/admin/') !== false || strpos($script, '/instructor/') !== false || strpos($script, '/supervisor/') !== false || strpos($script, '/student/') !== false);
+        $login_path = $in_sub ? '../login.php' : 'login.php';
+        header('Location: ' . $login_path);
+        exit;
+    }
 }
 
 // 3. First-time login redirect to change password
@@ -63,7 +68,9 @@ if (strpos($script_name, '/admin/') !== false) {
     require_role('supervisor');
 } elseif (strpos($script_name, '/student/') !== false) {
     if (strpos($script_name, 'print_report.php') !== false) {
-        require_role(['student', 'supervisor', 'admin']);
+        if (isset($_SESSION['user_id'])) {
+            require_role(['student', 'supervisor', 'admin']);
+        }
     } else {
         require_role('student');
     }

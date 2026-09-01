@@ -45,11 +45,11 @@ if (!empty($weeks[$selected_week])) {
                     <th class="px-4 py-2.5 text-left">တက်ရောက်မှုအခြေအနေ</th>
                     <th class="px-4 py-2.5 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
                     <th class="px-4 py-2.5 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
-                    <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                    <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</th>
                     <th class="px-4 py-2.5 text-left">လေ့လာသိရှိသော အသိပညာ</th>
-                    <th class="px-4 py-2.5 text-left">ကြာချိန်</th>
+                    <th class="px-4 py-2.5 text-left">ကြာချိန် (နာရီ)</th>
                     <?php if (empty($weekly_report_submitted)): ?>
-                    <th class="px-4 py-2.5 text-right">Action</th>
+                        <th class="px-4 py-2.5 text-right">Action</th>
                     <?php endif; ?>
                 </tr>
             </thead>
@@ -89,11 +89,11 @@ if (!empty($weeks[$selected_week])) {
                                 <td class="px-4 py-3 text-sm text-gray-700 leading-normal align-top break-words"><?= $is_absent ? '-' : htmlspecialchars($log['learnt_skills'] ?? '-') ?></td>
                                 <td class="px-4 py-3 font-mono text-blue-600 text-sm font-semibold whitespace-nowrap"><?= htmlspecialchars($log['calculated_duration'] ?? '') ?></td>
                                 <?php if (empty($weekly_report_submitted)): ?>
-                                <td class="px-4 py-3 text-right whitespace-nowrap">
-                                    <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&edit=<?= $log['id'] ?>" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition">
-                                        ✏️ Edit
-                                    </a>
-                                </td>
+                                    <td class="px-4 py-3 text-right whitespace-nowrap">
+                                        <a href="student-dashboard.php?tab=daily-log&week=<?= $selected_week ?>&edit=<?= $log['id'] ?>" class="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition">
+                                            ✏️ Edit
+                                        </a>
+                                    </td>
                                 <?php endif; ?>
                             </tr>
                         <?php else: ?>

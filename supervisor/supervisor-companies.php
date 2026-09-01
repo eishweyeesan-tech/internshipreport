@@ -11,8 +11,16 @@ $db       = $mysqli ?? $conn;
 // ── Notification redirect URL helper ────────────────────────────
 require_once __DIR__ . '/../config/notify.php';
 
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+
 // ── Centralized Notification Action Handler ────────────────────
 handle_notification_ajax_actions($db, $sup_id);
+
+// ── Academic Year Configuration ────────────────────────────────
+ensure_academic_years_table($db);
+$available_years = get_academic_years_list($db);
+$active_year_label = get_active_academic_year_label($db);
+$filter_year = trim($_GET['year'] ?? ($_GET['academic_year'] ?? 'all'));
 
 // ── Fetch notifications ─────────────────────────────────────────
 $unread_notif_q = $db->prepare("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0");
@@ -51,13 +59,21 @@ $res = $pending_reviews_q->get_result();
 $row = $res ? $res->fetch_row() : null;
 $pending_reviews = (int) ($row[0] ?? 0);
 
-$company_count_q = $db->prepare("
+$cc_sql = "
     SELECT COUNT(DISTINCT sp.company_name) FROM users u
     JOIN student_profiles sp ON sp.user_id = u.id
     WHERE u.role = 'student' AND sp.supervisor_id = ?
       AND sp.company_name IS NOT NULL AND sp.company_name != ''
-");
-$company_count_q->bind_param("i", $sup_id);
+";
+$cc_types = "i";
+$cc_params = [$sup_id];
+if ($filter_year !== 'all' && $filter_year !== '') {
+    $cc_sql .= " AND u.academic_year = ?";
+    $cc_types .= "s";
+    $cc_params[] = $filter_year;
+}
+$company_count_q = $db->prepare($cc_sql);
+$company_count_q->bind_param($cc_types, ...$cc_params);
 $company_count_q->execute();
 $res = $company_count_q->get_result();
 $row = $res ? $res->fetch_row() : null;
@@ -65,7 +81,7 @@ $company_count = (int) ($row[0] ?? 0);
 
 // ── Students grouped by company (assigned students scope) ──────
 $sql = "
-    SELECT u.id AS uid, u.username, u.profile_pic,
+    SELECT u.id AS uid, u.username, u.profile_pic, u.academic_year,
            sp.full_name, sp.student_roll, sp.job_role, sp.company_name,
            sp.instructor_name, sp.instructor_email, sp.instructor_phone,
            c.id AS company_id, c.address, c.contact_person, c.contact_email, c.contact_phone, c.website
@@ -78,6 +94,12 @@ $sql = "
 $types = "i";
 $params = [$sup_id];
 
+if ($filter_year !== 'all' && $filter_year !== '') {
+    $sql .= " AND u.academic_year = ?";
+    $types .= "s";
+    $params[] = $filter_year;
+}
+
 if ($search) {
     $sql .= " AND (sp.company_name LIKE ? OR sp.full_name LIKE ? OR sp.job_role LIKE ? OR sp.instructor_name LIKE ? OR c.contact_person LIKE ? OR c.contact_email LIKE ?)";
     $like = '%' . $search . '%';
@@ -85,7 +107,7 @@ if ($search) {
     array_push($params, $like, $like, $like, $like, $like, $like);
 }
 
-$sql .= " ORDER BY sp.company_name ASC, sp.full_name ASC";
+$sql .= " ORDER BY sp.company_name ASC, u.academic_year DESC, sp.student_roll ASC, sp.full_name ASC";
 
 $companies_stmt = $db->prepare($sql);
 $companies_stmt->bind_param($types, ...$params);
@@ -116,10 +138,25 @@ foreach ($company_rows as $row) {
         'profile_pic'      => $row['profile_pic'] ?? '',
         'student_roll'     => $row['student_roll'],
         'job_role'         => $row['job_role'],
+        'academic_year'    => $row['academic_year'] ?? '',
         'instructor_name'  => $row['instructor_name'] ?? '',
         'instructor_email' => $row['instructor_email'] ?? '',
         'instructor_phone' => $row['instructor_phone'] ?? '',
     ];
+}
+
+// Sort each company's students by academic year descending, then roll number naturally
+foreach ($companies as $k => $comp) {
+    usort($companies[$k]['students'], function ($a, $b) {
+        $ayA = $a['academic_year'] ?? '';
+        $ayB = $b['academic_year'] ?? '';
+        if ($ayA !== $ayB) {
+            return strcmp($ayB, $ayA); // Descending (2025-2026, 2024-2025, 2023-2024)
+        }
+        $rollA = (string)($a['student_roll'] ?: $a['full_name']);
+        $rollB = (string)($b['student_roll'] ?: $b['full_name']);
+        return strnatcasecmp($rollA, $rollB); // Natural roll sort (e.g. 5CS-1, 5CS-2, 5CS-5, 5CS-10)
+    });
 }
 
 $filtered_count = count($companies);
@@ -215,15 +252,32 @@ function build_query_url($overrides = [])
                     <div class="flex items-center justify-between flex-wrap gap-3">
                         <p class="text-sm text-slate-400 font-medium">Placement companies of your assigned students</p>
                         <div class="flex items-center gap-2.5 flex-wrap">
-                            <div class="relative w-full sm:w-64">
+
+                            <!-- Academic Year Filter Dropdown -->
+                            <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-600">
+                                <span class="text-slate-500 whitespace-nowrap">Academic Year:</span>
+                                <select onchange="location.href='?year=' + encodeURIComponent(this.value) + '<?= !empty($search) ? '&search=' . urlencode($search) : '' ?>'" class="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition cursor-pointer shadow-2xs">
+                                    <option value="all" <?= ($filter_year === 'all' || empty($filter_year)) ? 'selected' : '' ?>>All Academic Years</option>
+                                    <?php foreach ($available_years as $ay): ?>
+                                        <option value="<?= htmlspecialchars($ay) ?>" <?= ($filter_year === $ay) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($ay) ?><?= ($ay === $active_year_label) ? ' (Active)' : '' ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+
+                            <!-- Search Input -->
+                            <div class="relative w-full sm:w-60">
                                 <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400 text-xs">🔍</span>
                                 <input type="text"
                                     id="companySearchInput"
                                     placeholder="Search company or student…"
+                                    value="<?= htmlspecialchars($search) ?>"
                                     class="w-full bg-white hover:bg-slate-50 focus:bg-white border border-slate-200 focus:border-teal-500 rounded-xl pl-8 pr-8 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all duration-200 shadow-2xs"
                                     oninput="filterCompaniesLive(this.value)">
                                 <button type="button" onclick="document.getElementById('companySearchInput').value=''; filterCompaniesLive('');" class="absolute inset-y-0 right-0 flex items-center pr-2.5 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer">✕</button>
                             </div>
+
                             <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 shadow-2xs">🏢 <?= $company_count ?> Active <?= $company_count === 1 ? 'Company' : 'Companies' ?></span>
                         </div>
                     </div>
@@ -305,7 +359,7 @@ function build_query_url($overrides = [])
                                                 $s_roll = $stu['student_roll'] ?: '';
                                                 $s_uid  = (int) $stu['uid'];
                                             ?>
-                                                <a href="view-student-dashboard.php?id=<?= $s_uid ?>"
+                                                <a href="view-student-dashboard.php?id=<?= $s_uid ?>&from=companies<?= (!empty($filter_year) && $filter_year !== 'all') ? '&year=' . urlencode($filter_year) : '' ?>"
                                                    title="View <?= htmlspecialchars($s_name) ?> (<?= htmlspecialchars($s_roll) ?>)'s progress"
                                                    class="inline-block transition-transform duration-200 hover:scale-125 hover:z-20 relative cursor-pointer">
                                                     <?php if (!empty($stu['profile_pic'])): ?>
@@ -420,10 +474,23 @@ function build_query_url($overrides = [])
             listEl.innerHTML = '';
 
             if (company.students && company.students.length > 0) {
-                company.students.forEach(stu => {
+                // Sort students descending by Academic Year (e.g. 2025-2026, 2024-2025, 2023-2024) and naturally by Roll Number
+                const sortedStudents = [...company.students].sort((a, b) => {
+                    const ayA = a.academic_year || '';
+                    const ayB = b.academic_year || '';
+                    if (ayA !== ayB) {
+                        return ayB.localeCompare(ayA);
+                    }
+                    const rollA = a.student_roll || a.full_name || '';
+                    const rollB = b.student_roll || b.full_name || '';
+                    return rollA.localeCompare(rollB, undefined, { numeric: true, sensitivity: 'base' });
+                });
+
+                sortedStudents.forEach(stu => {
                     const name = stu.full_name || stu.username;
                     const roll = stu.student_roll || stu.username;
                     const role = stu.job_role || 'Intern';
+                    const ay = stu.academic_year || '';
                     const initial = name.charAt(0).toUpperCase();
 
                     let avatarHtml = '';
@@ -431,6 +498,11 @@ function build_query_url($overrides = [])
                         avatarHtml = `<img src="../uploads/avatars/${escapeHtml(stu.profile_pic)}" alt="${escapeHtml(name)}" class="w-10 h-10 rounded-2xl object-cover ring-1 ring-slate-200 shrink-0">`;
                     } else {
                         avatarHtml = `<div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xs font-black shrink-0">${initial}</div>`;
+                    }
+
+                    let ayBadge = '';
+                    if (ay) {
+                        ayBadge = `<span class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs">📅 ${escapeHtml(ay)}</span>`;
                     }
 
                     let instructorHtml = '';
@@ -453,12 +525,13 @@ function build_query_url($overrides = [])
                                     <div class="flex items-center gap-2 flex-wrap">
                                         <h4 class="text-xs sm:text-sm font-bold text-slate-800">${escapeHtml(name)}</h4>
                                         <span class="px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">${escapeHtml(roll)}</span>
+                                        ${ayBadge}
                                     </div>
                                     <p class="text-[11px] text-slate-500 font-medium mt-0.5">${escapeHtml(role)}</p>
                                     ${instructorHtml}
                                 </div>
                             </div>
-                            <a href="view-student-dashboard.php?id=${stu.uid}" class="inline-flex items-center gap-1 px-3.5 py-2 bg-white hover:bg-teal-50 text-teal-700 hover:text-teal-800 text-xs font-bold rounded-xl border border-slate-200 hover:border-teal-300 shadow-2xs transition shrink-0">
+                            <a href="view-student-dashboard.php?id=${stu.uid}&from=companies" class="inline-flex items-center gap-1 px-3.5 py-2 bg-white hover:bg-teal-50 text-teal-700 hover:text-teal-800 text-xs font-bold rounded-xl border border-slate-200 hover:border-teal-300 shadow-2xs transition shrink-0">
                                 <span>View Progress</span>
                                 <span>→</span>
                             </a>

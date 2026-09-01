@@ -275,10 +275,47 @@ if ($view_mode === 'weekly' && $filter_week > 0 && isset($weeks[$filter_week])) 
     $display_mins  = $display_minutes % 60;
 }
 
-// Back link
-$back_url = ($role === 'admin') ? 'admin/admin-dashboard.php?tab=history' : 'supervisor/my-students.php';
-if (!empty($_SERVER['HTTP_REFERER']) && !str_contains($_SERVER['HTTP_REFERER'], 'view_student_history.php')) {
-    $back_url = $_SERVER['HTTP_REFERER'];
+// ── Canonical Back Link ──────────────────────────────────────────
+$from = trim($_GET['from'] ?? '');
+if ($role === 'admin') {
+    if ($from === 'students') {
+        $back_url  = 'admin/admin-dashboard.php?tab=students';
+        $back_text = 'Back to Students';
+    } elseif ($from === 'academic-years') {
+        $back_url  = 'admin/manage-academic-years.php';
+        $back_text = 'Back to Academic Years';
+    } else {
+        $back_url  = 'admin/admin-dashboard.php?tab=history';
+        $back_text = 'Back to Reports';
+    }
+} elseif ($role === 'supervisor') {
+    if ($from === 'students' || $from === 'my-students') {
+        $back_url  = 'supervisor/my-students.php';
+        $back_text = 'Back to My Students';
+    } elseif ($from === 'dashboard') {
+        $back_url  = 'supervisor/view-student-dashboard.php?id=' . $uid;
+        $back_text = 'Back to Student Dashboard';
+    } else {
+        $back_url  = 'supervisor/supervisor-reports.php';
+        $back_text = 'Back to Reports';
+    }
+} else {
+    $back_url  = 'student/student-dashboard.php';
+    $back_text = 'Back to Dashboard';
+}
+
+// Preserve explicit referer only if it is a valid main dashboard page (never a print/report viewer or history loop)
+if (!empty($_SERVER['HTTP_REFERER'])) {
+    $ref = $_SERVER['HTTP_REFERER'];
+    if (!str_contains($ref, 'print_report.php') && !str_contains($ref, 'view_student_history.php')) {
+        if ($role === 'admin' && str_contains($ref, 'admin-dashboard.php')) {
+            $back_url  = $ref;
+            $back_text = str_contains($ref, 'tab=students') ? 'Back to Students' : 'Back to Reports';
+        } elseif ($role === 'supervisor' && (str_contains($ref, 'supervisor-reports.php') || str_contains($ref, 'my-students.php') || str_contains($ref, 'view-student-dashboard.php'))) {
+            $back_url  = $ref;
+            $back_text = str_contains($ref, 'my-students.php') ? 'Back to My Students' : (str_contains($ref, 'view-student-dashboard.php') ? 'Back to Student Dashboard' : 'Back to Reports');
+        }
+    }
 }
 
 $gmap = [
@@ -349,7 +386,7 @@ $sgd = [
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to Dashboard
+                <span><?= htmlspecialchars($back_text) ?></span>
             </a>
         </div>
 
@@ -471,13 +508,13 @@ $sgd = [
                     <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Reflections: <strong class="text-slate-800"><?= $total_reflections ?></strong></span>
                     <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Present: <strong class="text-slate-800"><?= $total_present ?></strong></span>
                     <?php if ($total_absent > 0): ?>
-                    <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Absent: <strong class="text-slate-800"><?= $total_absent ?></strong></span>
+                        <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span> Absent: <strong class="text-slate-800"><?= $total_absent ?></strong></span>
                     <?php endif; ?>
                 </div>
                 <?php if ($intern_start && $intern_end): ?>
-                <div class="text-slate-400 font-medium">
-                    <?= (new DateTime($intern_start))->format('d M Y') ?> – <?= (new DateTime($intern_end))->format('d M Y') ?>
-                </div>
+                    <div class="text-slate-400 font-medium">
+                        <?= (new DateTime($intern_start))->format('d M Y') ?> – <?= (new DateTime($intern_end))->format('d M Y') ?>
+                    </div>
                 <?php endif; ?>
             </div>
         </div>
@@ -603,9 +640,9 @@ $sgd = [
                                                     <th class="px-4 py-2.5 text-left">တက်ရောက်မှုအခြေအနေ</th>
                                                     <th class="px-4 py-2.5 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
                                                     <th class="px-4 py-2.5 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
-                                                    <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                                                    <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</th>
                                                     <th class="px-4 py-2.5 text-left">လေ့လာသိရှိသော အသိပညာ</th>
-                                                    <th class="px-4 py-2.5 text-left">ကြာချိန်</th>
+                                                    <th class="px-4 py-2.5 text-left">ကြာချိန်(နာရီ)</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-slate-100">
@@ -926,7 +963,7 @@ $sgd = [
                                                             <th class="px-4 py-2.5 text-left">တက်ရောက်မှုအခြေအနေ</th>
                                                             <th class="px-4 py-2.5 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
                                                             <th class="px-4 py-2.5 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
-                                                            <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                                                            <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</th>
                                                             <th class="px-4 py-2.5 text-left">လေ့လာသိရှိသော အသိပညာ</th>
                                                             <th class="px-4 py-2.5 text-left">ကြာချိန်</th>
                                                         </tr>

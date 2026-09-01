@@ -4,47 +4,68 @@ require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../config/week_helper.php';
 require_once __DIR__ . '/../includes/ui_helpers.php';
 
-$auth_role     = $_SESSION['role'] ?? 'student';
-$auth_user_id  = (int) $_SESSION['user_id'];
 $db            = $mysqli ?? $conn;
 
-// Target student ID
-$target_student_id = isset($_GET['student_id']) ? (int)$_GET['student_id'] : (isset($_GET['uid']) ? (int)$_GET['uid'] : 0);
-if ($target_student_id <= 0) {
-    if ($auth_role === 'student') {
-        $target_student_id = $auth_user_id;
-    } else {
-        // Fallback for supervisor/admin if accessed without student_id
-        if ($auth_role === 'supervisor') {
-            $f_stmt = $db->prepare("SELECT user_id FROM student_profiles WHERE supervisor_id = ? ORDER BY id ASC LIMIT 1");
-            $f_stmt->bind_param("i", $auth_user_id);
-            $f_stmt->execute();
-            $f_res = $f_stmt->get_result();
-            $target_student_id = ($f_res && $f_row = $f_res->fetch_row()) ? (int)$f_row[0] : 0;
-        } else {
-            $f_stmt = $db->query("SELECT user_id FROM student_profiles ORDER BY id ASC LIMIT 1");
-            $target_student_id = ($f_stmt && $f_row = $f_stmt->fetch_row()) ? (int)$f_row[0] : 0;
-        }
-        if ($target_student_id <= 0) {
-            $target_student_id = $auth_user_id;
-        }
+$magic_token   = trim($_GET['token'] ?? '');
+$is_magic_link = false;
+$magic_link_row = null;
+
+if ($magic_token && preg_match('/^[a-f0-9]{32,64}$/i', $magic_token)) {
+    $m_stmt = $db->prepare("SELECT internship_id AS student_id, week_number FROM magic_links WHERE token = ? AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1");
+    $m_stmt->bind_param("s", $magic_token);
+    $m_stmt->execute();
+    $m_res = $m_stmt->get_result();
+    $magic_link_row = $m_res ? $m_res->fetch_assoc() : null;
+    if ($magic_link_row) {
+        $is_magic_link = true;
+        $auth_role = 'instructor';
     }
 }
 
-// Access authorization for supervisors
-if ($auth_role === 'supervisor' && $target_student_id !== $auth_user_id) {
-    $chk = $db->prepare("SELECT 1 FROM student_profiles WHERE user_id = ? AND supervisor_id = ?");
-    $chk->bind_param("ii", $target_student_id, $auth_user_id);
-    $chk->execute();
-    $chk_res = $chk->get_result();
-    if (!$chk_res || !$chk_res->fetch_row()) {
-        header('Location: ../supervisor/supervisor-dashboard.php');
-        exit;
+$auth_role     = $is_magic_link ? 'instructor' : ($_SESSION['role'] ?? 'student');
+$auth_user_id  = (int) ($_SESSION['user_id'] ?? 0);
+
+// Target student ID
+if ($is_magic_link && $magic_link_row) {
+    $target_student_id = (int)$magic_link_row['student_id'];
+} else {
+    $target_student_id = isset($_GET['student_id']) ? (int)$_GET['student_id'] : (isset($_GET['uid']) ? (int)$_GET['uid'] : 0);
+    if ($target_student_id <= 0) {
+        if ($auth_role === 'student') {
+            $target_student_id = $auth_user_id;
+        } else {
+            // Fallback for supervisor/admin if accessed without student_id
+            if ($auth_role === 'supervisor') {
+                $f_stmt = $db->prepare("SELECT user_id FROM student_profiles WHERE supervisor_id = ? ORDER BY id ASC LIMIT 1");
+                $f_stmt->bind_param("i", $auth_user_id);
+                $f_stmt->execute();
+                $f_res = $f_stmt->get_result();
+                $target_student_id = ($f_res && $f_row = $f_res->fetch_row()) ? (int)$f_row[0] : 0;
+            } else {
+                $f_stmt = $db->query("SELECT user_id FROM student_profiles ORDER BY id ASC LIMIT 1");
+                $target_student_id = ($f_stmt && $f_row = $f_stmt->fetch_row()) ? (int)$f_row[0] : 0;
+            }
+            if ($target_student_id <= 0) {
+                $target_student_id = $auth_user_id;
+            }
+        }
+    }
+
+    // Access authorization for supervisors
+    if ($auth_role === 'supervisor' && $target_student_id !== $auth_user_id) {
+        $chk = $db->prepare("SELECT 1 FROM student_profiles WHERE user_id = ? AND supervisor_id = ?");
+        $chk->bind_param("ii", $target_student_id, $auth_user_id);
+        $chk->execute();
+        $chk_res = $chk->get_result();
+        if (!$chk_res || !$chk_res->fetch_row()) {
+            header('Location: ../supervisor/supervisor-dashboard.php');
+            exit;
+        }
     }
 }
 
 $user_id       = $target_student_id;
-$username      = $_SESSION['username'];
+$username      = $_SESSION['username'] ?? '';
 $internship_id = $user_id;
 
 // 1. FETCH STUDENT & SUPERVISOR & INSTRUCTOR PROFILE
@@ -274,12 +295,19 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
     $week_switch_prefix = $preserved_query ? 'print_report.php?' . $preserved_query . '&week=' : 'print_report.php?week=';
 
     $back_url = 'log-history.php';
-    if ($auth_role === 'supervisor') {
+    $back_label = 'Back to Log History';
+    if ($is_magic_link) {
+        $back_url = '../instructor/view-report.php' . ($magic_token ? '?token=' . urlencode($magic_token) : '');
+        $back_label = 'Back to Review';
+    } elseif ($auth_role === 'supervisor') {
         $back_url = '../supervisor/supervisor-review.php?student_id=' . $user_id . '&week=' . ($selected_week ?: 1);
+        $back_label = 'Back to Review';
     } elseif ($auth_role === 'admin') {
         $back_url = '../view_student_history.php?uid=' . $user_id;
+        $back_label = 'Back to Student History';
     } else {
         $back_url = 'log-history.php' . ($selected_week && !$is_all_weeks ? "?mode=weekly&week={$selected_week}" : '');
+        $back_label = 'Back to Log History';
     }
     ?>
     <!-- ═══════════ TOP ACTION TOOLBAR (SCREEN ONLY) ═══════════ -->
@@ -289,7 +317,7 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-                Back to Log History
+                <?= htmlspecialchars($back_label) ?>
             </a>
             <span class="text-slate-300">|</span>
             <div class="flex items-center gap-2">
@@ -349,7 +377,7 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                 <!-- Col 1: Student Information -->
                 <div class="space-y-1.5">
                     <p class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 border-b border-slate-200 pb-1">
-                        1. Student Details / ကျောင်းသားအချက်အလက်
+                        1. Student Details
                     </p>
                     <div class="flex justify-between"><span class="text-slate-500">Name:</span> <strong class="text-slate-800"><?= htmlspecialchars($student_name) ?></strong></div>
                     <div class="flex justify-between"><span class="text-slate-500">Roll No:</span> <strong class="text-slate-800 font-mono"><?= htmlspecialchars($student_roll) ?></strong></div>
@@ -359,7 +387,7 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                 <!-- Col 2: Company & Instructors -->
                 <div class="space-y-1.5">
                     <p class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 border-b border-slate-200 pb-1">
-                        2. Supervision / ကြီးကြပ်မှု
+                        2. Supervision
                     </p>
                     <div class="flex justify-between"><span class="text-slate-500">Company Instructor:</span> <strong class="text-slate-800"><?= htmlspecialchars($instructor_name) ?></strong></div>
                     <div class="flex justify-between"><span class="text-slate-500">University Supervisor:</span> <strong class="text-slate-800"><?= htmlspecialchars($supervisor_name) ?></strong></div>
@@ -369,7 +397,7 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                 <!-- Col 3: Internship & Report Period -->
                 <div class="space-y-1.5">
                     <p class="text-[10px] font-bold uppercase tracking-wider text-indigo-700 border-b border-slate-200 pb-1">
-                        3. Period & Status / ကာလနှင့် အခြေအနေ
+                        3. Period & Status
                     </p>
                     <div class="flex justify-between"><span class="text-slate-500">Report Week:</span> <strong class="text-indigo-900 font-bold"><?= $is_all_weeks ? 'All Weeks (Complete History)' : 'Week ' . $selected_week ?></strong></div>
                     <div class="flex justify-between"><span class="text-slate-500">Week Duration:</span> <strong class="text-slate-800"><?= $is_all_weeks ? ($intern_start ? (new DateTime($intern_start))->format('d M Y') . ' – ' . (new DateTime($intern_end))->format('d M Y') : '—') : ($week_start ? (new DateTime($week_start))->format('d M') . ' – ' . (new DateTime($week_end))->format('d M Y') : '—') ?></strong></div>
@@ -405,7 +433,7 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
         <section class="mb-6">
             <div class="flex items-center justify-between mb-2">
                 <h2 class="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <span>📅</span> Daily Work Logs / နေ့စဉ်လုပ်ငန်းမှတ်တမ်းများ
+                    <span>📅</span> Daily Logs / နေ့စဉ်မှတ်တမ်းများ
                 </h2>
                 <span class="text-[10px] font-bold text-slate-400"><?= $is_all_weeks ? 'All Weeks' : 'Week ' . $selected_week ?></span>
             </div>
@@ -415,12 +443,12 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                     <thead>
                         <tr class="bg-slate-100 text-slate-700 font-bold uppercase tracking-wider text-[10px] border-b border-slate-300">
                             <th class="py-2.5 px-3 border-r border-slate-200 w-24">Date / Day</th>
-                            <th class="py-2.5 px-2 border-r border-slate-200 w-20 text-center">Status</th>
-                            <th class="py-2.5 px-3 border-r border-slate-200 w-1/4">Intended Task</th>
-                            <th class="py-2.5 px-3 border-r border-slate-200 w-1/3">Actual Tasks Performed</th>
-                            <th class="py-2.5 px-2 border-r border-slate-200 w-24">Tools / Tech</th>
-                            <th class="py-2.5 px-2 border-r border-slate-200">Knowledge Gained</th>
-                            <th class="py-2.5 px-2 w-14 text-center">Hours</th>
+                            <th class="py-2.5 px-2 border-r border-slate-200 w-20 text-center">တက်ရောက်မှုအခြေအနေ</th>
+                            <th class="py-2.5 px-3 border-r border-slate-200 w-1/4">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
+                            <th class="py-2.5 px-3 border-r border-slate-200 w-1/3">အမှန်တကယ်လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
+                            <th class="py-2.5 px-2 border-r border-slate-200 w-24">အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</th>
+                            <th class="py-2.5 px-2 border-r border-slate-200">ရရှိခဲ့သောဗဟုသုတများ</th>
+                            <th class="py-2.5 px-2 w-14 text-center">ကြာချိန်(နာရီ)</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200 text-slate-700">
@@ -470,10 +498,18 @@ $doc_ref_id = 'IR-' . date('Y') . '-' . str_pad($user_id, 4, '0', STR_PAD_LEFT) 
                                         <?php endif; ?>
                                     </td>
                                     <td class="py-2.5 px-2 border-r border-slate-200 font-mono text-[11px] text-slate-600">
-                                        <?= htmlspecialchars($log['tools_used'] ?? '—') ?>
+                                        <?php if ($is_present && !$is_holiday && !empty($log['tools_used']) && $log['tools_used'] !== 'N/A - Absent'): ?>
+                                            <?= htmlspecialchars($log['tools_used']) ?>
+                                        <?php else: ?>
+                                            <span class="text-slate-400">—</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="py-2.5 px-2 border-r border-slate-200 text-slate-600">
-                                        <?= htmlspecialchars($log['learnt_skills'] ?? '—') ?>
+                                        <?php if ($is_present && !$is_holiday && !empty($log['learnt_skills']) && $log['learnt_skills'] !== 'N/A - Absent'): ?>
+                                            <?= htmlspecialchars($log['learnt_skills']) ?>
+                                        <?php else: ?>
+                                            <span class="text-slate-400">—</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td class="py-2.5 px-2 text-center font-bold text-slate-800 font-mono text-[11px]">
                                         <?= htmlspecialchars($log['calculated_duration'] ?? $log['hours_worked'] ?? '—') ?>

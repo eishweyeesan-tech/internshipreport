@@ -118,7 +118,7 @@ if (!function_exists('student_notif_url')) {
             return $url;
         }
         if (in_array($type, ['daily_log_added', 'daily_log_updated', 'student_behind_schedule'], true)) {
-            return 'daily_log.php' . ($related_week ? '?week=' . (int)$related_week : '') . '#daily-log-form';
+            return 'student-dashboard.php?tab=daily-log' . ($related_week ? '&week=' . (int)$related_week : '') . '#daily-log-form';
         }
         if ($related_week) {
             return $base . '?week=' . (int)$related_week;

@@ -72,9 +72,21 @@ $res = $recent_notifs_q->get_result();
 $recent_notifications = $res ? $res->fetch_all(MYSQLI_ASSOC) : [];
 
 $student_id = (int) ($_GET['id'] ?? $_GET['student_id'] ?? $_GET['uid'] ?? 0);
+$from       = trim($_GET['from'] ?? '');
+$from_year  = trim($_GET['year'] ?? '');
+
+$back_url   = 'my-students.php';
+$back_text  = '← Back to My Students';
+$sidebar_active_page = 'students';
+
+if ($from === 'companies' || $from === 'company') {
+    $back_url   = 'supervisor-companies.php' . (!empty($from_year) && $from_year !== 'all' ? '?year=' . urlencode($from_year) : '');
+    $back_text  = '← Back to Placement Companies';
+    $sidebar_active_page = 'companies';
+}
 
 if ($student_id <= 0) {
-    header('Location: my-students.php');
+    header('Location: ' . $back_url);
     exit;
 }
 
@@ -94,7 +106,7 @@ if (!$res || !$res->fetch_row()) {
 }
 
 $profile_r = $db->prepare("
-    SELECT sp.*, u.username, u.email, u.profile_pic,
+    SELECT sp.*, u.username, u.email, u.profile_pic, u.academic_year, u.status,
            sup_u.username AS supervisor_name
     FROM student_profiles sp
     LEFT JOIN users u ON u.id = sp.user_id
@@ -109,6 +121,23 @@ $profile = $res ? $res->fetch_assoc() : null;
 if (!$profile) {
     header('Location: supervisor-dashboard.php');
     exit;
+}
+
+$stu_ay = trim((string)($profile['academic_year'] ?? ''));
+$is_student_archived = false;
+if (strcasecmp((string)($profile['status'] ?? 'Active'), 'Archived') === 0) {
+    $is_student_archived = true;
+}
+if (!$is_student_archived && $stu_ay !== '') {
+    $ay_q = $db->prepare("SELECT status, is_current FROM academic_years WHERE year_label = ? LIMIT 1");
+    $ay_q->bind_param("s", $stu_ay);
+    $ay_q->execute();
+    $ay_res = $ay_q->get_result();
+    if ($ay_res && $ay_r = $ay_res->fetch_assoc()) {
+        if (strcasecmp($ay_r['status'], 'Archived') === 0 || ((int)$ay_r['is_current'] === 0 && strcasecmp($ay_r['status'], 'Active') !== 0)) {
+            $is_student_archived = true;
+        }
+    }
 }
 
 $intern_start  = $profile['internship_start_date'] ?? null;
@@ -295,7 +324,7 @@ if ($intern_start) {
     <div class="flex h-screen overflow-hidden">
 
         <!-- ─── SIDEBAR ─── -->
-        <?php $active_page = 'students';
+        <?php $active_page = $sidebar_active_page;
         include __DIR__ . '/includes/supervisor_sidebar.php'; ?>
 
         <!-- ─── MAIN ─── -->
@@ -311,8 +340,8 @@ if ($intern_start) {
 
                     <!-- Back Navigation -->
                     <div>
-                        <a href="my-students.php" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition" title="Back to My Students">
-                            ← Back to My Students
+                        <a href="<?= htmlspecialchars($back_url) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition" title="<?= htmlspecialchars($back_text) ?>">
+                            <?= htmlspecialchars($back_text) ?>
                         </a>
                     </div>
 
@@ -427,7 +456,7 @@ if ($intern_start) {
                                     </button>
                                     <div id="week-menu" class="absolute left-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 hidden overflow-hidden max-h-64 overflow-y-auto">
                                         <?php foreach ($weeks as $wn => $wr): ?>
-                                            <a href="?id=<?= $student_id ?>&week=<?= $wn ?>" class="flex items-center justify-between px-3 py-2 text-xs font-semibold <?= $selected_week === $wn ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?> transition">
+                                            <a href="?id=<?= $student_id ?>&week=<?= $wn ?><?= $from ? '&from=' . urlencode($from) : '' ?><?= $from_year ? '&year=' . urlencode($from_year) : '' ?>" class="flex items-center justify-between px-3 py-2 text-xs font-semibold <?= $selected_week === $wn ? 'bg-indigo-50 text-indigo-600' : 'text-slate-600 hover:bg-slate-50' ?> transition">
                                                 Week <?= $wn ?>
                                                 <span class="text-label text-slate-400"><?= $wr['start'] ?></span>
                                             </a>
@@ -445,8 +474,8 @@ if ($intern_start) {
                                 <a href="../view_student_history.php?uid=<?= $student_id ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition shadow-xs" title="View complete 13-week log history">
                                     📜 Full History
                                 </a>
-                                <a href="supervisor-review.php?student_id=<?= $student_id ?>&week=<?= $selected_week ?>" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f] text-white text-xs font-bold rounded-lg shadow-xs transition" title="Review & grade this week's report">
-                                    📝 Review & Grade
+                                <a href="supervisor-review.php?student_id=<?= $student_id ?>&week=<?= $selected_week ?>" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 <?= $is_student_archived ? 'bg-slate-700 hover:bg-slate-800' : 'bg-gradient-to-r from-teal-600 to-[#005f73] hover:from-teal-700 hover:to-[#004e5f]' ?> text-white text-xs font-bold rounded-lg shadow-xs transition" title="<?= $is_student_archived ? 'View historical evaluation (Archived Year)' : 'Review & grade this week\'s report' ?>">
+                                    <?= $is_student_archived ? '📦 View Evaluation' : '📝 Review & Grade' ?>
                                 </a>
                             </div>
                         </div>

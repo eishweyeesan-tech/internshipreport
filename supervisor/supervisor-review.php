@@ -21,7 +21,7 @@ if ($student_id <= 0) {
 
 // ── Verify this student belongs to this supervisor ─────────────────
 $stu = $db->prepare("
-    SELECT u.id, u.username, u.email, u.academic_year, u.created_at,
+    SELECT u.id, u.username, u.email, u.academic_year, u.status AS user_status, u.created_at,
            sp.full_name, sp.student_roll, sp.major, sp.company_name,
            sp.job_role, sp.phone, sp.instructor_name, sp.instructor_email,
            sp.internship_start_date, sp.internship_end_date
@@ -40,6 +40,30 @@ if (!$student) {
 }
 
 $student_name = $student['full_name'] ?: $student['username'];
+
+// ── Check if Student / Academic Year is Archived ───────────────────
+require_once __DIR__ . '/../includes/academic_year_helper.php';
+ensure_academic_years_table($db);
+
+$student_ay = trim((string)($student['academic_year'] ?? ''));
+$student_status = trim((string)($student['user_status'] ?? 'Active'));
+
+$is_archived = false;
+if (strcasecmp($student_status, 'Archived') === 0) {
+    $is_archived = true;
+}
+
+if (!$is_archived && $student_ay !== '') {
+    $ay_chk = $db->prepare("SELECT status, is_current FROM academic_years WHERE year_label = ? LIMIT 1");
+    $ay_chk->bind_param("s", $student_ay);
+    $ay_chk->execute();
+    $ay_res = $ay_chk->get_result();
+    if ($ay_res && $ay_row = $ay_res->fetch_assoc()) {
+        if (strcasecmp($ay_row['status'], 'Archived') === 0 || ((int)$ay_row['is_current'] === 0 && strcasecmp($ay_row['status'], 'Active') !== 0)) {
+            $is_archived = true;
+        }
+    }
+}
 
 // ── Active Year Badge Data ─────────────────────────────────────────
 $total_assigned_q = $db->prepare("SELECT COUNT(*) FROM users u JOIN student_profiles sp ON sp.user_id = u.id WHERE u.role = 'student' AND sp.supervisor_id = ?");
@@ -254,55 +278,59 @@ $week_log_days        = $week_att['expected'];
 // ── Handle Supervisor Evaluation Submission (Method 1) ─────────────
 $msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_sup_eval'])) {
-    $grade    = $_POST['weekly_grade'] ?? '';
-    $comments = trim($_POST['supervisor_comments'] ?? '');
-    $allowed  = ['A', 'B', 'C', 'D', 'F'];
-
-    if (!in_array($grade, $allowed, true)) {
-        $msg = 'invalid_grade';
+    if ($is_archived) {
+        $msg = 'archived_locked';
     } else {
-        $upsert = $db->prepare("
-            INSERT INTO supervisor_weekly_evaluations (student_id, week_number, supervisor_id, weekly_grade, supervisor_comments)
-            VALUES (?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            weekly_grade = VALUES(weekly_grade),
-            supervisor_comments = VALUES(supervisor_comments),
-            evaluated_at = NOW()
-        ");
-        $upsert->bind_param("iiiss", $student_id, $week_num, $sup_id, $grade, $comments);
-        $upsert->execute();
+        $grade    = $_POST['weekly_grade'] ?? '';
+        $comments = trim($_POST['supervisor_comments'] ?? '');
+        $allowed  = ['A', 'B', 'C', 'D', 'F'];
 
-        // Update the main report status to approved_by_supervisor
-        $update_status = $db->prepare("
-            UPDATE report_evaluations SET report_status = 'approved_by_supervisor'
-            WHERE student_id = ? AND week_number = ?
-        ");
-        $update_status->bind_param("ii", $student_id, $week_num);
-        $update_status->execute();
+        if (!in_array($grade, $allowed, true)) {
+            $msg = 'invalid_grade';
+        } else {
+            $upsert = $db->prepare("
+                INSERT INTO supervisor_weekly_evaluations (student_id, week_number, supervisor_id, weekly_grade, supervisor_comments)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                weekly_grade = VALUES(weekly_grade),
+                supervisor_comments = VALUES(supervisor_comments),
+                evaluated_at = NOW()
+            ");
+            $upsert->bind_param("iiiss", $student_id, $week_num, $sup_id, $grade, $comments);
+            $upsert->execute();
 
-        // Notify student that report has been graded
-        notify_user_once(
-            $db,
-            $student_id,
-            "Week {$week_num} Report Graded",
-            "Your university supervisor evaluated and graded your Week {$week_num} report with '{$grade}'.",
-            'supervisor_approved',
-            $week_num,
-            $student_id,
-            null
-        );
+            // Update the main report status to approved_by_supervisor
+            $update_status = $db->prepare("
+                UPDATE report_evaluations SET report_status = 'approved_by_supervisor'
+                WHERE student_id = ? AND week_number = ?
+            ");
+            $update_status->bind_param("ii", $student_id, $week_num);
+            $update_status->execute();
 
-        // Re-fetch current week evaluation
-        $gq = $db->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
-        $gq->bind_param("ii", $student_id, $week_num);
-        $gq->execute();
-        $res = $gq->get_result();
-        $supervisor_eval = $res ? $res->fetch_assoc() : null;
+            // Notify student that report has been graded
+            notify_user_once(
+                $db,
+                $student_id,
+                "Week {$week_num} Report Graded",
+                "Your university supervisor evaluated and graded your Week {$week_num} report with '{$grade}'.",
+                'supervisor_approved',
+                $week_num,
+                $student_id,
+                null
+            );
 
-        // Update history cache
-        $all_weeks_grades[$week_num] = $supervisor_eval;
+            // Re-fetch current week evaluation
+            $gq = $db->prepare("SELECT weekly_grade, supervisor_comments, evaluated_at FROM supervisor_weekly_evaluations WHERE student_id = ? AND week_number = ?");
+            $gq->bind_param("ii", $student_id, $week_num);
+            $gq->execute();
+            $res = $gq->get_result();
+            $supervisor_eval = $res ? $res->fetch_assoc() : null;
 
-        $msg = 'saved';
+            // Update history cache
+            $all_weeks_grades[$week_num] = $supervisor_eval;
+
+            $msg = 'saved';
+        }
     }
 }
 
@@ -500,6 +528,11 @@ foreach ($all_weeks_grades as $wg) {
                         <div class="bg-gradient-to-r from-red-50 to-red-100/50 border border-red-200/60 text-red-700 text-sm font-semibold px-5 py-4 rounded-2xl flex items-center gap-3 shadow-sm">
                             <div class="w-8 h-8 rounded-xl bg-red-500 text-white flex items-center justify-center text-sm shadow-lg shadow-red-500/30">❌</div>
                             <span>Invalid grade selected. Please choose A, B, C, D, or F.</span>
+                        </div>
+                    <?php elseif ($msg === 'archived_locked'): ?>
+                        <div class="bg-gradient-to-r from-amber-50 to-amber-100/50 border border-amber-200/60 text-amber-800 text-sm font-semibold px-5 py-4 rounded-2xl flex items-center gap-3 shadow-sm">
+                            <div class="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center text-sm shadow-lg shadow-amber-500/30">📦</div>
+                            <span>This academic year is archived. Reports and grades are read-only and cannot be modified.</span>
                         </div>
                     <?php endif; ?>
 
@@ -845,10 +878,14 @@ foreach ($all_weeks_grades as $wg) {
                             <div id="university-evaluation" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 scroll-mt-24">
                                 <div class="flex items-center justify-between flex-wrap gap-2 pb-3 border-b border-slate-100">
                                     <div class="flex items-center gap-2">
-                                        <div class="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center text-xs shadow-xs shrink-0">🎓</div>
+                                        <div class="w-7 h-7 rounded-lg <?= $is_archived ? 'bg-slate-700' : 'bg-teal-700' ?> text-white flex items-center justify-center text-xs shadow-xs shrink-0">🎓</div>
                                         <h3 class="text-xs sm:text-sm font-bold text-slate-800">University Evaluation – Week <?= $week_num ?></h3>
                                     </div>
-                                    <?php if ($supervisor_eval): ?>
+                                    <?php if ($is_archived): ?>
+                                        <span class="text-[11px] font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                                            <span>📦 Archived Year (Read-Only)</span>
+                                        </span>
+                                    <?php elseif ($supervisor_eval): ?>
                                         <span class="text-[11px] font-bold text-teal-800 bg-teal-50 border border-teal-200/60 px-2 py-0.5 rounded-lg">
                                             Evaluated: <?= (new DateTime($supervisor_eval['evaluated_at']))->format('d M Y') ?>
                                         </span>
@@ -864,18 +901,18 @@ foreach ($all_weeks_grades as $wg) {
                                     <div>
                                         <div class="flex items-center justify-between mb-1.5">
                                             <label class="block text-xs font-bold text-slate-700">Weekly Grade <span class="text-rose-500">*</span></label>
-                                            <?php if (empty($supervisor_eval['weekly_grade'])): ?>
+                                            <?php if (empty($supervisor_eval['weekly_grade']) && !$is_archived): ?>
                                                 <span class="text-[10px] text-amber-600 font-semibold bg-amber-50 border border-amber-200/60 px-2 py-0.5 rounded-md">Please select a grade</span>
                                             <?php endif; ?>
                                         </div>
                                         <div class="grid grid-cols-5 gap-2">
                                             <?php
-                                            $existing_grade = $supervisor_eval['weekly_grade'] ?? '';
-                                            $labels = ['A' => 'Excellent', 'B' => 'Good', 'C' => 'Satisfactory', 'D' => 'Pass', 'F' => 'Fail'];
-                                            foreach (['A', 'B', 'C', 'D', 'F'] as $g):
-                                            ?>
-                                                <label class="flex items-center justify-center gap-1.5 py-2 px-2 bg-slate-50 hover:bg-teal-50/50 border border-slate-200 hover:border-teal-300 rounded-xl cursor-pointer transition text-center group">
-                                                    <input type="radio" name="weekly_grade" value="<?= $g ?>" <?= ($existing_grade !== '' && $g === $existing_grade) ? 'checked' : '' ?> required class="accent-teal-600 w-3.5 h-3.5 cursor-pointer">
+                                             $existing_grade = $supervisor_eval['weekly_grade'] ?? '';
+                                             $labels = ['A' => 'Excellent', 'B' => 'Good', 'C' => 'Satisfactory', 'D' => 'Pass', 'F' => 'Fail'];
+                                             foreach (['A', 'B', 'C', 'D', 'F'] as $g):
+                                             ?>
+                                                <label class="flex items-center justify-center gap-1.5 py-2 px-2 <?= $is_archived ? 'bg-slate-100 border-slate-200 opacity-75 cursor-not-allowed' : 'bg-slate-50 hover:bg-teal-50/50 border-slate-200 hover:border-teal-300 cursor-pointer' ?> border rounded-xl transition text-center group">
+                                                    <input type="radio" name="weekly_grade" value="<?= $g ?>" <?= ($existing_grade !== '' && $g === $existing_grade) ? 'checked' : '' ?> <?= $is_archived ? 'disabled' : 'required' ?> class="accent-teal-600 w-3.5 h-3.5 <?= $is_archived ? 'cursor-not-allowed' : 'cursor-pointer' ?>">
                                                     <span class="text-sm font-black <?= $g === 'A' ? 'text-emerald-600' : ($g === 'F' ? 'text-rose-500' : 'text-slate-700') ?>"><?= $g ?></span>
                                                     <span class="text-[10px] text-slate-400 font-semibold hidden sm:inline">(<?= $labels[$g] ?>)</span>
                                                 </label>
@@ -886,21 +923,28 @@ foreach ($all_weeks_grades as $wg) {
                                     <!-- Compact Supervisor Comments -->
                                     <div>
                                         <label class="block text-xs font-bold text-slate-500 mb-1">Supervisor Comments</label>
-                                        <textarea name="supervisor_comments" rows="2" placeholder="Write feedback and recommendations for the student…"
-                                            class="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition resize-none shadow-xs"><?= htmlspecialchars($supervisor_eval['supervisor_comments'] ?? '') ?></textarea>
+                                        <textarea name="supervisor_comments" rows="2" placeholder="<?= $is_archived ? 'No comments recorded.' : 'Write feedback and recommendations for the student…' ?>"
+                                            <?= $is_archived ? 'disabled readonly' : '' ?>
+                                            class="w-full <?= $is_archived ? 'bg-slate-100 border-slate-200 text-slate-600 cursor-not-allowed' : 'bg-slate-50 focus:bg-white border-slate-200 text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500' ?> border rounded-xl px-3.5 py-2 text-xs sm:text-sm transition resize-none shadow-xs"><?= htmlspecialchars($supervisor_eval['supervisor_comments'] ?? '') ?></textarea>
                                     </div>
 
-                                    <!-- Compact Submit Button -->
+                                    <!-- Compact Submit Button / Lock Badge -->
                                     <div class="flex items-center justify-between gap-3 pt-1">
                                         <p class="text-[11px] text-slate-400 font-medium hidden sm:block">
-                                            Final university assessment for Week <?= $week_num ?>.
+                                            <?= $is_archived ? 'Historical record for Week ' . $week_num . '.' : 'Final university assessment for Week ' . $week_num . '.' ?>
                                         </p>
-                                        <button type="submit" name="submit_sup_eval" class="w-full sm:w-auto px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5 ml-auto">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                            <span><?= $supervisor_eval ? 'Update Grade' : 'Submit & Approve' ?></span>
-                                        </button>
+                                        <?php if ($is_archived): ?>
+                                            <div class="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-100 text-slate-500 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs ml-auto cursor-not-allowed" title="Evaluation is locked for archived academic years">
+                                                <span>🔒 Grade Locked (Archived Year)</span>
+                                            </div>
+                                        <?php else: ?>
+                                            <button type="submit" name="submit_sup_eval" class="w-full sm:w-auto px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-sm transition cursor-pointer flex items-center justify-center gap-1.5 ml-auto">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <span><?= $supervisor_eval ? 'Update Grade' : 'Submit & Approve' ?></span>
+                                            </button>
+                                        <?php endif; ?>
                                     </div>
                                 </form>
                             </div>

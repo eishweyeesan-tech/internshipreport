@@ -24,8 +24,9 @@ if (!defined('MAILER_CONFIG_LOADED')) {
     define('MAIL_FROM_NAME',    'InternReport System');
 
     // ── PUBLIC BASE URL FOR MOBILE / LAN / LIVE HOSTING ──────────────────────
-    // ဖုန်းမှ တိုက်ရိုက် ဖွင့်နိုင်ရန် သင်၏ PC Wi-Fi IP သို့မဟုတ် Domain / Public Tunnel URL
-    define('APP_URL', 'http://192.168.100.78/internreportsystem');
+    // 'auto' = Automatically detects your PC's current Wi-Fi/LAN IP (e.g. 192.168.x.x)
+    // Or set a custom URL (e.g. Ngrok 'https://xxxx.ngrok-free.app/internreportsystem' or live domain)
+    define('APP_URL', 'auto');
 }
 
 /**
@@ -280,6 +281,88 @@ function send_smtp_socket(
 }
 
 /**
+ * Auto-detect and generate application base URL
+ * Supports:
+ * 1. Explicit Custom APP_URL (e.g. Ngrok / Cloudflare Tunnel / Live Domain)
+ * 2. Host header if accessing from a non-localhost IP / domain
+ * 3. Dynamic machine Wi-Fi / LAN IP auto-detection if on localhost / local environment
+ */
+function get_system_base_url(): string
+{
+    // 1. If explicit Custom APP_URL is defined and not set to 'auto'
+    if (defined('APP_URL') && !empty(APP_URL) && APP_URL !== 'auto') {
+        return rtrim(APP_URL, '/\\');
+    }
+
+    $is_https = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
+        (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $scheme = $is_https ? 'https' : 'http';
+
+    // 2. Determine App Directory Path
+    $raw_script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+    if (preg_match('#/internreportsystem(?:/.*)?$#i', $raw_script)) {
+        $app_dir = '/internreportsystem';
+    } else {
+        $app_dir = preg_replace('#/(student|instructor|supervisor|admin|api|config)/[^/]+$#i', '', $raw_script);
+        if ($app_dir === $raw_script) {
+            $app_dir = dirname($raw_script);
+        }
+        $app_dir = rtrim($app_dir, '/\\');
+        if (preg_match('/^[a-zA-Z]:/', $app_dir) || $app_dir === '' || $app_dir === '.' || $app_dir === '/') {
+            $app_dir = '/internreportsystem';
+        }
+    }
+
+    // 3. Determine Host
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+
+    // If accessing through a real IP or public domain/tunnel (e.g. 192.168.x.x, domain.com, ngrok-free.app), use it directly
+    if (!empty($host) && !str_starts_with($host, 'localhost') && !str_starts_with($host, '127.0.0.1')) {
+        return "{$scheme}://{$host}{$app_dir}";
+    }
+
+    // 4. If accessed via localhost, auto-detect physical Wi-Fi or Phone Hotspot IP
+    $lan_ip = 'localhost';
+    $all_ips = @gethostbynamel(gethostname()) ?: [];
+
+    // Priority 1: Physical Wi-Fi & Android Hotspot (192.168.x.x, excluding VirtualBox 192.168.56.x)
+    foreach ($all_ips as $ip) {
+        if (str_starts_with($ip, '192.168.') && !str_starts_with($ip, '192.168.56.')) {
+            $lan_ip = $ip;
+            break;
+        }
+    }
+
+    // Priority 2: iPhone Personal Hotspot (172.20.10.x) or other standard 172.16-31
+    if ($lan_ip === 'localhost') {
+        foreach ($all_ips as $ip) {
+            if (preg_match('/^172\.(1[6-9]|2[0-9]|3[0-1])\./', $ip) && !str_starts_with($ip, '172.17.') && !str_starts_with($ip, '172.18.')) {
+                $lan_ip = $ip;
+                break;
+            }
+        }
+    }
+
+    // Priority 3: 10.x.x.x Private Networks
+    if ($lan_ip === 'localhost') {
+        foreach ($all_ips as $ip) {
+            if (str_starts_with($ip, '10.')) {
+                $lan_ip = $ip;
+                break;
+            }
+        }
+    }
+
+    $host = $lan_ip;
+    $server_port = $_SERVER['SERVER_PORT'] ?? 80;
+    if ((int)$server_port !== 80 && (int)$server_port !== 443 && !str_contains($host, ':')) {
+        $host .= ':' . $server_port;
+    }
+
+    return "{$scheme}://{$host}{$app_dir}";
+}
+
+/**
  * Generate a responsive HTML Email Template for Instructor Review
  */
 function build_instructor_email_html(
@@ -469,23 +552,8 @@ function send_instructor_magic_link(
     }
 
     // 4. Construct Public Magic Link URL
-    if (defined('APP_URL') && !empty(APP_URL)) {
-        $base_url = rtrim(APP_URL, '/\\');
-        $review_link = "{$base_url}/instructor/view-report.php?token={$token}";
-    } else {
-        $is_https = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-        $scheme = $is_https ? 'https' : 'http';
-        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        
-        $raw_script = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
-        $app_dir = preg_replace('#/(student|instructor|supervisor|admin|api|config)/[^/]+$#i', '', $raw_script);
-        if ($app_dir === $raw_script) {
-            $app_dir = dirname($raw_script);
-        }
-        $app_dir = rtrim($app_dir, '/\\');
-        
-        $review_link = "{$scheme}://{$host}{$app_dir}/instructor/view-report.php?token={$token}";
-    }
+    $base_url = get_system_base_url();
+    $review_link = "{$base_url}/instructor/view-report.php?token={$token}";
 
     // 5. Build HTML & Plaintext Body
     $html_body = build_instructor_email_html(

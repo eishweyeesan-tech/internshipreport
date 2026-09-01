@@ -520,7 +520,7 @@ $back_url = 'student-dashboard.php';
                                                                 <th class="px-4 py-2.5 text-left">တက်ရောက်မှုအခြေအနေ</th>
                                                                 <th class="px-4 py-2.5 text-left">ဆောင်ရွက်မည့်လုပ်ငန်း</th>
                                                                 <th class="px-4 py-2.5 text-left">အမှန်တကယ် လုပ်ဆောင်ဖြစ်သော လုပ်ငန်းစဉ်များ</th>
-                                                                <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ</th>
+                                                                <th class="px-4 py-2.5 text-left">အသုံးပြုသောပစ္စည်းများ/ နည်းပညာများ</th>
                                                                 <th class="px-4 py-2.5 text-left">လေ့လာသိရှိသော အသိပညာ</th>
                                                                 <th class="px-4 py-2.5 text-left">ကြာချိန်</th>
                                                             </tr>

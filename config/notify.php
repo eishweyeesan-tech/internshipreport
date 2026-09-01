@@ -161,12 +161,15 @@ function notif_action_url($notif, $role = null)
             case 'daily_log_added':
             case 'daily_log_updated':
                 if ($week) {
-                    return $base . 'daily_log.php?week=' . $week . '#daily-log-form';
+                    return $base . 'student-dashboard.php?tab=daily-log&week=' . $week . '#daily-log-form';
                 }
-                return $base . 'daily_log.php#daily-log-form';
+                return $base . 'student-dashboard.php?tab=daily-log#daily-log-form';
 
             case 'student_behind_schedule':
-                return $base . 'daily_log.php';
+                if ($week) {
+                    return $base . 'student-dashboard.php?tab=daily-log&week=' . $week . '#daily-log-form';
+                }
+                return $base . 'student-dashboard.php?tab=daily-log#daily-log-form';
 
             case 'profile_updated':
             case 'user_registered':

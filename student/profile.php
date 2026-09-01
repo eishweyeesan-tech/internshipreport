@@ -362,6 +362,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
         }
 
         @media print {
+
             aside,
             header,
             .no-print {
@@ -482,56 +483,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                     <!-- Alerts -->
                     <?php if ($profile_msg): ?>
                         <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
                             <?= htmlspecialchars($profile_msg) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($profile_err): ?>
                         <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             <?= htmlspecialchars($profile_err) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($internship_msg): ?>
                         <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
                             <?= htmlspecialchars($internship_msg) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($internship_err): ?>
                         <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             <?= htmlspecialchars($internship_err) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($pw_msg): ?>
                         <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
                             <?= htmlspecialchars($pw_msg) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($pw_err): ?>
                         <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             <?= htmlspecialchars($pw_err) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($avatar_msg): ?>
                         <div class="bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                            <svg class="w-4 h-4 text-emerald-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
                             <?= htmlspecialchars($avatar_msg) ?>
                         </div>
                     <?php endif; ?>
 
                     <?php if ($avatar_err): ?>
                         <div class="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold px-4 py-3 rounded-2xl flex items-center gap-2 shadow-xs">
-                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            <svg class="w-4 h-4 text-rose-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
                             <?= htmlspecialchars($avatar_err) ?>
                         </div>
                     <?php endif; ?>
@@ -612,7 +629,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                     <dd class="text-xs sm:text-sm text-slate-800 font-bold font-mono"><?= htmlspecialchars($profile['student_roll'] ?: '—') ?></dd>
                                 </div>
                                 <div>
-                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Major / Department</dt>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Major</dt>
                                     <dd class="text-xs sm:text-sm text-slate-800 font-bold"><?= htmlspecialchars($profile['major'] ?: '—') ?></dd>
                                 </div>
                                 <div>
@@ -644,7 +661,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                                         <input type="text" name="student_roll" value="<?= htmlspecialchars($profile['student_roll']) ?>" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                     <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Major / Department</label>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Major</label>
                                         <input type="text" name="major" value="<?= htmlspecialchars($profile['major']) ?>" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition">
                                     </div>
                                     <div>
@@ -684,7 +701,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                         <div class="view-mode p-6">
                             <dl class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                                 <div>
-                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Company / Organization</dt>
+                                    <dt class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Company</dt>
                                     <dd class="text-xs sm:text-sm text-slate-800 font-bold"><?= htmlspecialchars($profile['company_name'] ?: '—') ?></dd>
                                 </div>
                                 <div>
@@ -739,7 +756,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_avatar'])) {
                             <div class="p-6 space-y-4">
                                 <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                     <div>
-                                        <label class="block text-xs font-bold text-slate-700 mb-1">Company / Organization</label>
+                                        <label class="block text-xs font-bold text-slate-700 mb-1">Company</label>
                                         <select name="company_id" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white transition cursor-pointer mb-2">
                                             <option value="">— Select Partner Company —</option>
                                             <?php foreach ($companies_list as $comp): ?>
